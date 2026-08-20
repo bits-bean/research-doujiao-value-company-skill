@@ -2,9 +2,24 @@
 
 ## 权威规范
 
-每次任务先解析 `bits-bean/doujiao-value-system` 的目标 ref。用户未指定时使用 `main`，随后立即锁定精确 commit SHA；本次任务所有规范文件必须从该 SHA 读取。
+每次任务先解析 `bits-bean/doujiao-value-system` 的 `main` HEAD，并把 [trusted-spec-lock.json](trusted-spec-lock.json) 中的 commit 作为已经审核的**规范锚点**。这个小文件只记录规范锚点和受保护文件 blob，不复制方法正文。
 
-正式冻结还必须让已解析的 `main` 与 [trusted-spec-lock.json](trusted-spec-lock.json) 一致。这个小文件只记录受信任 commit 和必读文件 blob，不复制方法正文。如果 `main` 已前进，先审查差异、更新 lock、运行 Skill 测试并保存新 Skill 版本；在此之前只能研究草案或规范迁移审查，不能冻结为“当前正式研究”。
+正式研究按以下规则判断当前 `main` 是否与 Skill 兼容：
+
+1. 规范锚点必须是当前 `main` HEAD 的祖先；
+2. 当前 `main` 上 `trusted-spec-lock.json.files` 列出的每个受保护文件，其 Git blob SHA 必须与锁完全一致；
+3. 两项均成立时，允许 `main` 在规范锚点之后只增加研究快照、公司数据或其他未受保护文件；本次研究仍从规范锚点读取方法正文和 Schema，并在 manifest 中记录该锚点；
+4. 任一受保护文件发生变化，先审查规范差异、更新 lock、运行 Skill 测试并保存新 Skill 版本；在此之前只能研究草案或规范迁移审查，不能冻结为“当前正式研究”。
+
+这样，归档研究数据导致 `main` 前进不会被误判为规范升级，也不会让未审核的方法变化静默进入正式研究。
+
+已有受信 Git checkout 时运行：
+
+```bash
+python3 scripts/verify_spec_anchor.py <doujiao-value-system-checkout> --head-ref main
+```
+
+线上 Work 只有 GitHub 连接器而没有 checkout 时，必须通过连接器完成同等的祖先关系与四个受保护 blob 校验；不得因为脚本不可运行而跳过。
 
 不要把本 Skill 内的说明当作方法论副本，也不要用模型记忆、旧聊天或缓存代替上游文件。
 
@@ -40,15 +55,15 @@
 
 在内部工作层记录：
 
-- repository、requested ref、resolved commit；
+- repository、requested ref、当前 `main` HEAD、受信规范锚点及祖先关系校验结果；
 - 各必读文件路径与 blob SHA；其中 Schema blob SHA 必须传给冻结工具复算核对；
 - Schema 的 `$id`、Draft、`schema_version`；
 - 研究模式、公司身份、行业框架；
 - 数据截至日、估值日和访问日期。
 
-同一研究版本不得混用多个规范 commit。若任务中途 `main` 更新，继续使用已锁定 SHA；新 SHA 只用于下一研究版本。
+同一研究版本不得混用多个规范锚点。若任务中途 `main` 更新，重新检查祖先关系和受保护 blob；研究语义仍保持原锚点，远端写入则必须基于新的 HEAD 重新预检。
 
-不要只验证“像 commit 的 40 位字符串”。运行时必须通过 GitHub 或本地受信任 checkout 实际解析 ref、commit、文件路径和 blob SHA，并把精确值写入工作锁；本地 Schema 的 Git blob SHA 与解析结果不同就停止冻结。GitHub 连接器把无末尾换行的文本落盘时可能补一个换行，工具只容许这一种可逆的传输差异，同时仍记录本地 SHA-256；其他字节差异一律阻断。
+不要只验证“像 commit 的 40 位字符串”。运行时必须通过 GitHub 或本地受信任 checkout 实际解析 `main`、规范锚点祖先关系、文件路径和 blob SHA，并把精确值写入工作锁；本地 Schema 的 Git blob SHA 与规范锚点不同就停止冻结。GitHub 连接器把无末尾换行的文本落盘时可能补一个换行，工具只容许这一种可逆的传输差异，同时仍记录本地 SHA-256；其他字节差异一律阻断。
 
 ## 失败策略
 

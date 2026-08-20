@@ -1,8 +1,8 @@
 interface:
   display_name: 豆角长期价值研究
-  short_description: 从公司原始证据生成冻结研究报告与合规 company.json
-  default_prompt: 使用 $research-doujiao-value-company 对目标公司完成证据驱动的长期价值研究，生成冻结研究报告和通过最新
-    Schema 校验的 company.json。
+  short_description: 生成、冻结并可选归档长期价值研究与 company.json
+  default_prompt: 使用 $research-doujiao-value-company 对目标公司完成证据驱动的长期价值研究，生成并冻结通过 Schema
+    校验的研究包；如我明确授权，再归档到 GitHub。
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:
