@@ -23,6 +23,18 @@ VERSION_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}(?:-v(?:[2-9]|[1-9]\d+))?")
 SHA1_PATTERN = re.compile(r"[0-9a-f]{40}")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 IDENTITY_FIELDS = ("company_name_cn", "company_name_en", "ticker", "exchange")
+CANONICAL_IDENTITY_FIELDS = IDENTITY_FIELDS + ("schema_version",)
+SLUG_REGISTRY_STATE_KEYS = {
+    "repository",
+    "branch",
+    "base_head",
+    "company_slug",
+    "identity",
+    "slug_exists",
+    "slug_identity",
+    "identity_slugs",
+}
+CANONICAL_STATE_KEYS = {"repository", "branch", "base_head", "path", "exists", "content"}
 SENSITIVE_PATTERNS = (
     (
         "private-key",
@@ -208,6 +220,162 @@ def snapshot_action(
     )
 
 
+def _research_identity(research: dict[str, Any]) -> dict[str, str]:
+    identity: dict[str, str] = {}
+    for field in IDENTITY_FIELDS:
+        value = research.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ArchivePlanError(f"verified manifest research identity lacks {field}")
+        identity[field] = value
+    return identity
+
+
+def _state_base_head(
+    state: dict[str, Any],
+    label: str,
+    expected_base_head: str | None,
+) -> str:
+    if state.get("repository") != TARGET_REPOSITORY or state.get("branch") != TARGET_BRANCH:
+        raise ArchivePlanError(f"{label} has the wrong repository or branch")
+    base_head = str(state.get("base_head", ""))
+    if SHA1_PATTERN.fullmatch(base_head) is None:
+        raise ArchivePlanError(f"{label} lacks an exact base_head")
+    if expected_base_head is not None and base_head != expected_base_head:
+        raise ArchivePlanError(f"{label} and remote snapshot state came from different base heads")
+    return base_head
+
+
+def slug_binding_action(
+    company_slug: str,
+    identity: dict[str, str],
+    remote_state: dict[str, Any] | None,
+    expected_base_head: str | None,
+) -> tuple[str, str | None]:
+    """Verify a one-to-one remote slug/identity registry observation."""
+    if remote_state is None:
+        return "remote-preflight-required", None
+    if set(remote_state) != SLUG_REGISTRY_STATE_KEYS:
+        raise ArchivePlanError("remote slug registry state has unexpected or missing fields")
+    base_head = _state_base_head(remote_state, "remote slug registry state", expected_base_head)
+    if remote_state.get("company_slug") != company_slug:
+        raise ArchivePlanError("remote slug registry state is for a different company slug")
+    if remote_state.get("identity") != identity:
+        raise ArchivePlanError("remote slug registry requested identity does not match the frozen research package")
+    slug_exists = remote_state.get("slug_exists")
+    if not isinstance(slug_exists, bool):
+        raise ArchivePlanError("remote slug registry state slug_exists must be boolean")
+    identity_slugs = remote_state.get("identity_slugs")
+    if (
+        not isinstance(identity_slugs, list)
+        or any(not isinstance(item, str) or SLUG_PATTERN.fullmatch(item) is None for item in identity_slugs)
+        or len(identity_slugs) != len(set(identity_slugs))
+    ):
+        raise ArchivePlanError("remote slug registry state identity_slugs must be unique safe slugs")
+    slug_identity = remote_state.get("slug_identity")
+    if slug_exists:
+        if slug_identity != identity:
+            raise ArchivePlanError("remote company slug is bound to a different company identity")
+        if identity_slugs != [company_slug]:
+            raise ArchivePlanError("remote company identity is not bound one-to-one to the requested slug")
+        return "verified-bound", base_head
+    if slug_identity is not None:
+        raise ArchivePlanError("absent remote company slug cannot carry a bound identity")
+    if identity_slugs:
+        raise ArchivePlanError("remote company identity is already registered under a different slug")
+    return "verified-available", base_head
+
+
+def _canonical_identity(company: dict[str, Any], label: str) -> dict[str, Any]:
+    meta = _meta(company, label)
+    return {field: meta.get(field) for field in CANONICAL_IDENTITY_FIELDS}
+
+
+def canonical_preflight_action(
+    new_company_path: Path,
+    *,
+    company_slug: str,
+    version: str,
+    confirm_same_date_revision: bool,
+    remote_state: dict[str, Any] | None,
+    expected_base_head: str | None,
+) -> tuple[str, str | None, bool | None]:
+    """Verify one exact-head canonical observation and resolve its write action."""
+    if remote_state is None:
+        return "remote-preflight-required", None, None
+    if set(remote_state) != CANONICAL_STATE_KEYS:
+        raise ArchivePlanError("remote canonical state has unexpected or missing fields")
+    base_head = _state_base_head(remote_state, "remote canonical state", expected_base_head)
+    expected_path = f"companies/{company_slug}/company.json"
+    if remote_state.get("path") != expected_path:
+        raise ArchivePlanError("remote canonical state is for a different company path")
+    exists = remote_state.get("exists")
+    if not isinstance(exists, bool):
+        raise ArchivePlanError("remote canonical state exists must be boolean")
+    content = remote_state.get("content")
+    if not exists:
+        if content is not None:
+            raise ArchivePlanError("absent remote canonical state cannot contain file content")
+        return "create", base_head, False
+    if not isinstance(content, dict):
+        raise ArchivePlanError("existing remote canonical state requires content metadata")
+    if set(content) != {"source_path", "sha256", "size_bytes", "identity"}:
+        raise ArchivePlanError("remote canonical content must contain only source_path, sha256, size_bytes, and identity")
+    source_value = content.get("source_path")
+    if not isinstance(source_value, str) or not source_value:
+        raise ArchivePlanError("remote canonical content requires a source_path")
+    source_path = _safe_regular_file(Path(source_value), "remote canonical company.json")
+    sha256 = content.get("sha256")
+    size_bytes = content.get("size_bytes")
+    if SHA256_PATTERN.fullmatch(str(sha256)) is None:
+        raise ArchivePlanError("remote canonical content has an invalid SHA-256")
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
+        raise ArchivePlanError("remote canonical content has an invalid size")
+    if file_sha256(source_path) != sha256 or source_path.stat().st_size != size_bytes:
+        raise ArchivePlanError("remote canonical content hash or size does not match the downloaded file")
+    existing_company = _read_object(source_path, "remote canonical company.json")
+    if content.get("identity") != _canonical_identity(existing_company, "remote canonical company.json"):
+        raise ArchivePlanError("remote canonical content identity does not match the downloaded file")
+    action = canonical_action(
+        new_company_path,
+        existing_company_path=source_path,
+        canonical_absent=False,
+        version=version,
+        confirm_same_date_revision=confirm_same_date_revision,
+    )
+    return action, base_head, True
+
+
+def legacy_canonical_state(
+    company_slug: str,
+    existing_company_path: Path | None,
+    existing_company_head: str | None,
+    canonical_absent: bool,
+) -> dict[str, Any] | None:
+    """Translate legacy CLI inputs into the unified exact-head canonical state."""
+    if existing_company_path is None and not canonical_absent:
+        return None
+    if SHA1_PATTERN.fullmatch(str(existing_company_head or "")) is None:
+        return None
+    state: dict[str, Any] = {
+        "repository": TARGET_REPOSITORY,
+        "branch": TARGET_BRANCH,
+        "base_head": existing_company_head,
+        "path": f"companies/{company_slug}/company.json",
+        "exists": existing_company_path is not None,
+        "content": None,
+    }
+    if existing_company_path is not None:
+        source_path = _safe_regular_file(existing_company_path, "existing canonical company.json")
+        company = _read_object(source_path, "existing canonical company.json")
+        state["content"] = {
+            "source_path": str(source_path),
+            "sha256": file_sha256(source_path),
+            "size_bytes": source_path.stat().st_size,
+            "identity": _canonical_identity(company, "existing canonical company.json"),
+        }
+    return state
+
+
 def build_archive_plan(
     root: Path,
     schema_path: Path,
@@ -220,6 +388,8 @@ def build_archive_plan(
     promotion_authorized: bool = False,
     direct_main_authorized: bool = False,
     remote_snapshot_state: dict[str, Any] | None = None,
+    remote_slug_registry_state: dict[str, Any] | None = None,
+    remote_canonical_state: dict[str, Any] | None = None,
     existing_company_path: Path | None = None,
     existing_company_head: str | None = None,
     canonical_absent: bool = False,
@@ -243,9 +413,17 @@ def build_archive_plan(
         raise ArchivePlanError("promotion must be archive-only or archive-and-promote")
     if promotion == "archive-and-promote" and not promotion_authorized:
         raise ArchivePlanError("archive-and-promote requires explicit promotion authorization")
-    if existing_company_path is None and existing_company_head is not None:
-        raise ArchivePlanError("existing-company-head requires existing-company")
+    if existing_company_path is not None and canonical_absent:
+        raise ArchivePlanError("existing canonical file and canonical-absent are mutually exclusive")
+    if remote_canonical_state is not None and (
+        existing_company_path is not None or existing_company_head is not None or canonical_absent
+    ):
+        raise ArchivePlanError("remote-canonical-state cannot be combined with legacy canonical inputs")
+    if existing_company_head is not None and existing_company_path is None and not canonical_absent:
+        raise ArchivePlanError("existing-company-head requires existing-company or canonical-absent")
     if promotion == "archive-only" and (
+        remote_canonical_state is not None
+        or
         existing_company_path is not None
         or existing_company_head is not None
         or canonical_absent
@@ -307,29 +485,43 @@ def build_archive_plan(
     remote_action, base_head = snapshot_action(snapshot_root, snapshot_files, remote_snapshot_state)
 
     company_path = _safe_regular_file(root / "company.json", "company.json")
+    research = manifest.get("research") if isinstance(manifest.get("research"), dict) else {}
+    identity = _research_identity(research)
+    slug_action, slug_head = slug_binding_action(
+        company_slug,
+        identity,
+        remote_slug_registry_state,
+        base_head,
+    )
     if promotion == "archive-and-promote":
-        if existing_company_path is not None:
-            if SHA1_PATTERN.fullmatch(str(existing_company_head or "")) is None:
-                raise ArchivePlanError("existing canonical company.json requires an exact source head")
-            if base_head is not None and existing_company_head != base_head:
-                raise ArchivePlanError("canonical company.json and snapshot state came from different base heads")
-        action = canonical_action(
+        canonical_state = remote_canonical_state
+        if canonical_state is None:
+            canonical_state = legacy_canonical_state(
+                company_slug,
+                existing_company_path,
+                existing_company_head,
+                canonical_absent,
+            )
+        action, canonical_head, canonical_exists = canonical_preflight_action(
             company_path,
-            existing_company_path=existing_company_path,
-            canonical_absent=canonical_absent,
+            company_slug=company_slug,
             version=version,
             confirm_same_date_revision=confirm_same_date_revision,
+            remote_state=canonical_state,
+            expected_base_head=base_head,
         )
     else:
         action = "not-requested"
+        canonical_head = None
+        canonical_exists = None
     ready_for_write = (
         write_authorized
         and remote_action in {"create", "noop"}
+        and slug_action in {"verified-bound", "verified-available"}
         and action != "remote-preflight-required"
     )
-    research = manifest.get("research") if isinstance(manifest.get("research"), dict) else {}
     return {
-        "plan_version": "1.0",
+        "plan_version": "2.0",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -343,17 +535,18 @@ def build_archive_plan(
         "ready_for_write": ready_for_write,
         "source": {
             "manifest_sha256": file_sha256(manifest_path),
+            "manifest_version": manifest.get("manifest_version"),
             "human_review_status": manifest.get("human_review_status"),
             "data_as_of": research.get("data_as_of"),
             "valuation_date": research.get("valuation_date"),
+            "research_protocol": manifest.get("research_protocol"),
+            "specification": manifest.get("specification"),
         },
         "slug_binding": {
             "company_slug": company_slug,
-            "company_name_cn": research.get("company_name_cn"),
-            "company_name_en": research.get("company_name_en"),
-            "ticker": research.get("ticker"),
-            "exchange": research.get("exchange"),
-            "requires_remote_registry_check": True,
+            "identity": identity,
+            "remote_action": slug_action,
+            "base_head": slug_head,
         },
         "snapshot": {
             "root": snapshot_root,
@@ -367,6 +560,8 @@ def build_archive_plan(
             "sha256": file_sha256(company_path),
             "size_bytes": company_path.stat().st_size,
             "action": action,
+            "remote_base_head": canonical_head,
+            "remote_exists": canonical_exists,
         },
     }
 
@@ -391,10 +586,23 @@ def main() -> int:
         type=Path,
         help="Connector-produced JSON describing the version directory at one exact main head",
     )
+    parser.add_argument(
+        "--remote-slug-registry-state",
+        type=Path,
+        help="Connector-produced exact-main-head slug/identity registry observation",
+    )
+    parser.add_argument(
+        "--remote-canonical-state",
+        type=Path,
+        help="Connector-produced exact-main-head canonical path/content observation",
+    )
     canonical = parser.add_mutually_exclusive_group()
     canonical.add_argument("--existing-company", type=Path, help="Remote canonical company.json downloaded at preflight")
     canonical.add_argument("--canonical-absent", action="store_true", help="Confirm remote canonical path returned not found")
-    parser.add_argument("--existing-company-head", help="Exact main SHA used to fetch --existing-company")
+    parser.add_argument(
+        "--existing-company-head",
+        help="Exact main SHA used for legacy --existing-company or --canonical-absent preflight",
+    )
     parser.add_argument(
         "--confirm-same-date-revision",
         action="store_true",
@@ -412,6 +620,22 @@ def main() -> int:
             if args.remote_snapshot_state is not None
             else None
         )
+        remote_slug_registry_state = (
+            _read_object(
+                _safe_regular_file(args.remote_slug_registry_state, "remote slug registry state"),
+                "remote slug registry state",
+            )
+            if args.remote_slug_registry_state is not None
+            else None
+        )
+        remote_canonical_state = (
+            _read_object(
+                _safe_regular_file(args.remote_canonical_state, "remote canonical state"),
+                "remote canonical state",
+            )
+            if args.remote_canonical_state is not None
+            else None
+        )
         plan = build_archive_plan(
             args.root,
             args.schema,
@@ -423,6 +647,8 @@ def main() -> int:
             promotion_authorized=args.confirm_promotion_authorization,
             direct_main_authorized=args.confirm_direct_main_authorization,
             remote_snapshot_state=remote_state,
+            remote_slug_registry_state=remote_slug_registry_state,
+            remote_canonical_state=remote_canonical_state,
             existing_company_path=args.existing_company,
             existing_company_head=args.existing_company_head,
             canonical_absent=args.canonical_absent,
@@ -456,6 +682,13 @@ def main() -> int:
                 forbidden.add(args.existing_company.resolve())
             if args.remote_snapshot_state is not None:
                 forbidden.add(args.remote_snapshot_state.resolve())
+            if args.remote_slug_registry_state is not None:
+                forbidden.add(args.remote_slug_registry_state.resolve())
+            if args.remote_canonical_state is not None:
+                forbidden.add(args.remote_canonical_state.resolve())
+                content = remote_canonical_state.get("content") if isinstance(remote_canonical_state, dict) else None
+                if isinstance(content, dict) and isinstance(content.get("source_path"), str):
+                    forbidden.add(Path(content["source_path"]).resolve())
             if output_resolved in forbidden:
                 raise ArchivePlanError("archive plan output would overwrite an input or frozen file")
             output.parent.mkdir(parents=True, exist_ok=True)
