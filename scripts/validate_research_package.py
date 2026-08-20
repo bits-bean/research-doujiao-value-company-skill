@@ -34,6 +34,35 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
+EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
+EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
+PROTOCOL_DOCUMENT_PATHS = (
+    "references/specs/automation-workflow.md",
+    "references/specs/project-instructions.md",
+    "references/specs/research-methodology.md",
+)
+BUNDLED_SCHEMA_PATH = "references/specs/company.schema.json"
+TRUSTED_LOCK_KEYS = {"lock_version", "research_protocol", "company_schema"}
+RESEARCH_PROTOCOL_KEYS = {
+    "authority",
+    "repository",
+    "ref",
+    "commit",
+    "protocol_version",
+    "digest_sha256",
+    "documents",
+}
+COMPANY_SCHEMA_KEYS = {
+    "repository",
+    "ref",
+    "commit",
+    "path",
+    "blob_sha1",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "bundled_path",
+}
 CLASSIFICATIONS = {"fact", "management_claim", "third_party", "inference", "estimate"}
 CONFIDENCE = {"high", "medium", "low"}
 VERDICT_CONFIDENCE = CONFIDENCE | {"高", "中", "低"}
@@ -155,6 +184,18 @@ def schema_sha256_candidates(path: Path) -> set[str]:
     else:
         variants.add(data + b"\n")
     return {hashlib.sha256(value).hexdigest() for value in variants}
+
+
+def protocol_digest(documents: list[dict[str, Any]]) -> str:
+    """Hash the path-sorted research protocol document inventory."""
+    ordered = sorted(documents, key=lambda item: item["path"])
+    encoded = json.dumps(
+        ordered,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def git_blob_sha1(path: Path) -> str:
@@ -1134,24 +1175,111 @@ def load_trusted_spec_lock(findings: list[Finding]) -> dict[str, Any] | None:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         add(findings, "error", "trusted-spec-lock-load", str(path), str(exc))
         return None
-    files = lock.get("files") if isinstance(lock, dict) else None
-    schema_blob = files.get(EXPECTED_SCHEMA_PATH) if isinstance(files, dict) else None
-    valid = (
-        isinstance(lock, dict)
-        and lock.get("lock_version") == "1.0"
-        and lock.get("repository") == EXPECTED_SPEC_REPOSITORY
-        and lock.get("ref") == "main"
-        and re.fullmatch(r"[0-9a-f]{40}", str(lock.get("commit", ""))) is not None
-        and substantive_text(lock.get("schema_version"), 3)
-        and re.fullmatch(r"[0-9a-f]{40}", str(schema_blob or "")) is not None
+    if (
+        not isinstance(lock, dict)
+        or set(lock) != TRUSTED_LOCK_KEYS
+        or lock.get("lock_version") != "2.0"
+    ):
+        add(findings, "error", "trusted-spec-lock-shape", str(path), "bundled lock must use lock_version 2.0 and contain only lock_version, research_protocol, and company_schema")
+        return None
+
+    protocol = lock.get("research_protocol")
+    documents = protocol.get("documents") if isinstance(protocol, dict) else None
+    protocol_valid = (
+        isinstance(protocol, dict)
+        and set(protocol) == RESEARCH_PROTOCOL_KEYS
+        and protocol.get("authority") == EXPECTED_PROTOCOL_AUTHORITY
+        and protocol.get("repository") == EXPECTED_PROTOCOL_REPOSITORY
+        and protocol.get("ref") == "main"
+        and re.fullmatch(r"[0-9a-f]{40}", str(protocol.get("commit", ""))) is not None
+        and substantive_text(protocol.get("protocol_version"), 3)
+        and re.fullmatch(r"[0-9a-f]{64}", str(protocol.get("digest_sha256", ""))) is not None
+        and isinstance(documents, list)
     )
-    if not valid:
-        add(findings, "error", "trusted-spec-lock-shape", str(path), "bundled lock has invalid repository/ref/commit/schema_version/schema blob binding")
+    if not protocol_valid:
+        add(findings, "error", "trusted-research-protocol-shape", str(path), "research_protocol has an invalid authority/repository/ref/commit/version/digest/documents binding")
+        return None
+
+    expected_paths = set(PROTOCOL_DOCUMENT_PATHS)
+    seen_paths: list[str] = []
+    for index, entry in enumerate(documents):
+        item_path = f"{path}.research_protocol.documents[{index}]"
+        if not isinstance(entry, dict) or set(entry) != {"path", "sha256", "size_bytes"}:
+            add(findings, "error", "trusted-protocol-document-shape", item_path, "document entries require only path, sha256, and size_bytes")
+            continue
+        relative = entry.get("path")
+        digest = entry.get("sha256")
+        size = entry.get("size_bytes")
+        if (
+            not isinstance(relative, str)
+            or relative not in expected_paths
+            or re.fullmatch(r"[0-9a-f]{64}", str(digest or "")) is None
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+        ):
+            add(findings, "error", "trusted-protocol-document-shape", item_path, "document inventory contains an unsafe path, hash, or size")
+            continue
+        seen_paths.append(relative)
+        local = SKILL_ROOT / relative
+        if local.is_symlink() or not local.is_file():
+            add(findings, "error", "trusted-protocol-document-file", relative, "authoritative protocol document must be a non-symlink regular file")
+            continue
+        if file_sha256(local) != digest or local.stat().st_size != size:
+            add(findings, "error", "trusted-protocol-document-mismatch", relative, "authoritative protocol document differs from the bundled trust lock")
+    if seen_paths != sorted(expected_paths):
+        add(findings, "error", "trusted-protocol-document-set", str(path), f"documents must be unique and sorted as {sorted(expected_paths)!r}")
+    if isinstance(documents, list) and all(isinstance(item, dict) and "path" in item for item in documents):
+        try:
+            actual_digest = protocol_digest(documents)
+        except (KeyError, TypeError, ValueError):
+            actual_digest = None
+        if protocol.get("digest_sha256") != actual_digest:
+            add(findings, "error", "trusted-protocol-digest", str(path), "research_protocol digest does not match its path-sorted documents inventory")
+
+    company_schema = lock.get("company_schema")
+    schema_valid = (
+        isinstance(company_schema, dict)
+        and set(company_schema) == COMPANY_SCHEMA_KEYS
+        and company_schema.get("repository") == EXPECTED_SPEC_REPOSITORY
+        and company_schema.get("ref") == "main"
+        and re.fullmatch(r"[0-9a-f]{40}", str(company_schema.get("commit", ""))) is not None
+        and company_schema.get("path") == EXPECTED_SCHEMA_PATH
+        and re.fullmatch(r"[0-9a-f]{40}", str(company_schema.get("blob_sha1", ""))) is not None
+        and re.fullmatch(r"[0-9a-f]{64}", str(company_schema.get("sha256", ""))) is not None
+        and isinstance(company_schema.get("size_bytes"), int)
+        and not isinstance(company_schema.get("size_bytes"), bool)
+        and company_schema.get("size_bytes", -1) >= 0
+        and substantive_text(company_schema.get("schema_version"), 3)
+        and company_schema.get("bundled_path") == BUNDLED_SCHEMA_PATH
+    )
+    if not schema_valid:
+        add(findings, "error", "trusted-company-schema-shape", str(path), "company_schema has an invalid repository/ref/commit/path/blob/hash/size/version binding")
+        return None
+
+    bundled = SKILL_ROOT / BUNDLED_SCHEMA_PATH
+    if bundled.is_symlink() or not bundled.is_file():
+        add(findings, "error", "trusted-company-schema-file", BUNDLED_SCHEMA_PATH, "bundled Schema must be a non-symlink regular file")
+    else:
+        data = bundled.read_bytes()
+        size_candidates = {len(data)}
+        if data.endswith(b"\n"):
+            size_candidates.add(len(data) - 1)
+        else:
+            size_candidates.add(len(data) + 1)
+        if company_schema["sha256"] not in schema_sha256_candidates(bundled):
+            add(findings, "error", "trusted-company-schema-sha256", BUNDLED_SCHEMA_PATH, "bundled Schema differs beyond one transport-added final LF")
+        if company_schema["blob_sha1"] not in git_blob_sha1_candidates(bundled):
+            add(findings, "error", "trusted-company-schema-blob", BUNDLED_SCHEMA_PATH, "bundled Schema Git blob differs from the authoritative system lock")
+        if company_schema["size_bytes"] not in size_candidates:
+            add(findings, "error", "trusted-company-schema-size", BUNDLED_SCHEMA_PATH, "bundled Schema size differs beyond one transport-added final LF")
+
+    if any(item.severity == "error" and item.code.startswith("trusted-") for item in findings):
         return None
     return lock
 
 
-def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], findings: list[Finding]) -> None:
+def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mode: str, findings: list[Finding]) -> None:
     manifest_path = root / "research-manifest.json"
     if not manifest_path.exists():
         return
@@ -1167,8 +1295,11 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], fi
         add(findings, "error", "manifest-shape", "research-manifest.json", "manifest must be an object")
         return
     trusted = load_trusted_spec_lock(findings)
-    if manifest.get("manifest_version") != "1.0" or manifest.get("status") != "frozen":
-        add(findings, "error", "manifest-status", "research-manifest.json", "requires manifest_version 1.0 and status frozen")
+    manifest_version = manifest.get("manifest_version")
+    if manifest_version not in {"1.0", "2.0"} or manifest.get("status") != "frozen":
+        add(findings, "error", "manifest-status", "research-manifest.json", "requires manifest_version 1.0 or 2.0 and status frozen")
+    if manifest_version == "1.0" and mode != "audit":
+        add(findings, "error", "legacy-manifest-audit-only", "research-manifest.json", "manifest_version 1.0 is audit-only and cannot be used for new full/incremental/freeze/archive work")
     if manifest.get("human_review_status") not in {"pending", "accepted"}:
         add(findings, "error", "manifest-human-review", "research-manifest.json", "invalid human review status")
     if not isinstance(manifest.get("warning_acknowledged"), bool) or not valid_format(str(manifest.get("frozen_at", "")), "date-time"):
@@ -1176,28 +1307,44 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], fi
     specification = manifest.get("specification")
     if not isinstance(specification, dict):
         add(findings, "error", "manifest-specification", "research-manifest.json", "specification block is missing")
-    else:
-        if trusted is not None:
-            trusted_files = trusted["files"]
-            expected = {
-                "repository": trusted["repository"],
-                "ref": trusted["ref"],
-                "commit": trusted["commit"],
-                "schema_path": EXPECTED_SCHEMA_PATH,
-                "schema_blob_sha1": trusted_files[EXPECTED_SCHEMA_PATH],
-                "schema_version": trusted["schema_version"],
-            }
-            for key, value in expected.items():
-                if specification.get(key) != value:
-                    add(findings, "error", f"manifest-{key.replace('_', '-')}", "research-manifest.json.specification", f"{key} must exactly match the bundled trusted-spec-lock and local Schema")
-            if specification.get("schema_sha256") not in schema_sha256_candidates(schema_path):
-                add(findings, "error", "manifest-schema-sha256", "research-manifest.json.specification", "schema_sha256 must match the trusted Schema bytes, allowing only one transport-added final LF")
-            local_blob_candidates = git_blob_sha1_candidates(schema_path)
-            if trusted_files[EXPECTED_SCHEMA_PATH] not in local_blob_candidates:
-                add(findings, "error", "trusted-schema-local-mismatch", str(schema_path), "local Schema bytes do not match the trusted locked blob")
-            meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
-            if meta.get("schema_version") != trusted["schema_version"]:
-                add(findings, "error", "manifest-company-schema-version", "company.json.meta.schema_version", "company schema_version must exactly match the bundled trust lock")
+    elif manifest_version == "1.0":
+        expected_legacy = {
+            "repository": EXPECTED_SPEC_REPOSITORY,
+            "schema_path": EXPECTED_SCHEMA_PATH,
+            "schema_version": extract_schema_version(load_json(schema_path)),
+        }
+        for key, value in expected_legacy.items():
+            if specification.get(key) != value:
+                add(findings, "error", f"manifest-{key.replace('_', '-')}", "research-manifest.json.specification", f"legacy {key} does not match the supplied Schema")
+        if specification.get("schema_sha256") not in schema_sha256_candidates(schema_path):
+            add(findings, "error", "manifest-schema-sha256", "research-manifest.json.specification", "legacy schema_sha256 does not match the supplied Schema")
+        if specification.get("schema_blob_sha1") not in git_blob_sha1_candidates(schema_path):
+            add(findings, "error", "manifest-schema-blob-sha1", "research-manifest.json.specification", "legacy Schema blob does not match the supplied Schema")
+        if re.fullmatch(r"[0-9a-f]{40}", str(specification.get("commit", ""))) is None or specification.get("ref") != "main":
+            add(findings, "error", "manifest-legacy-anchor", "research-manifest.json.specification", "legacy manifest needs an exact commit and main ref for audit")
+    elif manifest_version == "2.0" and trusted is not None:
+        company_schema = trusted["company_schema"]
+        expected = {
+            "repository": company_schema["repository"],
+            "ref": company_schema["ref"],
+            "commit": company_schema["commit"],
+            "schema_path": company_schema["path"],
+            "schema_blob_sha1": company_schema["blob_sha1"],
+            "schema_version": company_schema["schema_version"],
+        }
+        for key, value in expected.items():
+            if specification.get(key) != value:
+                add(findings, "error", f"manifest-{key.replace('_', '-')}", "research-manifest.json.specification", f"{key} must exactly match trusted company_schema and the local Schema")
+        if specification.get("schema_sha256") not in schema_sha256_candidates(schema_path):
+            add(findings, "error", "manifest-schema-sha256", "research-manifest.json.specification", "schema_sha256 must match the trusted Schema bytes, allowing only one transport-added final LF")
+        if company_schema["blob_sha1"] not in git_blob_sha1_candidates(schema_path):
+            add(findings, "error", "trusted-schema-local-mismatch", str(schema_path), "local Schema bytes do not match the trusted locked blob")
+        meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
+        if meta.get("schema_version") != company_schema["schema_version"]:
+            add(findings, "error", "manifest-company-schema-version", "company.json.meta.schema_version", "company schema_version must exactly match trusted company_schema")
+        research_protocol = manifest.get("research_protocol")
+        if research_protocol != trusted["research_protocol"]:
+            add(findings, "error", "manifest-research-protocol", "research-manifest.json.research_protocol", "research_protocol must exactly match the bundled v2 trust lock")
     meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
     research = manifest.get("research")
     if not isinstance(research, dict):
@@ -1276,6 +1423,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
     if schema.get("$schema") != EXPECTED_SCHEMA_DRAFT or schema.get("$id") != EXPECTED_SCHEMA_ID:
         add(findings, "error", "schema-identity", str(schema_path), "must be the Doujiao Draft 2020-12 company Schema")
     findings.extend(validate_schema_keywords(schema))
+    load_trusted_spec_lock(findings)
     if any(item.severity == "error" for item in findings):
         return findings
     documents: dict[str, Any] = {}
@@ -1366,13 +1514,13 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
         add(findings, "error", "official-logo-source", "company.json.brand_identity.company_logo", "official logo requires a source URL")
     elif logo.get("is_official") is not True:
         add(findings, "warning", "unofficial-logo", "company.json.brand_identity.company_logo", "official logo unavailable; document the limitation and do not synthesize one")
-    validate_manifest(root, schema_path, company, findings)
+    validate_manifest(root, schema_path, company, mode, findings)
     return findings
 
 
 def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Finding]) -> dict[str, Any]:
     return {
-        "validator": "research-doujiao-value-company/1.1",
+        "validator": "research-doujiao-value-company/2.0",
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "root": str(root),
         "schema": str(schema_path),
