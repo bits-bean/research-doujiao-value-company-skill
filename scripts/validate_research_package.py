@@ -1192,6 +1192,7 @@ def load_trusted_spec_lock(findings: list[Finding]) -> dict[str, Any] | None:
         and protocol.get("repository") == EXPECTED_PROTOCOL_REPOSITORY
         and protocol.get("ref") == "main"
         and re.fullmatch(r"[0-9a-f]{40}", str(protocol.get("commit", ""))) is not None
+        and protocol.get("commit") != "0" * 40
         and substantive_text(protocol.get("protocol_version"), 3)
         and re.fullmatch(r"[0-9a-f]{64}", str(protocol.get("digest_sha256", ""))) is not None
         and isinstance(documents, list)
