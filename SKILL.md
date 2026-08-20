@@ -1,6 +1,6 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-archive evidence-driven long-term research for listed companies under the latest bits-bean/doujiao-value-system rules. Use when asked to research a company from scratch, analyze ten-year financials, FCF or Owner Earnings, ROIC, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, generate or update a formal research report and schema-valid company.json, audit an existing research package, process a new earnings report or major event, decide whether a company is Too Hard, prepare a frozen handoff to $produce-doujiao-value-content, or archive an accepted frozen package to bits-bean/doujiao-value-system. Do not use for social-media copy or visual production, short-term price prediction, trading signals, unsupported recommendations, website import, unapproved GitHub writes, or public publishing.
+description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-archive evidence-driven long-term research for listed companies under this Skill's authoritative research protocol and the locked bits-bean/doujiao-value-system company Schema. Use when asked to research a company from scratch, analyze ten-year financials, FCF or Owner Earnings, ROIC, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, generate or update a formal research report and schema-valid company.json, audit an existing research package, process a new earnings report or major event, decide whether a company is Too Hard, prepare a frozen handoff to $produce-doujiao-value-content, or archive an accepted frozen package to bits-bean/doujiao-value-system. Do not use for social-media copy or visual production, short-term price prediction, trading signals, unsupported recommendations, website import, unapproved GitHub writes, or public publishing.
 ---
 
 # 豆角长期价值研究
@@ -9,7 +9,8 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 把本 Skill 当作权威研究层。先从证据形成判断，再生成正式报告与结构化数据；不要生成传播成品。
 
-- 把 `bits-bean/doujiao-value-system` 指定 ref 的真实文件作为唯一方法论和 Schema 来源。
+- 把本 Skill 的 `references/specs/project-instructions.md`、`research-methodology.md` 和 `automation-workflow.md` 作为研究协议唯一可编辑权威源。
+- 只有 `company.schema.json` 以 `bits-bean/doujiao-value-system` 为唯一可编辑权威源；本 Skill 的 `references/specs/company.schema.json` 是经信任锁校验的只读发行副本。
 - 区分事实、管理层主张、第三方观点、分析推断和估算；不得先定结论再寻找材料。
 - 不得编造、插值或无声填补缺失数据。缺失数值按 Schema 写 `null`，缺失列表写 `[]`，真实零值才写 `0`。
 - 分开判断企业质量、估值状态和研究状态。估值不能覆盖诚信、治理、财务韧性或数据可靠性否决项。
@@ -31,15 +32,16 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 2. 锁定规范与公司身份
 
-完整读取 [source-routing.md](references/source-routing.md)，在同一任务内锁定：
+完整读取 [source-routing.md](references/source-routing.md)，并依次完整读取 [project-instructions.md](references/specs/project-instructions.md)、[research-methodology.md](references/specs/research-methodology.md) 和只读 [company.schema.json](references/specs/company.schema.json)。在同一任务内锁定：
 
-- 规范仓库、ref、精确 commit SHA、Schema blob 与 `schema_version`；
+- `research_protocol` 的 authority、仓库、ref、发行 commit、版本、文档哈希与摘要；
+- Schema 仓库、ref、精确 commit、blob、SHA-256 与 `schema_version`；
 - 法定名称、主要上市证券、ticker、交易所；
 - 会计准则、财年截止日、报告币种、金额单位、股数单位；
 - 数据截至日、估值日和股价时间戳；
 - 研究模式、行业框架、目标语言和交付范围。
 
-只有身份歧义会实质改变分析时才提问。规范或关键官方资料不可访问时，可以交付研究计划或证据缺口清单，但不得声称完成正式研究。
+只有身份歧义会实质改变分析时才提问。研究协议哈希不匹配、Schema 锚点不兼容或关键官方资料不可访问时，可以交付研究计划或证据缺口清单，但不得声称完成正式研究。
 
 ## 3. 建立证据与计算层
 
@@ -67,7 +69,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 5. 完成长期价值判断
 
-严格执行锁定版本 `docs/research-methodology.md` 第 1—13 节及行业适配框架。每个模块都必须包含：
+严格执行本 Skill 锁定的 `references/specs/research-methodology.md` 第 1—13 节及行业适配框架。每个模块都必须包含：
 
 1. 研究问题；
 2. 关键事实与计算；
@@ -94,7 +96,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 按 [research-contract.md](references/research-contract.md) 建立版本化目录，并按方法论第 14 节生成 `research-report.md`。
 
-每次创建或更新 `company.json` 前，重新读取锁定 commit 的 `schemas/company.schema.json`：
+每次创建或更新 `company.json` 前，重新读取当前 Skill 信任锁绑定的 `references/specs/company.schema.json` 只读副本：
 
 - 不创造额外字段，不改变字段名或类型；
 - 重要结构化事实使用 `source_ids` 指向 `sources`；
@@ -108,7 +110,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 ```bash
 python3 scripts/validate_research_package.py \
   <research-package-root> \
-  --schema <locked-company-schema-path> \
+  --schema references/specs/company.schema.json \
   --mode full \
   --output <research-package-root>/validation-report.json
 ```
@@ -118,13 +120,14 @@ python3 scripts/validate_research_package.py \
 ```bash
 python3 scripts/freeze_research.py \
   <research-package-root> \
-  --schema <locked-company-schema-path> \
+  --schema references/specs/company.schema.json \
   --schema-blob-sha <locked-schema-blob-sha> \
-  --spec-commit <locked-commit-sha>
+  --schema-commit <locked-schema-commit-sha>
 ```
 
-`--schema-blob-sha` 必须来自受信规范锚点的 `schemas/company.schema.json`，冻结工具会按 Git blob 算法复算本地 Schema，避免把任意同名文件冒充上游协议。正式当前研究只允许使用本 Skill 信任锁确认的规范锚点。
-`--schema-blob-sha` 和 commit 还必须同时匹配本 Skill 版本的 [trusted-spec-lock.json](references/trusted-spec-lock.json)。若上游 `main` 已前进，先确认规范锚点仍是其祖先且全部受保护 blob 未变；满足时继续使用原锚点。只有受保护文件变化时才审查规范差异、更新信任锁、测试并保存新 Skill 版本。不得把任意 40 位字符串当作规范锚点。历史研究只做审查或使用与当时 lock 对应的 Skill 版本，不在当前版本伪装成最新研究。
+`--schema-blob-sha` 和 `--schema-commit` 必须同时匹配 [trusted-spec-lock.json](references/trusted-spec-lock.json) 的 `company_schema`；冻结工具会复算本地副本，避免把任意同名文件冒充上游协议。若 `doujiao-value-system/main` 已前进，只检查锁定 Schema commit 仍是祖先且当前 Schema blob 未变。研究协议直接来自本 Skill，并按 `research_protocol` 文档哈希与摘要验证，不再受 system 仓库其他文档变化影响。
+
+新冻结一律生成 `manifest_version: 2.0`，其中 `specification` 只记录 Schema，`research_protocol` 单独记录本 Skill 的研究协议。`manifest_version: 1.0` 只允许审查；不得作为增量前序、重新冻结或 GitHub 归档。
 
 冻结工具遇到警告时默认拒绝继续。先在完整度说明中解释其影响；只有确认警告不改变研究结论时才追加 `--allow-warnings`。只有真实人工审核已经完成时才追加 `--human-reviewed`。
 
@@ -141,22 +144,22 @@ python3 scripts/freeze_research.py \
 ```bash
 python3 scripts/freeze_research.py \
   <new-research-package-root> \
-  --schema <locked-company-schema-path> \
+  --schema references/specs/company.schema.json \
   --schema-blob-sha <locked-schema-blob-sha> \
-  --spec-commit <locked-commit-sha> \
+  --schema-commit <locked-schema-commit-sha> \
   --mode incremental \
   --previous-manifest <previous-version>/research-manifest.json \
   --official-trigger-source-id <new-official-source-id>
 ```
 
-冻结工具会验证上一快照哈希、公司身份、数据日/估值日单调性、官方触发来源及最新报告引用，并仍以 `full` 门禁验收最终研究包。`audit` 模式永远不能冻结。
+冻结工具会验证上一快照哈希、公司身份、数据日/估值日单调性、官方触发来源及最新报告引用，并在当前受信研究协议与 Schema 下对上一版重新执行 `full` 验证；上一版自报的零错误或 `validation-report.json` 不能替代 fresh validation。最终研究包也仍以 `full` 门禁验收。`audit` 模式永远不能冻结。
 
 先比较旧版与新版，只更新受影响的事实、TTM、计算、判断、估值和 verdict，并明确长期逻辑是“增强 / 基本不变 / 削弱 / 被推翻 / 暂无法判断”。不要因为单季噪音机械重做历史或轻易推翻长期结论。
 
 若用户继续要求多平台内容，把以下同一冻结版本交给 `$produce-doujiao-value-content`：
 
 - `research-report.md`；
-- 通过同一规范 commit Schema 校验的 `company.json`；
+- 通过 manifest 中同一 Schema 锚点校验的 `company.json`；
 - `research-manifest.json`；
 - 数据完整度、低置信度和 Schema Gap 说明。
 
@@ -168,11 +171,12 @@ python3 scripts/freeze_research.py \
 
 归档前必须满足：
 
-- `research-manifest.json` 为 `status: frozen` 且 `human_review_status: accepted`；
+- `research-manifest.json` 为 `manifest_version: 2.0`、`status: frozen` 且 `human_review_status: accepted`；v1 研究包只能审查，不能归档；
 - manifest 文件集、哈希、Schema、`full` 验证和警告确认全部重新核验；
-- 目标仓库固定为 `bits-bean/doujiao-value-system`，默认目标分支为 `main`，且当前 `main` 必须通过规范锚点与受保护 blob 检查；
+- 目标仓库固定为 `bits-bean/doujiao-value-system`，默认目标分支为 `main`，且当前 `main` 必须通过 Schema 锚点与 Schema blob 检查；
 - `archive-only` 只把版本快照写入 `research/<company-slug>/<version>/`；只有用户还明确授权“设为当前正式版本”时，`archive-and-promote` 才更新 `companies/<company-slug>/company.json`；
 - 远端同名快照不存在；若已存在则只能在逐文件完全一致时视为幂等成功，任何差异都必须停止并使用新版本号；
+- 远端 slug registry 必须在同一最新 `main` SHA 下证明 `<company-slug>` 与 manifest/company 的法定名称、ticker、交易所一一绑定，或证明该 slug 与身份均未被占用；缺失、wrong slug、别名冲突或身份冲突都不能写入；
 - 当前正式数据不得回退到更旧 `data_as_of`，同日不同内容或公司身份不一致必须停止。
 
 先生成不可变发布计划：
@@ -180,7 +184,7 @@ python3 scripts/freeze_research.py \
 ```bash
 python3 scripts/prepare_github_archive.py \
   <research-package-root> \
-  --schema <locked-company-schema-path> \
+  --schema references/specs/company.schema.json \
   --company-slug <company-slug> \
   --version <YYYY-MM-DD-or-version> \
   --promotion archive-only \
@@ -188,11 +192,11 @@ python3 scripts/prepare_github_archive.py \
   --output <task-temp-dir>/github-archive-plan.json
 ```
 
-未提供远端快照状态时，计划必须标为 `ready_for_write: false`。通过 GitHub 连接器取得同一 `main` SHA 下的版本目录状态后，使用 `--remote-snapshot-state` 重新生成最终计划；`archive-and-promote` 还要用同一 SHA 取得 canonical 文件或确认其不存在。最终运行按实际授权追加 `--confirm-write-authorization`，提升 canonical 再追加 `--confirm-promotion-authorization`，直接写 `main` 再追加 `--confirm-direct-main-authorization`。只有最终计划为 `ready_for_write: true` 才能写入。用户明确授权提升时才把示例中的 `archive-only` 改为 `archive-and-promote`。
+未提供远端快照状态或 slug registry 状态时，计划必须标为 `ready_for_write: false`。通过 GitHub 连接器在同一最新 `main` SHA 下取得版本目录状态和 slug/identity registry observation 后，分别使用 `--remote-snapshot-state` 与 `--remote-slug-registry-state` 重新生成最终计划；`archive-and-promote` 还必须用 `--remote-canonical-state` 提供同一 SHA 的 canonical `{base_head, exists, content}` observation，不存在也必须绑定该 SHA。最终运行按实际授权追加 `--confirm-write-authorization`，提升 canonical 再追加 `--confirm-promotion-authorization`，直接写 `main` 再追加 `--confirm-direct-main-authorization`。只有最终计划为 `ready_for_write: true` 才能写入。用户明确授权提升时才把示例中的 `archive-only` 改为 `archive-and-promote`。
 
 默认使用独立分支和 Pull Request。只有用户明确要求“直接提交到 `main`”时才能使用 `--strategy direct-main`；仍必须基于预检得到的最新 `main` SHA 创建一个原子提交，并以非强制、仅快进方式更新分支。禁止逐文件直接修改 `main`，禁止强推，禁止覆盖冻结快照。
 
-归档 commit 不改变 manifest 使用的规范锚点。提交后重新读取远端 commit，逐项核对计划中的目标路径和 SHA-256。只有 GitHub 明确返回成功且远端复核一致时，才能声称归档完成。归档不等于网站导入、内容生成或公开发布。
+归档 commit 不改变 manifest 使用的 `research_protocol` 或 Schema 锚点。提交后重新读取远端 commit，逐项核对计划中的目标路径和 SHA-256。只有 GitHub 明确返回成功且远端复核一致时，才能声称归档完成。归档不等于网站导入、内容生成或公开发布。
 
 ## 11. 交付状态
 

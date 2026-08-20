@@ -13,15 +13,21 @@ GitHub 归档不等于网站或渠道发布，不触发网站导入，也不触�
 
 ## 发布前门禁
 
-1. 使用冻结时锁定的 Schema 和 Skill 受信锁重新验证研究包。
-2. 要求 `status: frozen`、`human_review_status: accepted`、`validation.mode: full`、零错误，并验证全部 manifest 哈希和文件大小。
+1. 使用冻结时锁定的 Schema 和当前 Skill v2 信任锁重新验证研究包。
+2. 要求 `manifest_version: 2.0`、`status: frozen`、`human_review_status: accepted`、`validation.mode: full`、零错误，并验证全部 manifest 哈希和文件大小。v1 研究包只能审查，不得归档。
 3. 运行 `prepare_github_archive.py` 生成计划。计划文件只能写入任务临时目录，不能写入冻结目录。
-4. 通过 GitHub 连接器取得目标仓库权限和最新 `main` SHA，确认受信规范锚点是其祖先，且锁内全部受保护文件在当前 `main` 上仍是相同 blob。
-5. 检查同名快照状态；`archive-and-promote` 还要取得当前正式 `company.json`。
+4. 通过 GitHub 连接器取得目标仓库权限和最新 `main` SHA，确认 `company_schema.commit` 是其祖先，且当前 `main:schemas/company.schema.json` 仍为锁定 blob；不再检查 system 仓库中的研究方法文档。
+5. 在同一最新 `main` SHA 下检查同名快照、slug/identity registry 一一绑定；`archive-and-promote` 还要取得当前正式 `company.json` 的统一 canonical observation。slug 不存在时还要确认同一公司身份未登记在其他 slug；canonical 不存在也必须记录读取时 SHA。
 6. 先运行确定性敏感字符串扫描，再语义复核非公开个人信息、资料保密性和再分发权；任一层失败都阻断提交。
 7. 任何预检步骤不可访问或结果含糊时停止，不得把 Library 文件、旧聊天或本地缓存当作远端状态。
 
-第一次运行规划器可以不带远端状态，但输出只能是 `ready_for_write: false` 的预检计划。取得连接器返回的精确 `main` SHA、版本目录文件集合、SHA-256 与大小后，把它们写到任务临时目录的 remote-state JSON，再运行规划器。`archive-and-promote` 若 canonical 已存在，还必须把同一 SHA 下载的文件和 `--existing-company-head` 一并提供。最终运行需要与当前请求对应的确认参数：任何写入使用 `--confirm-write-authorization`，提升 canonical 使用 `--confirm-promotion-authorization`，直接 `main` 使用 `--confirm-direct-main-authorization`；最终计划只有 `ready_for_write: true` 才能执行。
+第一次运行规划器可以不带远端状态，但输出只能是 `ready_for_write: false` 的预检计划。取得连接器返回的精确 `main` SHA 后，把下列 observation JSON 写到任务临时目录，再运行规划器：
+
+- `--remote-snapshot-state`：版本目录是否存在、完整文件集合、SHA-256 与大小；
+- `--remote-slug-registry-state`：请求的 `company_slug`、manifest/company 精确身份、`slug_exists`、`slug_identity` 及反向查询得到的 `identity_slugs`；
+- `--remote-canonical-state`（仅 `archive-and-promote`）：精确 canonical 路径、`exists` 与 `content`；存在时 `content` 必须含已下载文件路径、远端 SHA-256、大小及文件身份，不存在时 `content` 必须为 `null`。
+
+三个 observation 的 `repository`、`branch` 和 `base_head` 必须一致。任何缺失都使最终计划保持 `ready_for_write: false`；wrong slug、身份冲突、陈旧 SHA、hash/size/content 不一致都硬阻断。兼容参数 `--existing-company` / `--canonical-absent` 只有同时给出读取时 `--existing-company-head` 才能转换为同一内部 canonical state；新流程优先使用 `--remote-canonical-state`。最终运行需要与当前请求对应的确认参数：任何写入使用 `--confirm-write-authorization`，提升 canonical 使用 `--confirm-promotion-authorization`，直接 `main` 使用 `--confirm-direct-main-authorization`；最终计划只有 `ready_for_write: true` 才能执行。
 
 ## 路径与不可变性
 
@@ -38,7 +44,7 @@ research/<company-slug>/<version>/research-manifest.json
 companies/<company-slug>/company.json
 ```
 
-`company-slug` 只允许小写字母、数字和单连字符，并必须与公司法定名称、ticker、交易所及仓库已有目录核对。`version` 只允许 `YYYY-MM-DD` 或从 `YYYY-MM-DD-v2` 开始的修订后缀。不得接受绝对路径、`..`、转义分隔符、符号链接或其他目标仓库。
+`company-slug` 只允许小写字母、数字和单连字符，但语法正确不等于身份正确。必须以同一 `main` SHA 的 registry 正向核对 slug、反向核对法定名称 + ticker + 交易所；已有绑定必须精确一致，新绑定必须同时证明 slug 未占用且身份没有其他 slug。`version` 只允许 `YYYY-MM-DD` 或从 `YYYY-MM-DD-v2` 开始的修订后缀。不得接受绝对路径、`..`、转义分隔符、符号链接或其他目标仓库。
 
 版本目录不可变：
 
@@ -71,7 +77,7 @@ companies/<company-slug>/company.json
 2. 提交前再次确认远端 `main` 仍等于预检 SHA；若已变化，重新预检和重建 commit。
 3. 以 `force: false` 更新 `main`；禁止强推。
 
-`archive-only` 的 tree 不得包含当前正式副本。无论哪种模式，最终 diff 都只能新增一个版本目录，并可选创建或更新一个 canonical `company.json`；出现删除、重命名、其他路径或受保护规范文件变化立即阻断。
+`archive-only` 的 tree 不得包含当前正式副本。无论哪种模式，最终 diff 都只能新增一个版本目录，并可选创建或更新一个 canonical `company.json`；出现删除、重命名、其他路径或 Schema 文件变化立即阻断。
 
 禁止使用逐文件 contents 更新直接写 `main`，因为中途失败会留下部分版本。无法创建原子 tree/commit 时，退回独立分支和 PR，不得降低完整性门禁。
 
