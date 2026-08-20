@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import py_compile
 import subprocess
@@ -13,6 +15,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME = "research-doujiao-value-company"
+TRUSTED_LOCK_KEYS = {"lock_version", "research_protocol", "company_schema"}
+RESEARCH_PROTOCOL_KEYS = {
+    "authority",
+    "repository",
+    "ref",
+    "commit",
+    "protocol_version",
+    "digest_sha256",
+    "documents",
+}
+COMPANY_SCHEMA_KEYS = {
+    "repository",
+    "ref",
+    "commit",
+    "path",
+    "blob_sha1",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "bundled_path",
+}
 REQUIRED = (
     "SKILL.md",
     "agents/openai.yaml",
@@ -23,11 +46,16 @@ REQUIRED = (
     "references/qa-gates.md",
     "references/github-archive.md",
     "references/trusted-spec-lock.json",
+    "references/specs/project-instructions.md",
+    "references/specs/research-methodology.md",
+    "references/specs/automation-workflow.md",
+    "references/specs/company.schema.json",
     "scripts/validate_research_package.py",
     "scripts/freeze_research.py",
     "scripts/prepare_github_archive.py",
     "scripts/verify_spec_anchor.py",
     "scripts/validate_skill.py",
+    "tests/package_fixture.py",
     "tests/test_incremental_chain.py",
     "tests/test_github_archive.py",
     "tests/test_spec_anchor.py",
@@ -101,18 +129,77 @@ def main() -> int:
         errors += 1
 
     try:
-        import json
-
         lock = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
-        if lock.get("repository") != "bits-bean/doujiao-value-system" or lock.get("ref") != "main":
-            fail("trusted specification lock has the wrong repository or ref")
+        protocol = lock.get("research_protocol", {})
+        schema = lock.get("company_schema", {})
+        if set(lock) != TRUSTED_LOCK_KEYS or lock.get("lock_version") != "2.0":
+            fail("trusted specification lock must use version 2.0 and the exact top-level keys")
             errors += 1
-        if re.fullmatch(r"[0-9a-f]{40}", str(lock.get("commit", ""))) is None:
-            fail("trusted specification lock lacks an exact commit")
+        if (
+            set(protocol) != RESEARCH_PROTOCOL_KEYS
+            or
+            protocol.get("authority") != SKILL_NAME
+            or protocol.get("repository") != "bits-bean/doujiao-value-research-skill"
+            or protocol.get("ref") != "main"
+            or re.fullmatch(r"[0-9a-f]{40}", str(protocol.get("commit", ""))) is None
+        ):
+            fail("research_protocol has the wrong authority, repository, ref, or commit")
             errors += 1
-        schema_blob = lock.get("files", {}).get("schemas/company.schema.json")
-        if re.fullmatch(r"[0-9a-f]{40}", str(schema_blob or "")) is None:
-            fail("trusted specification lock lacks the Schema blob")
+        documents = protocol.get("documents")
+        if not isinstance(documents, list):
+            fail("research_protocol documents must be an array")
+            errors += 1
+        else:
+            expected_paths = {
+                "references/specs/project-instructions.md",
+                "references/specs/research-methodology.md",
+                "references/specs/automation-workflow.md",
+            }
+            if [item.get("path") for item in documents if isinstance(item, dict)] != sorted(expected_paths):
+                fail("research_protocol documents must be complete, unique, and path-sorted")
+                errors += 1
+            for item in documents:
+                if not isinstance(item, dict) or set(item) != {"path", "sha256", "size_bytes"}:
+                    fail("research_protocol document entries must contain exactly path, sha256, and size_bytes")
+                    errors += 1
+                    continue
+                if item.get("path") not in expected_paths:
+                    continue
+                local = ROOT / item["path"]
+                data = local.read_bytes()
+                if item.get("sha256") != hashlib.sha256(data).hexdigest() or item.get("size_bytes") != len(data):
+                    fail(f"research protocol lock mismatch: {item['path']}")
+                    errors += 1
+            digest = hashlib.sha256(
+                json.dumps(documents, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            if protocol.get("digest_sha256") != digest:
+                fail("research_protocol digest is invalid")
+                errors += 1
+        if (
+            set(schema) != COMPANY_SCHEMA_KEYS
+            or
+            schema.get("repository") != "bits-bean/doujiao-value-system"
+            or schema.get("ref") != "main"
+            or schema.get("path") != "schemas/company.schema.json"
+            or schema.get("bundled_path") != "references/specs/company.schema.json"
+            or re.fullmatch(r"[0-9a-f]{40}", str(schema.get("commit", ""))) is None
+            or re.fullmatch(r"[0-9a-f]{40}", str(schema.get("blob_sha1", ""))) is None
+            or re.fullmatch(r"[0-9a-f]{64}", str(schema.get("sha256", ""))) is None
+        ):
+            fail("company_schema has the wrong authority binding")
+            errors += 1
+        bundled_schema = (ROOT / "references/specs/company.schema.json").read_bytes()
+        schema_variants = {bundled_schema}
+        if bundled_schema.endswith(b"\n"):
+            schema_variants.add(bundled_schema[:-1])
+        else:
+            schema_variants.add(bundled_schema + b"\n")
+        if schema.get("sha256") not in {hashlib.sha256(item).hexdigest() for item in schema_variants}:
+            fail("bundled company Schema differs from company_schema SHA-256")
+            errors += 1
+        if schema.get("size_bytes") not in {len(item) for item in schema_variants}:
+            fail("bundled company Schema size differs from company_schema lock")
             errors += 1
     except (OSError, ValueError, AttributeError) as exc:
         fail(f"invalid trusted specification lock: {exc}")
