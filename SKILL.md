@@ -94,7 +94,9 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 7. 生成正式研究包
 
-按 [research-contract.md](references/research-contract.md) 建立版本化目录，并按方法论第 14 节生成 `research-report.md`。
+按 [research-contract.md](references/research-contract.md) 建立版本化目录，并按方法论第 14 节生成可独立阅读和核实的 `research-report.md`。报告必须完整包含规定的 16 节、一页式结论、八维最终评分、逐维护城河、完整 Pre-Mortem 与最终明确字段；伴随文件只是补充和审计层，不得替代报告正文。
+
+关键主张就地引用。使用 `SRC-*` 时，文末来源定位索引必须按 ID 给出标题、发布者/来源类型、日期/期间、直接 URL 和页码/章节定位；禁止把 URL 推给 `company.json`、台账或其他附件。术语首次出现时解释，结论先通俗表达、后给技术口径。
 
 每次创建或更新 `company.json` 前，重新读取当前 Skill 信任锁绑定的 `references/specs/company.schema.json` 只读副本：
 

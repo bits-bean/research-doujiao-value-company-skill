@@ -32,7 +32,13 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 ### research-report.md
 
-按本 Skill `references/specs/research-methodology.md` 第 14 节的顺序覆盖 16 个部分，并包含来源 ID 或直接链接。报告必须分别给出企业质量、估值状态、研究状态、置信度、2—4 个关键前提和 thesis breakers。
+按本 Skill `references/specs/research-methodology.md` 第 14 节的顺序完整包含 16 个部分，每节都有实质正文，不得合并、缺省或用占位文本替代。一页式结论和最终结论必须以明确字段分别给出企业质量、估值状态、研究状态、置信度、2—4 项关键前提和 thesis breakers，且前后一致。最终结论还必须展示方法论第 13 节规定的八维评分；护城河和 Pre-Mortem 必须逐项包含方法论第 5、11、14 节规定的全部字段。
+
+报告必须在脱离 `company.json`、证据台账、计算台账和完整度说明时仍可独立阅读和核实。伴随文件用于补充结构化数据、审计轨迹和机械复算，不得代替关键主张的正文解释、就地引用或来源定位。禁止使用“完整 URL 见 `company.json.sources`”或类似表述。
+
+正式报告使用可见的纯 Markdown；除无属性 `<br>` / `<br/>` 外不得包含原始 HTML，也不得把结构或正文藏进 fenced code、HTML comment 或不可见容器。
+
+关键数字和关键主张在出现处就地引用直接链接或标注 `SRC-*`。采用 `SRC-*` 时，精确定位由文末来源定位索引统一解析，正文不必重复；索引必须对每个 ID 给出标题、发布者与来源类型、发布日期或适用期间、直接 URL，以及页码、监管文件 Item/表号、稳定章节或时间戳中的至少一项。缩写、行业指标和非通用术语首次出现时必须解释；每项结论先给通俗含义，再给技术口径、计算和限制。
 
 ### company.json
 
