@@ -1,0 +1,1191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doujiao-value-system/schemas/company.schema.json",
+  "title": "Doujiao Value System Company Schema",
+  "description": "豆角长期价值研究系统的公司结构化数据协议。用于约束 AI 研究输出、网站导入、自动化更新与多平台内容生成。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "brand_identity",
+    "verdict",
+    "reporting",
+    "financials",
+    "income_statement_sankey",
+    "segments",
+    "capital_allocation",
+    "buyback_ledger",
+    "debt_maturities",
+    "moat",
+    "management",
+    "valuation",
+    "risks",
+    "sources"
+  ],
+  "properties": {
+    "meta": {
+      "$ref": "#/$defs/meta"
+    },
+    "brand_identity": {
+      "$ref": "#/$defs/brandIdentity"
+    },
+    "verdict": {
+      "$ref": "#/$defs/verdict"
+    },
+    "reporting": {
+      "$ref": "#/$defs/reporting"
+    },
+    "financials": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/financialPeriod"
+      }
+    },
+    "income_statement_sankey": {
+      "$ref": "#/$defs/sankey"
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/segment"
+      }
+    },
+    "capital_allocation": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capitalAllocationItem"
+      }
+    },
+    "buyback_ledger": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/buybackItem"
+      }
+    },
+    "debt_maturities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/debtMaturity"
+      }
+    },
+    "moat": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/moatItem"
+      }
+    },
+    "management": {
+      "$ref": "#/$defs/management"
+    },
+    "valuation": {
+      "$ref": "#/$defs/valuation"
+    },
+    "risks": {
+      "$ref": "#/$defs/risks"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "$defs": {
+    "nullableNumber": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ratio": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "比例统一使用十进制小数表示：0.25 = 25%，-0.10 = -10%。"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sourceIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "company_name_cn",
+        "company_name_en",
+        "ticker",
+        "exchange",
+        "fiscal_year_end",
+        "report_currency",
+        "financial_unit",
+        "share_unit",
+        "ratio_convention",
+        "valuation_date",
+        "data_as_of",
+        "accounting_standard",
+        "display_language",
+        "source_version",
+        "schema_version",
+        "theme",
+        "sankey_style"
+      ],
+      "properties": {
+        "company_name_cn": {
+          "type": "string",
+          "minLength": 1
+        },
+        "company_name_en": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ticker": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exchange": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fiscal_year_end": {
+          "type": "string",
+          "pattern": "^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+        },
+        "report_currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 报告货币代码，例如 CNY、USD、HKD。"
+        },
+        "financial_unit": {
+          "type": "string",
+          "enum": [
+            "unit",
+            "thousand",
+            "million",
+            "billion"
+          ],
+          "default": "million",
+          "description": "除每股价格外，company.json 内货币金额统一采用的计量单位。推荐 million。"
+        },
+        "share_unit": {
+          "type": "string",
+          "enum": [
+            "share",
+            "thousand_shares",
+            "million_shares",
+            "billion_shares"
+          ],
+          "default": "million_shares",
+          "description": "股数类字段统一采用的计量单位。推荐 million_shares。"
+        },
+        "ratio_convention": {
+          "type": "string",
+          "const": "decimal",
+          "default": "decimal",
+          "description": "所有百分比、增长率、利润率、ROE/ROIC、折现率等比例字段均使用十进制小数：0.25 = 25%。"
+        },
+        "valuation_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "data_as_of": {
+          "type": "string",
+          "format": "date"
+        },
+        "accounting_standard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_language": {
+          "type": "string",
+          "default": "zh-CN"
+        },
+        "source_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "研究方法 / Instructions / Knowledge 版本。"
+        },
+        "schema_version": {
+          "type": "string",
+          "const": "1.1.0",
+          "default": "1.1.0",
+          "description": "company.json 数据协议版本。"
+        },
+        "theme": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sankey_style": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "logoAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_path",
+        "source_url",
+        "alt",
+        "is_official"
+      ],
+      "properties": {
+        "asset_path": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "alt": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "is_official": {
+          "type": "boolean"
+        }
+      }
+    },
+    "brandPalette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary",
+        "secondary",
+        "accent"
+      ],
+      "properties": {
+        "primary": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "secondary": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "accent": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "brandIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "company_logo",
+        "brand_palette",
+        "product_brands",
+        "visual_motif",
+        "independent_research_label"
+      ],
+      "properties": {
+        "company_logo": {
+          "$ref": "#/$defs/logoAsset"
+        },
+        "brand_palette": {
+          "$ref": "#/$defs/brandPalette"
+        },
+        "product_brands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "visual_motif": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "independent_research_label": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "business_quality",
+        "valuation_status",
+        "research_status",
+        "confidence",
+        "one_sentence",
+        "key_assumptions",
+        "thesis_breakers"
+      ],
+      "properties": {
+        "business_quality": {
+          "type": "string"
+        },
+        "valuation_status": {
+          "type": "string"
+        },
+        "research_status": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "string"
+        },
+        "one_sentence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key_assumptions": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "thesis_breakers": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "reportRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "report_date",
+        "date_status",
+        "source_ids"
+      ],
+      "properties": {
+        "period": {
+          "type": "string",
+          "minLength": 1,
+          "description": "例如 2026Q2、2025FY。"
+        },
+        "period_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "FY",
+            "Q1",
+            "Q2",
+            "Q3",
+            "Q4",
+            "H1",
+            "H2",
+            null
+          ]
+        },
+        "report_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "date_status": {
+          "type": "string",
+          "enum": [
+            "official",
+            "estimated",
+            "unknown"
+          ]
+        },
+        "filing_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latest_report",
+        "next_expected_report"
+      ],
+      "properties": {
+        "latest_report": {
+          "$ref": "#/$defs/reportRecord"
+        },
+        "next_expected_report": {
+          "$ref": "#/$defs/reportRecord"
+        },
+        "last_checked_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "自动化系统最近一次检查财报发布状态的时间。"
+        },
+        "monitoring_notes": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "financialPeriod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "period_type",
+        "revenue",
+        "gross_profit",
+        "operating_profit",
+        "net_income",
+        "operating_cash_flow",
+        "capex_total",
+        "free_cash_flow",
+        "cash",
+        "total_debt",
+        "net_debt",
+        "is_estimate",
+        "source_ids"
+      ],
+      "properties": {
+        "period": {
+          "type": "string",
+          "minLength": 1
+        },
+        "period_type": {
+          "type": "string",
+          "enum": [
+            "FY",
+            "Q1",
+            "Q2",
+            "Q3",
+            "Q4",
+            "H1",
+            "H2",
+            "LTM",
+            "TTM"
+          ]
+        },
+        "revenue": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gross_profit": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "operating_profit": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "net_income": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "operating_cash_flow": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "capex_total": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "capex_maintenance_low": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "capex_maintenance_high": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "free_cash_flow": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "shareholder_adjusted_fcf": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "owner_earnings_low": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "owner_earnings_high": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "gross_margin": {
+          "$ref": "#/$defs/ratio"
+        },
+        "operating_margin": {
+          "$ref": "#/$defs/ratio"
+        },
+        "net_margin": {
+          "$ref": "#/$defs/ratio"
+        },
+        "roic": {
+          "$ref": "#/$defs/ratio"
+        },
+        "roe": {
+          "$ref": "#/$defs/ratio"
+        },
+        "incremental_roic": {
+          "$ref": "#/$defs/ratio"
+        },
+        "cash": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "total_debt": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "net_debt": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "interest_coverage": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "sbc": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "diluted_shares": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "dividends": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "buybacks": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "acquisitions": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "is_estimate": {
+          "type": "boolean"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "sankeyNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number"
+        },
+        "category": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "color": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "sankeyLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "value"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0
+        },
+        "label": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "sankey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fiscal_year",
+        "basis",
+        "nodes",
+        "links",
+        "reconciled",
+        "source_ids"
+      ],
+      "properties": {
+        "fiscal_year": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "income_statement"
+          ]
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sankeyNode"
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sankeyLink"
+          }
+        },
+        "reconciled": {
+          "type": "boolean"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "name",
+        "revenue",
+        "source_ids"
+      ],
+      "properties": {
+        "period": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revenue": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "operating_profit": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "revenue_share": {
+          "$ref": "#/$defs/ratio"
+        },
+        "growth_rate": {
+          "$ref": "#/$defs/ratio"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "capitalAllocationItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "category",
+        "amount",
+        "source_ids"
+      ],
+      "properties": {
+        "period": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "amount": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "commentary": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "buybackItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "amount",
+        "source_ids"
+      ],
+      "properties": {
+        "period": {
+          "type": "string"
+        },
+        "amount": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "shares_repurchased": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "average_price": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "shares_outstanding_change": {
+          "$ref": "#/$defs/ratio"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "debtMaturity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "year",
+        "amount",
+        "source_ids"
+      ],
+      "properties": {
+        "year": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "amount": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "instrument": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "interest_rate": {
+          "$ref": "#/$defs/ratio"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "moatItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimension",
+        "assessment",
+        "score",
+        "evidence",
+        "source_ids"
+      ],
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assessment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "managementScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimension",
+        "score",
+        "assessment",
+        "source_ids"
+      ],
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10
+        },
+        "assessment": {
+          "type": "string"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "commitmentEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date",
+        "commitment",
+        "status",
+        "source_ids"
+      ],
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "commitment": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "management": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scores",
+        "commitment_timeline",
+        "stop_doing_list"
+      ],
+      "properties": {
+        "scores": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/managementScore"
+          }
+        },
+        "commitment_timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/commitmentEvent"
+          }
+        },
+        "stop_doing_list": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "dcfScenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "fair_value_per_share"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "revenue_growth": {
+          "$ref": "#/$defs/ratio"
+        },
+        "margin": {
+          "$ref": "#/$defs/ratio"
+        },
+        "discount_rate": {
+          "$ref": "#/$defs/ratio"
+        },
+        "terminal_growth": {
+          "$ref": "#/$defs/ratio"
+        },
+        "fair_value_per_share": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "dcfSensitivityCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discount_rate",
+        "terminal_growth",
+        "fair_value_per_share"
+      ],
+      "properties": {
+        "discount_rate": {
+          "type": "number"
+        },
+        "terminal_growth": {
+          "type": "number"
+        },
+        "fair_value_per_share": {
+          "type": "number"
+        }
+      }
+    },
+    "expectedReturn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "horizon_years",
+        "scenario",
+        "annualized_return"
+      ],
+      "properties": {
+        "horizon_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "scenario": {
+          "type": "string"
+        },
+        "annualized_return": {
+          "$ref": "#/$defs/ratio"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "valuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "market_price",
+        "diluted_shares",
+        "market_cap",
+        "enterprise_value",
+        "multiples",
+        "dcf_scenarios",
+        "dcf_sensitivity",
+        "reverse_dcf",
+        "fair_value_range",
+        "expected_returns"
+      ],
+      "properties": {
+        "market_price": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "每股市场价格，单位为 report_currency / share。"
+        },
+        "diluted_shares": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "稀释后股数，单位遵循 meta.share_unit。"
+        },
+        "market_cap": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "市值，单位遵循 meta.financial_unit。"
+        },
+        "enterprise_value": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "企业价值，单位遵循 meta.financial_unit。"
+        },
+        "multiples": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string",
+              "null"
+            ]
+          }
+        },
+        "dcf_scenarios": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dcfScenario"
+          }
+        },
+        "dcf_sensitivity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dcfSensitivityCell"
+          }
+        },
+        "reverse_dcf": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "fair_value_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "low": {
+              "$ref": "#/$defs/nullableNumber"
+            },
+            "base": {
+              "$ref": "#/$defs/nullableNumber"
+            },
+            "high": {
+              "$ref": "#/$defs/nullableNumber"
+            },
+            "currency": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z]{3}$"
+            }
+          }
+        },
+        "expected_returns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expectedReturn"
+          }
+        }
+      }
+    },
+    "monitoringIndicator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "current_status",
+        "trigger"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "current_status": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": "string"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "risks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pre_mortem",
+        "bear_case",
+        "fragile_assumptions",
+        "monitoring_indicators"
+      ],
+      "properties": {
+        "pre_mortem": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "bear_case": {
+          "type": "string"
+        },
+        "fragile_assumptions": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "monitoring_indicators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/monitoringIndicator"
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "source_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "annual_report",
+            "quarterly_report",
+            "earnings_release",
+            "earnings_call",
+            "investor_presentation",
+            "regulatory_filing",
+            "official_website",
+            "management_interview",
+            "news",
+            "research",
+            "other"
+          ]
+        },
+        "publisher": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "accessed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    }
+  }
+}
