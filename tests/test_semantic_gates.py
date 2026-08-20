@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import copy
+import re
 import shutil
 import sys
 import tempfile
@@ -15,6 +17,9 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "tests"))
+
+from package_fixture import make_valid_unfrozen_package  # noqa: E402
 
 from validate_research_package import (  # noqa: E402
     FROZEN_HASH_FILES,
@@ -39,6 +44,31 @@ from validate_research_package import (  # noqa: E402
     validate_verdict_and_risks,
     write_json,
 )
+
+
+def replace_h2_body(report: str, heading: str, body: str) -> str:
+    marker = f"## {heading}\n"
+    start = report.index(marker)
+    end = report.find("\n## ", start + len(marker))
+    if end < 0:
+        end = len(report)
+    return report[:start] + marker + body.rstrip() + "\n" + report[end:]
+
+
+def h2_body(report: str, heading: str) -> str:
+    marker = f"## {heading}\n"
+    start = report.index(marker) + len(marker)
+    end = report.find("\n## ", start)
+    return report[start:end if end >= 0 else len(report)].rstrip()
+
+
+def remove_h2_section(report: str, heading: str) -> str:
+    marker = f"## {heading}\n"
+    start = report.index(marker)
+    end = report.find("\n## ", start + len(marker))
+    if end < 0:
+        end = len(report)
+    return report[:start] + report[end + (1 if end < len(report) else 0):]
 
 
 class SemanticGateTests(unittest.TestCase):
@@ -212,6 +242,397 @@ class SemanticGateTests(unittest.TestCase):
         report_findings: list[Finding] = []
         validate_report(company, report, "full", report_findings)
         self.assertIn("repeated-report-section", {item.code for item in report_findings})
+
+    def test_formal_report_fixture_passes_and_structural_keyword_stuffing_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        def codes(candidate: str) -> set[str]:
+            findings: list[Finding] = []
+            validate_report(company, candidate, "full", findings)
+            return {item.code for item in findings}
+
+        self.assertEqual(codes(report), set())
+        keyword_piles = {
+            "summary": (
+                replace_h2_body(
+                    report,
+                    "一页式结论",
+                    "企业质量、估值状态、研究状态、置信度、关键假设和 Thesis breakers 都是重要概念，"
+                    "但这段文字故意不把结论和值建立结构化对应。保留引用 SRC-FY 和 SRC-Q1 也不应绕过门禁。",
+                ),
+                "report-one-page-business-quality",
+            ),
+            "final": (
+                replace_h2_body(
+                    report,
+                    "最终结论",
+                    "八维评分矩阵、评分、置信度、核心证据、最强反证、企业质量、估值状态、研究状态、"
+                    "关键假设和 Thesis breakers 全部出现，但没有结构化字段或逐维记录，不能视为完整结论。",
+                ),
+                "report-final-scorecard",
+            ),
+            "moat": (
+                replace_h2_body(
+                    report,
+                    "护城河",
+                    "评分、趋势、置信度、支持证据、最强反证和最可能的破坏因素全部写在一个长段落中，"
+                    "没有逐维映射，也没有可验证的分数与互不重复的证据，因此关键词齐全仍应失败。",
+                ),
+                "report-moat-matrix",
+            ),
+            "pre-mortem": (
+                report.replace(
+                    "| 新技术改变客户入口，既有品牌无法转化为下一代产品采用。 | 中 | 高 | 5–10年 | 新入口交易占比上升而本公司采用率落后 | 部分可逆 | 开放接口并通过合作进入下一代入口 |\n",
+                    "",
+                    1,
+                ),
+                "report-pre-mortem-substance",
+            ),
+            "source-index": (
+                replace_h2_body(
+                    report,
+                    "主要来源索引",
+                    "SRC-FY 和 SRC-Q1 的标题、发布者、来源类型、日期、期间、URL、页码与章节定位关键词都在此，"
+                    "但没有把每个 ID 映射到一条完整可复核记录。",
+                ),
+                "report-source-index-structure",
+            ),
+        }
+        for label, (candidate, expected) in keyword_piles.items():
+            with self.subTest(label=label):
+                self.assertIn(expected, codes(candidate))
+
+        invalid_moat_score = report.replace("| 定价权 | 4.0 / 5 |", "| 定价权 | 9 / 5 |", 1)
+        self.assertIn("report-moat-matrix-substance", codes(invalid_moat_score))
+
+    def test_formal_report_section_and_source_index_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        def codes(candidate: str) -> set[str]:
+            findings: list[Finding] = []
+            validate_report(company, candidate, "full", findings)
+            return {item.code for item in findings}
+
+        self.assertIn("report-section-business-model", codes(remove_h2_section(report, "商业模式")))
+        swapped = report.replace("## 商业模式", "## __TEMP__", 1).replace("## 十年财务", "## 商业模式", 1).replace("## __TEMP__", "## 十年财务", 1)
+        self.assertIn("report-section-order", codes(swapped))
+
+        no_index = remove_h2_section(report, "主要来源索引")
+        self.assertIn("report-source-index", codes(no_index))
+        direct_links = no_index
+        direct_links = direct_links.replace("SRC-FY", "https://example.com/investors/2025-annual-report")
+        direct_links = direct_links.replace("SRC-Q1", "https://example.com/investors/2026-q1")
+        self.assertEqual(codes(direct_links), set())
+
+        uncited_business = replace_h2_body(
+            report,
+            "商业模式",
+            h2_body(report, "商业模式").replace("就地来源：SRC-FY。", "", 1),
+        )
+        self.assertIn("report-section-citation", codes(uncited_business))
+
+        final_start = report.index("## 最终结论\n")
+        conflicting_final = report[:final_start] + report[final_start:].replace("| 置信度 | 高 |", "| 置信度 | 低 |", 1)
+        self.assertIn("report-conclusion-consistency", codes(conflicting_final))
+        missing_final_quality = report[:final_start] + report[final_start:].replace("| 企业质量 | 良好 |\n", "", 1)
+        self.assertIn("report-final-business-quality", codes(missing_final_quality))
+
+        publisher_only = report.replace("Test Company / annual report", "Test Company", 1)
+        self.assertIn("report-source-index-mapping", codes(publisher_only))
+        wrong_date_and_period = report.replace("2026-02-15 / FY2025", "2024-01-01 / FY2024", 1)
+        self.assertIn("report-source-index-mapping", codes(wrong_date_and_period))
+        dated_location = report.replace("pp. 40-74", "2025 Annual Report pp. 40-74", 1)
+        self.assertEqual(codes(dated_location), set())
+        mapping_mutations = {
+            "missing-publisher": report.replace("Test Company / annual report", "annual report", 1),
+            "wrong-title": report.replace("Test Company 2025 Annual Report", "Unrelated document", 1),
+            "wrong-url": report.replace("https://example.com/investors/2025-annual-report | pp. 40-74", "https://example.com/wrong | pp. 40-74", 1),
+            "missing-location": report.replace("| pp. 40-74 |", "| Annual report |", 1),
+        }
+        for label, candidate in mapping_mutations.items():
+            with self.subTest(label=label):
+                self.assertIn("report-source-index-mapping", codes(candidate))
+
+        source_marker = "## 主要来源索引\n"
+        source_start = report.index(source_marker)
+        source_section = report[source_start:]
+        without_source = report[:source_start]
+        final_start = without_source.index("## 最终结论\n")
+        misplaced = without_source[:final_start] + source_section + "\n" + without_source[final_start:]
+        self.assertIn("report-source-index-order", codes(misplaced))
+
+    def test_report_bypass_regressions_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        def codes(candidate: str, candidate_company: dict | None = None) -> set[str]:
+            findings: list[Finding] = []
+            validate_report(candidate_company or company, candidate, "full", findings)
+            return {item.code for item in findings}
+
+        final_body = h2_body(report, "最终结论")
+        zero_scorecard = re.sub(r"(?m)^(\| [^|\n]+ \| )\d(?:\.\d+)? / 5( \|)", r"\g<1>0 / 5\2", final_body)
+        zero_without_row_sources = zero_scorecard.replace("〔SRC-FY〕", "").replace("〔SRC-Q1〕", "")
+        self.assertIn(
+            "report-final-scorecard-substance",
+            codes(replace_h2_body(report, "最终结论", zero_without_row_sources)),
+        )
+
+        contradictory_final = final_body.replace(
+            "核心客户续费率保持稳定且单位服务收入继续温和增长",
+            "核心客户续费率将永久崩溃且单位服务收入停止增长",
+            1,
+        )
+        self.assertIn(
+            "report-conclusion-key-assumptions-consistency",
+            codes(replace_h2_body(report, "最终结论", contradictory_final)),
+        )
+        contradictory_breaker = final_body.replace(
+            "连续四个季度核心客户净流失并伴随单位经济性恶化",
+            "连续四个季度核心客户增长即可推翻长期结论",
+            1,
+        )
+        self.assertIn(
+            "report-conclusion-thesis-breakers-consistency",
+            codes(replace_h2_body(report, "最终结论", contradictory_breaker)),
+        )
+
+        no_index = remove_h2_section(report, "主要来源索引")
+        fake_links = no_index.replace("SRC-FY", "https://fake.example/fy").replace("SRC-Q1", "https://fake.example/q1")
+        self.assertIn("report-source-url", codes(fake_links))
+        implausible_page = report.replace("pp. 40-74", "p. 999999", 1)
+        self.assertIn("report-source-index-mapping", codes(implausible_page))
+        beyond_disclosed_page_count = report.replace("pp. 40-74", "p. 100", 1)
+        self.assertIn("report-source-index-mapping", codes(beyond_disclosed_page_count))
+
+        empty_valuation = replace_h2_body(
+            report,
+            "Reverse DCF 与估值",
+            "这一段只声称公司具有合理价值，却没有给出任何 DCF 情景表、敏感性矩阵或 Reverse DCF 解释。"
+            "文字长度足够且保留就地来源 SRC-Q1，但不能替代可独立阅读和复核的估值结构。",
+        )
+        valuation_codes = codes(empty_valuation)
+        self.assertTrue(
+            {"report-valuation-scenarios", "report-valuation-sensitivity", "report-valuation-reverse-dcf"}.issubset(valuation_codes)
+        )
+
+        moat_body = h2_body(report, "护城河")
+        mismatched_moat_score = moat_body.replace("| 定价权 | 4.0 / 5 |", "| 定价权 | 2.0 / 5 |", 1)
+        self.assertIn("report-moat-score-consistency", codes(replace_h2_body(report, "护城河", mismatched_moat_score)))
+        missing_network = replace_h2_body(report, "护城河", moat_body.replace("| 网络效应 |", "| 规模优势 |", 1))
+        self.assertIn("report-moat-core-coverage", codes(missing_network))
+
+        pre_mortem = h2_body(report, "Pre-Mortem 事前验尸")
+        combined = pre_mortem.replace(
+            "| 失败路径 | 概率 | 影响 | 期限 | 最早预警 | 可逆性 | 管理层缓解 |",
+            "| 失败路径 | 概率/影响 | 期限 | 最早预警 | 可逆性 | 管理层缓解 |",
+            1,
+        ).replace("|---|---|---|---|---|---|---|", "|---|---|---|---|---|---|", 1)
+        combined = re.sub(
+            r"(?m)^\| (.+?) \| (中|中低|低) \| (高|严重|重大) \|",
+            r"| \1 | \2/\3 |",
+            combined,
+        )
+        self.assertIn("report-pre-mortem-matrix", codes(replace_h2_body(report, "Pre-Mortem 事前验尸", combined)))
+
+        unrelated_paths = pre_mortem
+        path_replacements = {
+            "核心客户因产品体验停滞而迁移，续费下降导致单位经济性失效。": "总部装修延期导致办公桌颜色未按计划更换",
+            "商户侧出现更低成本替代网络，覆盖优势逐步转为固定成本负担。": "年度团建地点调整造成员工出行安排短暂变化",
+            "监管限制数据使用范围，风控准确性下降并推高信用损失。": "公司食堂菜单轮换降低了午餐选择的稳定程度",
+            "管理层在高估值阶段过度回购，削弱应对衰退的资产负债表弹性。": "办公用品供应商更名需要重新打印采购联系人名片",
+            "新技术改变客户入口，既有品牌无法转化为下一代产品采用。": "会议室预订系统升级改变内部日历的显示颜色",
+        }
+        for structured_path, unrelated_path in path_replacements.items():
+            unrelated_paths = unrelated_paths.replace(structured_path, unrelated_path, 1)
+        self.assertIn(
+            "report-pre-mortem-path-mapping",
+            codes(replace_h2_body(report, "Pre-Mortem 事前验尸", unrelated_paths)),
+        )
+        extra_path = pre_mortem.replace(
+            "\n\n| 补充诊断 |",
+            "\n| 与核心风险无关的额外办公场地搬迁事件 | 低 | 中 | 1年 | 行政通知调整办公地址 | 高 | 重新安排座位与通勤支持 |\n\n| 补充诊断 |",
+            1,
+        )
+        self.assertIn(
+            "report-pre-mortem-path-mapping",
+            codes(replace_h2_body(report, "Pre-Mortem 事前验尸", extra_path)),
+        )
+
+        pre_mortem_supplement_regressions = {
+            "bear-case": (
+                pre_mortem.replace(
+                    "| 最强反方观点 | 最强悲观情形是竞争补贴、监管收紧与错误资本配置同时发生，使增长与利润率永久低于反向估值要求。 |\n",
+                    "",
+                    1,
+                ),
+                "report-pre-mortem-bear-case",
+            ),
+            "fragile-assumptions": (
+                pre_mortem.replace(
+                    "高价值客户仍愿意为可靠服务与权益组合支付溢价",
+                    "高价值客户将永久拒绝任何可靠服务与权益组合",
+                    1,
+                ),
+                "report-pre-mortem-fragile-assumptions",
+            ),
+            "thesis-breakers": (
+                pre_mortem.replace(
+                    "连续四个季度核心客户净流失并伴随单位经济性恶化",
+                    "连续四个季度核心客户增长即可推翻长期结论",
+                    1,
+                ),
+                "report-pre-mortem-thesis-breakers",
+            ),
+            "outcome-distinction": (
+                pre_mortem.replace(
+                    "| 破产路径 | 监管处罚与信用损失同时激增，流动性储备耗尽并触发债务违约，股权价值可能归零。 |\n",
+                    "",
+                    1,
+                ),
+                "report-pre-mortem-outcome-distinction",
+            ),
+        }
+        for label, (candidate_body, expected_code) in pre_mortem_supplement_regressions.items():
+            with self.subTest(label=label):
+                self.assertIn(expected_code, codes(replace_h2_body(report, "Pre-Mortem 事前验尸", candidate_body)))
+
+        bad_final_confidence = final_body.replace("| 生意可理解性 | 4.5 / 5 | 高 |", "| 生意可理解性 | 4.5 / 5 | 高中低均无法判断 |", 1)
+        self.assertIn("report-final-scorecard-substance", codes(replace_h2_body(report, "最终结论", bad_final_confidence)))
+        bad_moat_confidence = moat_body.replace("| 定价权 | 4.0 / 5 | 稳定 | 高 |", "| 定价权 | 4.0 / 5 | 稳定 | high-confidence-is-unknown |", 1)
+        self.assertIn("report-moat-matrix-substance", codes(replace_h2_body(report, "护城河", bad_moat_confidence)))
+
+        uncited_moat_row = moat_body.replace("稳定区间〔SRC-FY〕", "稳定区间", 1)
+        self.assertIn("report-moat-matrix-substance", codes(replace_h2_body(report, "护城河", uncited_moat_row)))
+        uncited_final_row = final_body.replace("直接解释〔SRC-FY〕", "直接解释", 1)
+        self.assertIn("report-final-scorecard-substance", codes(replace_h2_body(report, "最终结论", uncited_final_row)))
+
+    def test_report_visible_markdown_substance_and_canonical_headings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        def codes(candidate: str, candidate_company: dict | None = None) -> set[str]:
+            findings: list[Finding] = []
+            validate_report(candidate_company or company, candidate, "full", findings)
+            return {item.code for item in findings}
+
+        replace_headings = (
+            "身份、日期与完整度", "商业模式", "十年财务", "自由现金流与 Owner Earnings",
+            "ROIC 与投入资本回报", "长期生存与十年后需求", "企业文化、管理层与资本配置",
+            "回购明细", "治理、债务与红旗", "Reverse DCF 与估值", "待调查与 Open Questions",
+            "领先指标与 Monitoring Indicators",
+        )
+        pseudo_url_report = report
+        fake_body = "https://fake.example/only-citation-path-without-visible-analysis" * 3
+        for heading in replace_headings:
+            pseudo_url_report = replace_h2_body(pseudo_url_report, heading, fake_body)
+        pseudo_codes = codes(pseudo_url_report)
+        self.assertTrue({"report-section-thin", "repeated-report-section", "report-source-url"}.issubset(pseudo_codes))
+
+        fenced_codes = codes(f"```markdown\n{report}\n```\n")
+        self.assertIn("report-section-one-page-conclusion", fenced_codes)
+        commented_codes = codes(f"<!--\n{report}\n-->\n")
+        self.assertIn("report-section-one-page-conclusion", commented_codes)
+
+        br_variant = report.replace("<br>", "<BR />")
+        self.assertEqual(codes(br_variant), set())
+        br_with_attributes = report.replace("<br>", "<br hidden>", 1)
+        self.assertIn("report-raw-html", codes(br_with_attributes))
+        autolink = report.replace(
+            "https://example.com/investors/2025-annual-report |",
+            "<https://example.com/investors/2025-annual-report> |",
+            1,
+        )
+        self.assertEqual(codes(autolink), set())
+        first_h2 = report.index("## ")
+        prefix, h2_onward = report[:first_h2], report[first_h2:]
+        hidden_html = prefix + "<DiV\n HIDDEN = 'false'>\n" + h2_onward + "\n</dIv>\n"
+        self.assertIn("report-section-one-page-conclusion", codes(hidden_html))
+        display_none = prefix + '<section STYLE="color:red; DISPLAY : none">\n' + h2_onward + "\n</section>\n"
+        self.assertIn("report-section-one-page-conclusion", codes(display_none))
+        template_html = prefix + "<TeMpLaTe data-kind='report'>\n" + h2_onward + "\n</tEmPlAtE>\n"
+        self.assertIn("report-section-one-page-conclusion", codes(template_html))
+        script_html = prefix + "<SCRIPT type='text/markdown'>\n" + h2_onward + "\n</script>\n"
+        self.assertIn("report-section-one-page-conclusion", codes(script_html))
+        raw_div = prefix + '<div class="report">\n' + h2_onward + "\n</div>\n"
+        self.assertIn("report-raw-html", codes(raw_div))
+
+        current_headings = (
+            "一页式结论", "身份、日期与完整度", "商业模式", "十年财务", "自由现金流与 Owner Earnings",
+            "ROIC 与投入资本回报", "护城河", "长期生存与十年后需求", "企业文化、管理层与资本配置",
+            "回购明细", "治理、债务与红旗", "Reverse DCF 与估值", "Pre-Mortem 事前验尸",
+            "待调查与 Open Questions", "领先指标与 Monitoring Indicators", "最终结论",
+        )
+        canonical_headings = (
+            "一页式结论", "身份、数据截至日、完整度和缺失项", "商业模式与行业结构", "十年财务表和关键趋势",
+            "FCF、股东调整后 FCF 与 Owner Earnings", "ROIC 与再投资跑道", "逐维护城河",
+            "十年后需求与长期生存", "文化、不做清单、管理层和资本配置", "回购明细账",
+            "会计、治理、负债和红旗", "估值、Reverse DCF、敏感性和情景回报", "完整 Pre-Mortem",
+            "尚待调查问题", "未来跟踪的 5—10 个领先指标", "最终结论",
+        )
+        canonical_report = report
+        for index, (current, canonical) in enumerate(zip(current_headings, canonical_headings), start=1):
+            canonical_report = canonical_report.replace(f"## {current}\n", f"## {index}. {canonical}\n", 1)
+        self.assertEqual(codes(canonical_report), set())
+
+    def test_uniform_scores_and_weighted_final_moat_are_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        def findings_for(candidate: str, candidate_company: dict) -> list[Finding]:
+            findings: list[Finding] = []
+            validate_report(candidate_company, candidate, "full", findings)
+            return findings
+
+        all_four_final = re.sub(
+            r"(?m)^(\| [^|\n]+ \| )\d(?:\.\d+)? / 5( \|)",
+            r"\g<1>4.0 / 5\2",
+            h2_body(report, "最终结论"),
+        )
+        self.assertEqual(findings_for(replace_h2_body(report, "最终结论", all_four_final), company), [])
+
+        uniform_company = copy.deepcopy(company)
+        for item in uniform_company["moat"]:
+            item["score"] = 4.0
+        uniform_moat = h2_body(report, "护城河").replace("| 转换成本 | 3.5 / 5 |", "| 转换成本 | 4.0 / 5 |", 1)
+        uniform_moat = uniform_moat.replace("| 网络效应 | 4.5 / 5 |", "| 网络效应 | 4.0 / 5 |", 1)
+        uniform_report = replace_h2_body(report, "护城河", uniform_moat)
+        self.assertEqual(findings_for(uniform_report, uniform_company), [])
+
+        weighted_final = h2_body(uniform_report, "最终结论").replace("| 护城河 | 4.0 / 5 |", "| 护城河 | 4.5 / 5 |", 1)
+        weighted_report = replace_h2_body(uniform_report, "最终结论", weighted_final)
+        self.assertEqual(findings_for(weighted_report, uniform_company), [])
+
+    def test_too_hard_report_allows_explicit_sourced_unscored_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, original_company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+        company = copy.deepcopy(original_company)
+        company["verdict"]["research_status"] = "Too Hard"
+        company["moat"][0]["score"] = None
+        report = report.replace("| 研究状态 | 观察名单 |", "| 研究状态 | Too Hard |")
+        moat_body = h2_body(report, "护城河").replace(
+            "| 定价权 | 4.0 / 5 | 稳定 | 高 | 提价后单位服务收入增长且留存仍处稳定区间〔SRC-FY〕 | 竞争者以补贴压低同类服务的有效价格〔SRC-FY〕 |",
+            "| 定价权 | 无法判断 | 稳定 | 低 | 公司未披露分层提价留存，存在证据缺口待补〔SRC-FY〕 | 现有年报无法核实细分价格弹性，资料不足〔SRC-FY〕 |",
+            1,
+        )
+        report = replace_h2_body(report, "护城河", moat_body)
+        final_body = h2_body(report, "最终结论").replace(
+            "| 生意可理解性 | 4.5 / 5 | 高 | 收费方、客户价值和网络反馈机制均可直接解释〔SRC-FY〕 | 信用与服务收入之间仍存在复杂交叉补贴〔SRC-FY〕 |",
+            "| 生意可理解性 | 无法判断 | 低 | 分部收费方披露仍有证据缺口待补〔SRC-FY〕 | 现有年报无法核实全部交叉补贴，资料不足〔SRC-FY〕 |",
+            1,
+        )
+        report = replace_h2_body(report, "最终结论", final_body)
+        findings: list[Finding] = []
+        validate_report(company, report, "full", findings)
+        self.assertEqual(findings, [])
 
     def test_too_hard_warning_needs_code_specific_explanation(self) -> None:
         company = {"verdict": {"research_status": "Too Hard", "valuation_status": "无法判断"}}

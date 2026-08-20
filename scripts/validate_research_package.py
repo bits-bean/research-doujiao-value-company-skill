@@ -93,22 +93,62 @@ SUPPORTED_SCHEMA_KEYWORDS = {
 }
 REPORT_SECTIONS = (
     ("one-page-conclusion", ("一页式结论", "one-page conclusion", "executive summary")),
-    ("identity-and-completeness", ("身份、日期与完整度", "数据截至日", "identity and completeness", "研究完整度")),
-    ("business-model", ("商业模式", "business model")),
-    ("ten-year-financials", ("十年财务", "10-year financial", "ten-year financial")),
-    ("cash-flow", ("owner earnings", "所有者收益", "三种现金流", "自由现金流")),
-    ("roic", ("roic", "投入资本回报")),
-    ("moat", ("护城河", "moat")),
-    ("durability", ("长期生存", "十年后", "durability")),
-    ("culture-management", ("企业文化、管理层与资本配置", "文化与管理", "stop doing", "不做清单")),
-    ("buyback-ledger", ("回购明细", "buyback ledger")),
-    ("governance-debt", ("治理、债务与红旗", "治理与债务", "governance and debt")),
-    ("valuation", ("reverse dcf", "反向 dcf", "估值")),
-    ("pre-mortem", ("pre-mortem", "事前验尸", "失败路径")),
-    ("open-questions", ("待调查", "open questions", "尚待调查")),
-    ("monitoring", ("领先指标", "monitoring indicators")),
+    ("identity-and-completeness", ("身份、数据截至日、完整度和缺失项", "身份、日期与完整度", "数据截至日", "identity and completeness", "研究完整度")),
+    ("business-model", ("商业模式与行业结构", "商业模式", "business model")),
+    ("ten-year-financials", ("十年财务表和关键趋势", "十年财务", "10-year financial", "ten-year financial")),
+    ("cash-flow", ("fcf、股东调整后 fcf 与 owner earnings", "owner earnings", "所有者收益", "三种现金流", "自由现金流")),
+    ("roic", ("roic 与再投资跑道", "roic", "投入资本回报")),
+    ("moat", ("逐维护城河", "护城河", "moat")),
+    ("durability", ("十年后需求与长期生存", "长期生存", "十年后", "durability")),
+    ("culture-management", ("文化、不做清单、管理层和资本配置", "企业文化、管理层与资本配置", "文化与管理", "stop doing", "不做清单")),
+    ("buyback-ledger", ("回购明细账", "回购明细", "buyback ledger")),
+    ("governance-debt", ("会计、治理、负债和红旗", "治理、债务与红旗", "治理与债务", "governance and debt")),
+    ("valuation", ("估值、reverse dcf、敏感性和情景回报", "reverse dcf", "反向 dcf", "估值")),
+    ("pre-mortem", ("完整 pre-mortem", "pre-mortem", "事前验尸", "失败路径")),
+    ("open-questions", ("尚待调查问题", "待调查", "open questions", "尚待调查")),
+    ("monitoring", ("未来跟踪的 5—10 个领先指标", "领先指标", "monitoring indicators")),
     ("final-conclusion", ("最终结论", "final conclusion")),
 )
+REPORT_SOURCE_HEADINGS = ("来源定位索引", "主要来源索引", "主要来源", "来源索引", "source index", "sources", "references")
+REPORT_EVIDENCE_SECTIONS = {
+    "business-model", "ten-year-financials", "cash-flow", "roic", "moat", "durability",
+    "culture-management", "buyback-ledger", "governance-debt", "valuation", "pre-mortem", "monitoring",
+}
+MOAT_CORE_DIMENSIONS = (
+    ("pricing-power", ("定价权", "pricing power")),
+    ("hard-to-replicate", ("难复制", "不可复制", "hard to replicate", "hard to copy")),
+    ("switching-costs", ("转换成本", "切换成本", "switching costs", "switching cost")),
+    ("network-effects", ("网络效应", "network effects", "network effect")),
+)
+CONFIDENCE_ALIASES = {
+    "high": ("high", "high confidence", "高", "高置信度"),
+    "medium": ("medium", "medium confidence", "中", "中等", "中置信度"),
+    "low": ("low", "low confidence", "低", "低置信度"),
+}
+DEFAULT_SOURCE_PAGE_LIMIT = 5000
+FINAL_SCORE_DIMENSIONS = (
+    ("business-understanding", ("生意可理解", "商业模式", "business understanding", "business model")),
+    ("financial-cash-flow", ("财务与现金流", "财务和现金流", "financial and cash flow", "financials and cash flow")),
+    ("returns-reinvestment", ("roic与再投资", "roe与再投资", "资本回报与再投资", "returns and reinvestment")),
+    ("moat", ("护城河", "moat")),
+    ("durability", ("长期生存", "需求持久", "durability", "long-term survival")),
+    ("management-capital-allocation", ("文化、管理层和资本配置", "文化管理层与资本配置", "management and capital allocation")),
+    ("governance-balance-sheet", ("会计、治理和资产负债表", "会计治理与资产负债表", "governance and balance sheet")),
+    ("valuation-margin-of-safety", ("估值与安全边际", "估值和安全边际", "valuation and margin of safety")),
+)
+SOURCE_TYPE_ALIASES = {
+    "annual_report": ("annual report", "年报"),
+    "quarterly_report": ("quarterly report", "10-q", "季报"),
+    "earnings_release": ("earnings release", "results release", "业绩公告"),
+    "earnings_call": ("earnings call", "conference call", "业绩会"),
+    "investor_presentation": ("investor presentation", "earnings presentation", "投资者演示"),
+    "regulatory_filing": ("regulatory filing", "filing", "监管申报"),
+    "official_website": ("official website", "investor relations", "官方网站", "投资者关系"),
+    "management_interview": ("management interview", "管理层访谈"),
+    "news": ("news", "新闻"),
+    "research": ("research", "研究"),
+    "other": ("other", "其他"),
+}
 
 
 @dataclass
@@ -117,6 +157,15 @@ class Finding:
     code: str
     path: str
     message: str
+
+
+@dataclass
+class HeadingBlock:
+    level: int
+    title: str
+    body: str
+    start: int
+    end: int
 
 
 class DuplicateKeyError(ValueError):
@@ -220,6 +269,10 @@ def numeric(value: Any) -> bool:
         return math.isfinite(value)
     except (OverflowError, TypeError, ValueError):
         return False
+
+
+def list_or_empty(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def nonblank(value: Any) -> bool:
@@ -1123,43 +1176,1058 @@ def validate_verdict_and_risks(company: dict[str, Any], findings: list[Finding])
             add(findings, "error", "repeated-monitoring-template", "company.json.risks.monitoring_indicators", "monitoring triggers repeat a numeric placeholder template")
 
 
-def parse_headings(report: str) -> list[tuple[str, str]]:
-    matches = list(re.finditer(r"(?m)^#{1,6}\s+(.+?)\s*$", report))
-    result: list[tuple[str, str]] = []
+def clean_markdown_text(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    value = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 \2", value)
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.I)
+    value = re.sub(r"[`*_~]", "", value)
+    return value.strip()
+
+
+def mask_non_rendered_markdown(report: str) -> str:
+    """Mask fenced code and HTML comments while preserving offsets and line breaks."""
+    def mask_text(value: str) -> str:
+        return "".join(char if char in "\r\n" else " " for char in value)
+
+    report = re.sub(r"<!--.*?-->", lambda match: mask_text(match.group(0)), report, flags=re.S)
+    opening_tags = list(re.finditer(r"<\s*([A-Za-z][\w:-]*)\b([^>]*)>", report, flags=re.S))
+    for opening in reversed(opening_tags):
+        tag = opening.group(1).lower()
+        attributes = opening.group(2)
+        hidden_attribute = re.search(
+            r"(?:^|\s)hidden(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s]+))?(?=\s|/|$)",
+            attributes,
+            re.I | re.S,
+        ) is not None
+        style_match = re.search(r"(?:^|\s)style\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s]+))", attributes, re.I | re.S)
+        style = next((value for value in style_match.groups() if value is not None), "") if style_match else ""
+        hidden_style = re.search(r"(?:display\s*:\s*none|visibility\s*:\s*hidden)\b", style, re.I) is not None
+        if tag not in {"template", "script", "style"} and not hidden_attribute and not hidden_style:
+            continue
+        closing = re.search(rf"<\s*/\s*{re.escape(tag)}\s*>", report[opening.end():], re.I)
+        if closing is None:
+            continue
+        end = opening.end() + closing.end()
+        report = report[:opening.start()] + mask_text(report[opening.start():end]) + report[end:]
+    lines = report.splitlines(keepends=True)
+    active_fence: tuple[str, int] | None = None
+    masked: list[str] = []
+    for line in lines:
+        match = re.match(r"^[ \t]*([`~]{3,})", line)
+        if active_fence is None and match:
+            token = match.group(1)
+            active_fence = (token[0], len(token))
+            masked.append(mask_text(line))
+            continue
+        if active_fence is not None:
+            masked.append(mask_text(line))
+            if match and match.group(1)[0] == active_fence[0] and len(match.group(1)) >= active_fence[1]:
+                active_fence = None
+            continue
+        masked.append(line)
+    return "".join(masked)
+
+
+def raw_html_tags(report: str) -> list[str]:
+    tags: list[str] = []
+    for match in re.finditer(r"<\s*/?\s*([A-Za-z][\w:-]*)\b[^>]*>", report, re.I | re.S):
+        raw = match.group(0)
+        tag = match.group(1).lower()
+        if re.fullmatch(r"<\s*br\s*/?\s*>", raw, re.I):
+            continue
+        if re.fullmatch(r"<https?://[^>]+>", raw, re.I):
+            continue
+        tags.append(tag)
+    return tags
+
+
+def report_prose_text(value: str) -> str:
+    text = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", value, flags=re.I)
+    text = re.sub(r"https?://[^\s)>|]+", " ", text, flags=re.I)
+    text = re.sub(r"\bSRC-[A-Za-z0-9_-]+\b", " ", text, flags=re.I)
+    text = re.sub(r"(?m)^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*$", " ", text)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    text = re.sub(r"[`*_>#|~\-]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def extract_report_urls(value: str) -> set[str]:
+    return {
+        item.rstrip(".,;；。，、)]}〕】」』》〉\"'")
+        for item in re.findall(r"https?://[^\s>|]+", value, re.I)
+    }
+
+
+def known_source_urls(company: dict[str, Any]) -> set[str]:
+    return {
+        str(item.get("url")).rstrip("/")
+        for item in list_or_empty(company.get("sources"))
+        if isinstance(item, dict) and nonblank(item.get("url"))
+    }
+
+
+def text_has_known_citation(company: dict[str, Any], value: str, allowed_ids: set[str] | None = None) -> bool:
+    sources = [item for item in list_or_empty(company.get("sources")) if isinstance(item, dict)]
+    known_ids = {str(item.get("id")) for item in sources if nonblank(item.get("id"))}
+    if allowed_ids is not None:
+        known_ids &= allowed_ids
+    cited_ids = {match.group(0) for match in re.finditer(r"\bSRC-[A-Za-z0-9_-]+\b", value, re.I)}
+    if any(any(item.lower() == cited.lower() for item in known_ids) for cited in cited_ids):
+        return True
+    allowed_urls = {
+        str(item.get("url")).rstrip("/")
+        for item in sources
+        if nonblank(item.get("url")) and (allowed_ids is None or item.get("id") in allowed_ids)
+    }
+    return any(url.rstrip("/") in allowed_urls for url in extract_report_urls(value))
+
+
+def canonical_confidence(value: Any) -> str | None:
+    key = normalized_text(clean_markdown_text(value))
+    for canonical, aliases in CONFIDENCE_ALIASES.items():
+        if any(key == normalized_text(alias) for alias in aliases):
+            return canonical
+    return None
+
+
+def parse_report_number(value: Any) -> float | None:
+    cleaned = clean_markdown_text(value).replace(",", "")
+    match = re.fullmatch(r"\s*[$¥€£]?\s*(-?\d+(?:\.\d+)?)\s*(%)?\s*(?:USD|CNY|RMB|美元|元)?\s*", cleaned, re.I)
+    if not match:
+        return None
+    number = float(match.group(1))
+    return number / 100 if match.group(2) else number
+
+
+def heading_key(value: Any) -> str:
+    text = clean_markdown_text(value).lower()
+    text = re.sub(r"^\s*(?:\u7b2c\s*)?(?:\d+|[一二三四五六七八九十百]+)\s*[.\u3001):\uff1a-]\s*", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def heading_matches(value: Any, alternatives: tuple[str, ...]) -> bool:
+    key = heading_key(value)
+    for alternative in alternatives:
+        token = alternative.lower().strip()
+        if key == token or re.match(rf"^{re.escape(token)}(?:\s|[:\uff1a\-\u2014(/\uff08\u4e0e\u548c])", key):
+            return True
+    return False
+
+
+def parse_heading_blocks(report: str) -> list[HeadingBlock]:
+    matches = list(re.finditer(r"(?m)^(#{1,6})\s+(.+?)\s*$", report))
+    result: list[HeadingBlock] = []
     for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(report)
-        result.append((match.group(1).strip(), report[match.end():end].strip()))
+        level = len(match.group(1))
+        end = len(report)
+        for candidate in matches[index + 1:]:
+            if len(candidate.group(1)) <= level:
+                end = candidate.start()
+                break
+        result.append(HeadingBlock(level, match.group(2).strip(), report[match.end():end].strip(), match.start(), end))
     return result
 
 
-def validate_report(company: dict[str, Any], report: str, mode: str, findings: list[Finding]) -> None:
-    lowered = report.lower()
-    headings = parse_headings(report)
-    if mode == "full":
-        cursor = -1
-        section_bodies: list[str] = []
-        for code, alternatives in REPORT_SECTIONS:
-            match_index = next((index for index in range(cursor + 1, len(headings)) if any(token in headings[index][0].lower() for token in alternatives)), None)
-            if match_index is None:
-                add(findings, "error", f"report-section-{code}", "research-report.md", f"missing ordered Markdown heading: {alternatives[0]}")
+def parse_headings(report: str) -> list[tuple[str, str]]:
+    """Compatibility wrapper returning heading titles with nested content included."""
+    return [(block.title, block.body) for block in parse_heading_blocks(report)]
+
+
+def markdown_cells(line: str) -> list[str]:
+    stripped = line.strip()
+    if "|" not in stripped:
+        return []
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [cell.strip() for cell in stripped.split("|")]
+
+
+def table_separator(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.replace(" ", "")) for cell in cells)
+
+
+def parse_markdown_tables(text: str) -> list[tuple[list[str], list[list[str]]]]:
+    lines = text.splitlines()
+    tables: list[tuple[list[str], list[list[str]]]] = []
+    index = 0
+    while index + 1 < len(lines):
+        headers = markdown_cells(lines[index])
+        separator = markdown_cells(lines[index + 1])
+        if len(headers) >= 2 and len(separator) == len(headers) and table_separator(separator):
+            rows: list[list[str]] = []
+            cursor = index + 2
+            while cursor < len(lines):
+                cells = markdown_cells(lines[cursor])
+                if not cells:
+                    break
+                if len(cells) < len(headers):
+                    cells.extend([""] * (len(headers) - len(cells)))
+                rows.append(cells[:len(headers)])
+                cursor += 1
+            tables.append((headers, rows))
+            index = cursor
+            continue
+        index += 1
+    return tables
+
+
+def header_column(headers: list[str], alternatives: tuple[str, ...]) -> int | None:
+    normalized_alternatives = [normalized_text(item) for item in alternatives]
+    for index, header in enumerate(headers):
+        key = normalized_text(clean_markdown_text(header))
+        if any(token and token in key for token in normalized_alternatives):
+            return index
+    return None
+
+
+def labelled_value(body: str, alternatives: tuple[str, ...]) -> str | None:
+    for _, rows in parse_markdown_tables(body):
+        for row in rows:
+            if row and heading_matches(row[0], alternatives):
+                return " | ".join(clean_markdown_text(cell) for cell in row[1:] if clean_markdown_text(cell))
+    labels = "|".join(re.escape(item) for item in alternatives)
+    pattern = re.compile(rf"^\s*(?:[-*+]\s*)?(?:\*\*)?(?:{labels})(?:\*\*)?\s*[:\uff1a]\s*(.+?)\s*$", re.I)
+    for line in body.splitlines():
+        match = pattern.match(line)
+        if match:
+            return clean_markdown_text(match.group(1))
+    return None
+
+
+def split_report_entries(value: str) -> list[str]:
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.I)
+    value = re.sub(r"(?<!\w)(?=\d{1,2}\s*[.)\u3001])", "\n", value)
+    pieces: list[str] = []
+    for line in value.splitlines():
+        for piece in re.split(r"[;\uff1b]", line):
+            cleaned = re.sub(r"^\s*(?:[-*+]\s*|\d{1,2}\s*[.)\u3001]\s*)", "", clean_markdown_text(piece)).strip()
+            if cleaned:
+                pieces.append(cleaned)
+    return pieces
+
+
+def labelled_entries(body: str, alternatives: tuple[str, ...]) -> list[str]:
+    inline = labelled_value(body, alternatives)
+    if inline:
+        return split_report_entries(inline)
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        candidate = re.sub(r"^\s*#{1,6}\s+", "", line)
+        candidate = re.sub(r"^\s*(?:[-*+]\s*)?", "", candidate)
+        if not heading_matches(candidate, alternatives):
+            continue
+        entries: list[str] = []
+        for following in lines[index + 1:]:
+            if re.match(r"^\s*#{1,6}\s+", following):
+                break
+            match = re.match(r"^\s*(?:[-*+]\s+|\d{1,2}\s*[.)\u3001]\s+)(.+?)\s*$", following)
+            if match:
+                entries.extend(split_report_entries(match.group(1)))
+            elif entries and following.strip():
+                break
+        if entries:
+            return entries
+    return []
+
+
+def contains_allowed_value(value: Any, allowed: set[str]) -> bool:
+    key = normalized_text(clean_markdown_text(value))
+    return any(normalized_text(item) in key for item in allowed)
+
+
+def substantive_distinct_entries(values: list[str], minimum: int) -> bool:
+    normalized = [normalized_text(item, replace_numbers=True) for item in values]
+    return (
+        all(substantive_text(item, minimum) and not looks_like_placeholder(item) for item in values)
+        and len(normalized) == len(set(normalized))
+        and not repeated_template_fingerprints(values, minimum_count=3)
+        and not has_near_duplicate_cluster(values, minimum_count=3)
+    )
+
+
+def validate_conclusion_fields(body: str, findings: list[Finding], *, section: str, code_prefix: str) -> None:
+    path = f"research-report.md#{section}"
+    fields = (
+        ("business-quality", ("企业质量", "商业质量", "business quality"), BUSINESS_QUALITY),
+        ("valuation-status", ("估值状态", "valuation status"), VALUATION_STATUS),
+        ("research-status", ("研究状态", "research status"), RESEARCH_STATUS),
+        ("confidence", ("置信度", "置信水平", "confidence"), VERDICT_CONFIDENCE),
+    )
+    for code, labels, allowed in fields:
+        value = labelled_value(body, labels)
+        if value is None or canonical_conclusion_value(value, allowed) is None:
+            add(findings, "error", f"{code_prefix}-{code}", path, f"{section} needs a labelled, valid {code} value")
+    assumptions = labelled_entries(body, ("关键假设", "关键前提", "key assumptions"))
+    if not 2 <= len(assumptions) <= 4 or not substantive_distinct_entries(assumptions, 8):
+        add(findings, "error", f"{code_prefix}-key-assumptions", path, f"{section} needs 2–4 distinct, substantive key assumptions in a labelled field or list")
+    breakers = labelled_entries(body, ("thesis breakers", "thesis breaker", "论点破坏点", "推翻条件"))
+    if not breakers or not substantive_distinct_entries(breakers, 8):
+        add(findings, "error", f"{code_prefix}-thesis-breakers", path, f"{section} needs a labelled list of substantive thesis breakers")
+
+
+def validate_one_page_report(body: str, findings: list[Finding]) -> None:
+    validate_conclusion_fields(body, findings, section="one-page-conclusion", code_prefix="report-one-page")
+
+
+def canonical_conclusion_value(value: Any, allowed: set[str]) -> str | None:
+    if allowed is VERDICT_CONFIDENCE:
+        return canonical_confidence(value)
+    key = normalized_text(clean_markdown_text(value))
+    matched = next((item for item in allowed if key == normalized_text(item)), None)
+    if matched is None:
+        return None
+    return normalized_text(matched)
+
+
+def conclusion_status_values(body: str) -> dict[str, str | None]:
+    specs = {
+        "business_quality": (("企业质量", "商业质量", "business quality"), BUSINESS_QUALITY),
+        "valuation_status": (("估值状态", "valuation status"), VALUATION_STATUS),
+        "research_status": (("研究状态", "research status"), RESEARCH_STATUS),
+        "confidence": (("置信度", "置信水平", "confidence"), VERDICT_CONFIDENCE),
+    }
+    return {
+        key: canonical_conclusion_value(labelled_value(body, labels), allowed)
+        for key, (labels, allowed) in specs.items()
+    }
+
+
+def normalized_entry_set(values: list[Any]) -> set[str]:
+    return {normalized_text(clean_markdown_text(value)) for value in values if substantive_text(value, 4)}
+
+
+def validate_conclusion_consistency(company: dict[str, Any], one_page: str, final: str, findings: list[Finding]) -> None:
+    one_values = conclusion_status_values(one_page)
+    final_values = conclusion_status_values(final)
+    verdict = company.get("verdict") if isinstance(company.get("verdict"), dict) else {}
+    allowed_by_key = {
+        "business_quality": BUSINESS_QUALITY,
+        "valuation_status": VALUATION_STATUS,
+        "research_status": RESEARCH_STATUS,
+        "confidence": VERDICT_CONFIDENCE,
+    }
+    mismatches: list[str] = []
+    for key, allowed in allowed_by_key.items():
+        company_value = canonical_conclusion_value(verdict.get(key), allowed)
+        values = [one_values.get(key), final_values.get(key), company_value]
+        present = [value for value in values if value is not None]
+        if len(present) == 3 and len(set(present)) != 1:
+            mismatches.append(key)
+    if mismatches:
+        add(findings, "error", "report-conclusion-consistency", "research-report.md#final-conclusion", f"one-page, final and company.verdict status values disagree: {mismatches!r}")
+    entry_specs = (
+        ("key-assumptions", ("关键假设", "关键前提", "key assumptions"), "key_assumptions"),
+        ("thesis-breakers", ("thesis breakers", "thesis breaker", "论点破坏点", "推翻条件"), "thesis_breakers"),
+    )
+    for code, labels, company_key in entry_specs:
+        one_entries = normalized_entry_set(labelled_entries(one_page, labels))
+        final_entries = normalized_entry_set(labelled_entries(final, labels))
+        company_entries = normalized_entry_set(verdict.get(company_key) if isinstance(verdict.get(company_key), list) else [])
+        if not one_entries or one_entries != final_entries or one_entries != company_entries:
+            add(findings, "error", f"report-conclusion-{code}-consistency", "research-report.md#final-conclusion", f"one-page, final and company.verdict {company_key} must map one-to-one")
+
+
+def parse_score(value: Any) -> float | None:
+    match = re.fullmatch(r"\s*([0-5](?:\.\d+)?)\s*(?:/\s*5)?\s*", clean_markdown_text(value))
+    if not match:
+        return None
+    score = float(match.group(1))
+    return score if 0 <= score <= 5 else None
+
+
+def explicit_unscored(value: Any) -> bool:
+    return normalized_text(clean_markdown_text(value)) in {
+        normalized_text(item) for item in ("无法判断", "Too Hard", "N/A", "not applicable", "unscored")
+    }
+
+
+def gap_explained(value: str) -> bool:
+    prose = report_prose_text(value)
+    return substantive_text(prose, 10) and bool(re.search(
+        r"缺口|未披露|待补|无法核实|证据不足|资料不足|不可得|insufficient|not disclosed|data gap|unavailable",
+        prose,
+        re.I,
+    ))
+
+
+def moat_dimension_kind(value: Any) -> str | None:
+    key = normalized_text(clean_markdown_text(value))
+    matches = [code for code, aliases in MOAT_CORE_DIMENSIONS if any(normalized_text(alias) in key for alias in aliases)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def validate_final_scorecard(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    required_headers = {
+        "dimension": ("维度", "dimension"),
+        "score": ("评分", "分数", "score"),
+        "confidence": ("置信度", "confidence"),
+        "evidence": ("核心证据", "key evidence", "core evidence"),
+        "counterevidence": ("最强反证", "主要反证", "strongest counterevidence", "main counterevidence"),
+    }
+    selected: tuple[list[str], list[list[str]], dict[str, int]] | None = None
+    for headers, rows in parse_markdown_tables(body):
+        columns = {key: header_column(headers, aliases) for key, aliases in required_headers.items()}
+        if all(index is not None for index in columns.values()) and len(set(columns.values())) == len(columns):
+            selected = (headers, rows, {key: int(index) for key, index in columns.items()})
+            break
+    if selected is None:
+        add(findings, "error", "report-final-scorecard", "research-report.md#final-conclusion", "final conclusion needs a Markdown scorecard with dimension, score, confidence, core evidence and strongest counterevidence columns")
+        return
+    _, rows, columns = selected
+    seen: set[str] = set()
+    evidence_values: list[str] = []
+    counter_values: list[str] = []
+    invalid_rows = 0
+    for row in rows:
+        dimension = clean_markdown_text(row[columns["dimension"]])
+        key = normalized_text(dimension)
+        matches = [code for code, aliases in FINAL_SCORE_DIMENSIONS if any(normalized_text(alias) in key for alias in aliases)]
+        if len(matches) != 1 or matches[0] in seen:
+            invalid_rows += 1
+            continue
+        seen.add(matches[0])
+        score_cell = row[columns["score"]]
+        score = parse_score(score_cell)
+        confidence = canonical_confidence(row[columns["confidence"]])
+        evidence_raw = row[columns["evidence"]]
+        counter_raw = row[columns["counterevidence"]]
+        evidence = clean_markdown_text(evidence_raw)
+        counter = clean_markdown_text(counter_raw)
+        evidence_values.append(evidence)
+        counter_values.append(counter)
+        unscored = explicit_unscored(score_cell)
+        if (
+            confidence is None
+            or (score is None and not (unscored and confidence == "low" and gap_explained(f"{evidence} {counter}")))
+            or (unscored and not is_unable(company))
+            or not substantive_text(report_prose_text(evidence), 10)
+            or (not unscored and looks_like_placeholder(report_prose_text(evidence)))
+            or not substantive_text(report_prose_text(counter), 8)
+            or (not unscored and looks_like_placeholder(report_prose_text(counter)))
+            or not text_has_known_citation(company, evidence_raw)
+            or not text_has_known_citation(company, counter_raw)
+        ):
+            invalid_rows += 1
+    missing = [code for code, _ in FINAL_SCORE_DIMENSIONS if code not in seen]
+    evidence_prose = [report_prose_text(value) for value in evidence_values]
+    counter_prose = [report_prose_text(value) for value in counter_values]
+    if invalid_rows or missing or not substantive_distinct_entries(evidence_prose, 10) or not substantive_distinct_entries(counter_prose, 8):
+        add(findings, "error", "report-final-scorecard-substance", "research-report.md#final-conclusion", f"final scorecard needs eight unique, substantive rows; missing={missing!r}, invalid_rows={invalid_rows}")
+
+
+def validate_moat_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    required_headers = {
+        "dimension": ("维度", "dimension"),
+        "score": ("评分", "分数", "score"),
+        "trend": ("趋势", "trend"),
+        "confidence": ("置信度", "confidence"),
+        "evidence": ("支持证据", "核心证据", "evidence"),
+        "counterevidence": ("最强反证", "主要反证", "counterevidence"),
+        "destroyer": ("破坏因素", "破坏条件", "最可能的破坏因素", "destroyer"),
+    }
+    selected: tuple[list[list[str]], dict[str, int]] | None = None
+    for headers, rows in parse_markdown_tables(body):
+        columns = {key: header_column(headers, aliases) for key, aliases in required_headers.items()}
+        if all(index is not None for index in columns.values()) and len(set(columns.values())) == len(columns):
+            selected = (rows, {key: int(index) for key, index in columns.items()})
+            break
+    if selected is None:
+        add(findings, "error", "report-moat-matrix", "research-report.md#moat", "moat section needs separate score, trend, confidence, evidence, counterevidence and destroyer columns")
+        return
+    rows, columns = selected
+    dimensions: set[str] = set()
+    evidence_values: list[str] = []
+    counter_values: list[str] = []
+    destroyer_values: list[str] = []
+    core_dimensions: set[str] = set()
+    company_moat = {
+        moat_dimension_kind(item.get("dimension")): item
+        for item in list_or_empty(company.get("moat"))
+        if isinstance(item, dict) and moat_dimension_kind(item.get("dimension")) is not None
+    }
+    score_mismatches: list[str] = []
+    valid_rows = 0
+    for row in rows:
+        dimension = clean_markdown_text(row[columns["dimension"]])
+        normalized_dimension = normalized_text(dimension)
+        score_cell = row[columns["score"]]
+        score = parse_score(score_cell)
+        unscored = explicit_unscored(score_cell)
+        trend = clean_markdown_text(row[columns["trend"]])
+        confidence = canonical_confidence(row[columns["confidence"]])
+        evidence_raw = row[columns["evidence"]]
+        counter_raw = row[columns["counterevidence"]]
+        evidence = clean_markdown_text(evidence_raw)
+        counter = clean_markdown_text(counter_raw)
+        destroyer = clean_markdown_text(row[columns["destroyer"]])
+        core = moat_dimension_kind(dimension)
+        module_item = company_moat.get(core)
+        module_ids = {str(item) for item in module_item.get("source_ids", [])} if isinstance(module_item, dict) else None
+        if (
+            not substantive_text(dimension, 2)
+            or normalized_dimension in dimensions
+            or (score is None and not (unscored and confidence == "low" and gap_explained(f"{evidence} {counter}")))
+            or not substantive_text(trend, 2)
+            or looks_like_placeholder(trend)
+            or confidence is None
+            or not substantive_text(report_prose_text(evidence), 8)
+            or (not unscored and looks_like_placeholder(report_prose_text(evidence)))
+            or not substantive_text(report_prose_text(counter), 8)
+            or (not unscored and looks_like_placeholder(report_prose_text(counter)))
+            or not substantive_text(report_prose_text(destroyer), 8)
+            or looks_like_placeholder(destroyer)
+            or not text_has_known_citation(company, evidence_raw, module_ids)
+            or not text_has_known_citation(company, counter_raw, module_ids)
+        ):
+            continue
+        if isinstance(module_item, dict):
+            module_score = module_item.get("score")
+            if numeric(module_score) and (score is None or abs(score - float(module_score)) > 0.01):
+                score_mismatches.append(core or dimension)
+            elif module_score is None and score is not None:
+                score_mismatches.append(core or dimension)
+        dimensions.add(normalized_dimension)
+        if core:
+            core_dimensions.add(core)
+        evidence_values.append(evidence)
+        counter_values.append(counter)
+        destroyer_values.append(destroyer)
+        valid_rows += 1
+    missing_core = []
+    explained_not_applicable: set[str] = set()
+    for code, aliases in MOAT_CORE_DIMENSIONS:
+        if code in core_dimensions:
+            continue
+        na_line = next((line for line in body.splitlines() if any(alias.lower() in line.lower() for alias in aliases) and re.search(r"不适用|无法判断|not applicable|n/a", line, re.I)), "")
+        if gap_explained(na_line) and text_has_known_citation(company, na_line):
+            explained_not_applicable.add(code)
+        else:
+            missing_core.append(code)
+    if (
+        valid_rows + len(explained_not_applicable) < 4
+        or not substantive_distinct_entries([report_prose_text(value) for value in evidence_values], 8)
+        or not substantive_distinct_entries([report_prose_text(value) for value in counter_values], 8)
+        or not substantive_distinct_entries([report_prose_text(value) for value in destroyer_values], 8)
+    ):
+        add(findings, "error", "report-moat-matrix-substance", "research-report.md#moat", "moat matrix needs at least four unique dimensions with substantive, non-repeated evidence, counterevidence and destroyers")
+    if missing_core:
+        add(findings, "error", "report-moat-core-coverage", "research-report.md#moat", f"moat matrix must cover four core dimensions or explain a sourced data gap: {missing_core!r}")
+    if score_mismatches:
+        add(findings, "error", "report-moat-score-consistency", "research-report.md#moat", f"moat scores must reconcile to company.moat by dimension: {score_mismatches!r}")
+
+
+def probability_value(value: str) -> bool:
+    return bool(re.search(r"\d+(?:\.\d+)?\s*%|\b(?:high|medium|low)\b|(?:极高|高|中高|中|中低|低|极低)(?:概率)?", value, re.I))
+
+
+def impact_value(value: str) -> bool:
+    return bool(re.search(r"\b(?:critical|severe|high|medium|low)\b|毁灭|严重|重大|极高|高|中高|中|中低|低", value, re.I))
+
+
+def horizon_value(value: str) -> bool:
+    return bool(re.search(r"\d+(?:\s*[–—-]\s*\d+)?\s*(?:年|月|季|years?|months?|quarters?)|随时|持续|短期|中期|长期", value, re.I))
+
+
+def reversibility_value(value: str) -> bool:
+    return bool(re.search(r"不可逆|可逆|部分可逆|极高|高|中高|中|中低|低|极低|\b(?:yes|no|partial|high|medium|low)\b", value, re.I))
+
+
+def validate_pre_mortem_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    required_headers = {
+        "path": ("失败路径", "failure path"),
+        "probability": ("概率", "probability", "likelihood"),
+        "impact": ("影响", "impact"),
+        "horizon": ("期限", "时间", "horizon", "time frame"),
+        "warning": ("最早预警", "早期信号", "earliest warning", "leading signal"),
+        "reversibility": ("可逆性", "reversibility"),
+        "mitigation": ("管理层缓解", "缓解能力", "management mitigation", "mitigation"),
+    }
+    selected: tuple[list[list[str]], dict[str, int]] | None = None
+    for headers, rows in parse_markdown_tables(body):
+        columns = {key: header_column(headers, aliases) for key, aliases in required_headers.items()}
+        if all(index is not None for index in columns.values()) and len(set(columns.values())) == len(columns):
+            selected = (rows, {key: int(index) for key, index in columns.items()})
+            break
+    if selected is None:
+        add(findings, "error", "report-pre-mortem-matrix", "research-report.md#pre-mortem", "Pre-Mortem needs path, probability, impact, horizon, earliest warning, reversibility and management mitigation columns")
+        return
+    rows, columns = selected
+    paths: list[str] = []
+    valid_rows = 0
+    for row in rows:
+        path = clean_markdown_text(row[columns["path"]])
+        probability = clean_markdown_text(row[columns["probability"]])
+        impact = clean_markdown_text(row[columns["impact"]])
+        horizon = clean_markdown_text(row[columns["horizon"]])
+        warning = clean_markdown_text(row[columns["warning"]])
+        reversibility = clean_markdown_text(row[columns["reversibility"]])
+        mitigation = clean_markdown_text(row[columns["mitigation"]])
+        if (
+            not substantive_text(path, 8)
+            or looks_like_placeholder(path)
+            or not probability_value(probability)
+            or not impact_value(impact)
+            or not horizon_value(horizon)
+            or not substantive_text(warning, 6)
+            or looks_like_placeholder(warning)
+            or not reversibility_value(reversibility)
+            or not substantive_text(mitigation, 8)
+            or looks_like_placeholder(mitigation)
+        ):
+            continue
+        paths.append(path)
+        valid_rows += 1
+    if valid_rows < 5 or not substantive_distinct_entries(paths, 8):
+        add(findings, "error", "report-pre-mortem-substance", "research-report.md#pre-mortem", "Pre-Mortem needs at least five distinct, fully specified failure paths")
+
+    risks = company.get("risks") if isinstance(company.get("risks"), dict) else {}
+    expected_paths = [item for item in list_or_empty(risks.get("pre_mortem")) if substantive_text(item, 8)]
+    normalized_expected = [normalized_text(item) for item in expected_paths]
+    matched_expected: list[int] = []
+    path_mapping_valid = len(rows) == len(paths) == len(expected_paths) and bool(expected_paths)
+    if path_mapping_valid:
+        for path in paths:
+            normalized_path = normalized_text(path)
+            matches = [index for index, expected in enumerate(normalized_expected) if expected and expected in normalized_path]
+            if matches:
+                longest = max(len(normalized_expected[index]) for index in matches)
+                matches = [index for index in matches if len(normalized_expected[index]) == longest]
+            if len(matches) != 1:
+                path_mapping_valid = False
+                break
+            matched_expected.append(matches[0])
+        path_mapping_valid = path_mapping_valid and len(set(matched_expected)) == len(expected_paths)
+    if not path_mapping_valid:
+        add(findings, "error", "report-pre-mortem-path-mapping", "research-report.md#pre-mortem", "failure-path rows must uniquely contain and exhaust company.risks.pre_mortem, with no extra rows")
+
+    verdict = company.get("verdict") if isinstance(company.get("verdict"), dict) else {}
+    bear = labelled_value(body, ("最强反方观点", "最强悲观观点", "strongest bear case", "bear case"))
+    expected_bear = risks.get("bear_case")
+    bear_matches = (
+        substantive_text(bear, 12)
+        and not looks_like_placeholder(report_prose_text(bear or ""))
+        and (
+            (substantive_text(expected_bear, 12) and normalized_text(bear) == normalized_text(expected_bear))
+            or (not substantive_text(expected_bear, 12) and is_unable(company) and gap_explained(bear or ""))
+        )
+    )
+    if not bear_matches:
+        add(findings, "error", "report-pre-mortem-bear-case", "research-report.md#pre-mortem", "Pre-Mortem needs a labelled strongest bear case matching company.risks.bear_case")
+
+    fragile_labels = ("三个最脆弱假设", "最脆弱假设", "脆弱假设", "three fragile assumptions", "fragile assumptions")
+    fragile = labelled_entries(body, fragile_labels)
+    expected_fragile = list_or_empty(risks.get("fragile_assumptions"))
+    fragile_matches = (
+        len(fragile) == 3
+        and substantive_distinct_entries(fragile, 8)
+        and normalized_entry_set(fragile) == normalized_entry_set(expected_fragile)
+    )
+    if not fragile_matches:
+        gap_value = labelled_value(body, fragile_labels)
+        if not (is_unable(company) and not expected_fragile and gap_explained(gap_value or "")):
+            add(findings, "error", "report-pre-mortem-fragile-assumptions", "research-report.md#pre-mortem", "Pre-Mortem needs exactly three fragile assumptions matching company.risks.fragile_assumptions")
+
+    breaker_labels = ("thesis breakers", "thesis breaker", "论点破坏点", "推翻条件")
+    breakers = labelled_entries(body, breaker_labels)
+    expected_breakers = list_or_empty(verdict.get("thesis_breakers"))
+    breakers_match = (
+        bool(breakers)
+        and substantive_distinct_entries(breakers, 8)
+        and normalized_entry_set(breakers) == normalized_entry_set(expected_breakers)
+    )
+    if not breakers_match:
+        gap_value = labelled_value(body, breaker_labels)
+        if not (is_unable(company) and not expected_breakers and gap_explained(gap_value or "")):
+            add(findings, "error", "report-pre-mortem-thesis-breakers", "research-report.md#pre-mortem", "Pre-Mortem thesis breakers must map one-to-one to company.verdict.thesis_breakers")
+
+    bankruptcy = labelled_value(body, ("破产路径", "破产情景", "bankruptcy outcome", "bankruptcy case"))
+    low_return = labelled_value(body, ("存活但股东回报差", "存活但低回报", "survives with poor returns", "survival with poor returns"))
+    outcomes_valid = (
+        substantive_text(report_prose_text(bankruptcy or ""), 12)
+        and substantive_text(report_prose_text(low_return or ""), 12)
+        and not looks_like_placeholder(report_prose_text(bankruptcy or ""))
+        and not looks_like_placeholder(report_prose_text(low_return or ""))
+        and normalized_text(bankruptcy) != normalized_text(low_return)
+    )
+    if not outcomes_valid:
+        add(findings, "error", "report-pre-mortem-outcome-distinction", "research-report.md#pre-mortem", "Pre-Mortem must separately explain bankruptcy and survival with poor shareholder returns")
+
+
+def report_number_matches(actual: float | None, expected: Any) -> bool:
+    if actual is None or not numeric(expected):
+        return False
+    expected_number = float(expected)
+    return abs(actual - expected_number) <= max(0.0005, abs(expected_number) * 0.02)
+
+
+def validate_valuation_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    if is_unable(company) and re.search(r"无法判断|too hard", body, re.I) and gap_explained(body):
+        return
+    valuation = company.get("valuation") if isinstance(company.get("valuation"), dict) else {}
+    tables = parse_markdown_tables(body)
+    scenario_headers = {
+        "scenario": ("情景", "场景", "scenario"),
+        "growth": ("收入增长", "营收增长", "revenue growth"),
+        "margin": ("利润率", "经营利润率", "margin"),
+        "discount": ("折现率", "discount rate"),
+        "terminal": ("永续增长", "终值增长", "terminal growth"),
+        "value": ("每股价值", "公允价值", "fair value"),
+    }
+    scenario_index: int | None = None
+    scenario_valid = False
+    expected_scenarios = {
+        scenario_kind(item.get("name")): item
+        for item in list_or_empty(valuation.get("dcf_scenarios"))
+        if isinstance(item, dict) and scenario_kind(item.get("name")) is not None
+    }
+    for table_index, (headers, rows) in enumerate(tables):
+        columns = {key: header_column(headers, aliases) for key, aliases in scenario_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        scenario_index = table_index
+        kinds: set[str] = set()
+        invalid = 0
+        for row in rows:
+            kind = scenario_kind(row[int(columns["scenario"])])
+            expected = expected_scenarios.get(kind)
+            values = {
+                "revenue_growth": parse_report_number(row[int(columns["growth"])]),
+                "margin": parse_report_number(row[int(columns["margin"])]),
+                "discount_rate": parse_report_number(row[int(columns["discount"])]),
+                "terminal_growth": parse_report_number(row[int(columns["terminal"])]),
+                "fair_value_per_share": parse_report_number(row[int(columns["value"])]),
+            }
+            if kind is None or kind in kinds or any(value is None for value in values.values()):
+                invalid += 1
                 continue
-            cursor = match_index
-            body = re.sub(r"[`*_>#|\-]", "", headings[match_index][1])
+            kinds.add(kind)
+            if isinstance(expected, dict) and any(not report_number_matches(actual, expected.get(key)) for key, actual in values.items()):
+                invalid += 1
+        scenario_valid = kinds == {"bear", "base", "bull"} and invalid == 0
+        break
+    if scenario_index is None or not scenario_valid or not re.search(r"\bdcf\b|现金流折现", body, re.I):
+        add(findings, "error", "report-valuation-scenarios", "research-report.md#valuation", "valuation section needs a three-scenario DCF table reconciled to company.valuation")
+
+    sensitivity_headers = {
+        "discount": ("折现率", "discount rate"),
+        "terminal": ("永续增长", "终值增长", "terminal growth"),
+        "value": ("每股价值", "公允价值", "fair value"),
+    }
+    actual_cells: list[tuple[float, float, float]] = []
+    for table_index, (headers, rows) in enumerate(tables):
+        if table_index == scenario_index:
+            continue
+        columns = {key: header_column(headers, aliases) for key, aliases in sensitivity_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        for row in rows:
+            values = tuple(parse_report_number(row[int(columns[key])]) for key in ("discount", "terminal", "value"))
+            if all(value is not None for value in values):
+                actual_cells.append((float(values[0]), float(values[1]), float(values[2])))
+        break
+    expected_cells = [
+        (item.get("discount_rate"), item.get("terminal_growth"), item.get("fair_value_per_share"))
+        for item in list_or_empty(valuation.get("dcf_sensitivity"))
+        if isinstance(item, dict)
+    ]
+    unique_pairs = {(round(discount, 6), round(terminal, 6)) for discount, terminal, _ in actual_cells}
+    cells_match = len(actual_cells) >= 4 and len(unique_pairs) >= 4
+    if expected_cells:
+        cells_match = cells_match and all(
+            any(
+                report_number_matches(actual_discount, expected[0])
+                and report_number_matches(actual_terminal, expected[1])
+                and report_number_matches(actual_value, expected[2])
+                for actual_discount, actual_terminal, actual_value in actual_cells
+            )
+            for expected in expected_cells
+        )
+    if not cells_match or not re.search(r"敏感|sensitivity", body, re.I):
+        add(findings, "error", "report-valuation-sensitivity", "research-report.md#valuation", "valuation section needs a distinct, reconciled DCF sensitivity table with at least four cells")
+
+    reverse_headers = {
+        "dimension": ("假设", "维度", "assumption", "dimension"),
+        "implied": ("隐含值", "隐含假设", "implied value", "implied assumption"),
+        "comparison": ("历史比较", "现实比较", "comparison"),
+        "threshold": ("推翻阈值", "临界条件", "threshold", "breaker"),
+    }
+    reverse = valuation.get("reverse_dcf") if isinstance(valuation.get("reverse_dcf"), dict) else {}
+    category_tokens = {
+        "growth": ("growth", "cagr", "revenue", "sales", "earnings", "增长", "收入", "营收", "盈利"),
+        "profitability": ("margin", "roe", "roa", "roic", "rotce", "profit", "利润率", "回报率", "回报", "净利率"),
+        "capital-cash": ("capital", "reinvest", "cash", "capex", "turnover", "payout", "buyback", "资本", "再投资", "现金", "周转", "回购"),
+    }
+    expected_by_category: dict[str, list[float]] = {key: [] for key in category_tokens}
+    for path, value in flatten_leaves(reverse):
+        if not numeric(value):
+            continue
+        for category, tokens in category_tokens.items():
+            if any(token in path.lower() for token in tokens):
+                expected_by_category[category].append(float(value))
+                break
+    reverse_categories: set[str] = set()
+    reverse_valid = False
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in reverse_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        invalid = 0
+        for row in rows:
+            dimension = clean_markdown_text(row[int(columns["dimension"])]).lower()
+            implied = parse_report_number(row[int(columns["implied"])] )
+            comparison = report_prose_text(row[int(columns["comparison"])] )
+            threshold = report_prose_text(row[int(columns["threshold"])] )
+            category = next(
+                (name for name, tokens in category_tokens.items() if any(token in dimension for token in tokens)),
+                None,
+            )
+            expected_values = expected_by_category.get(category, []) if category else []
+            if (
+                category is None
+                or category in reverse_categories
+                or not any(report_number_matches(implied, expected) for expected in expected_values)
+                or not substantive_text(comparison, 8)
+                or not substantive_text(threshold, 8)
+            ):
+                invalid += 1
+                continue
+            reverse_categories.add(category)
+        reverse_valid = len(reverse_categories) >= 2 and invalid == 0
+        break
+    if not reverse_valid or not re.search(r"reverse\s*dcf|反向\s*dcf", body, re.I):
+        add(findings, "error", "report-valuation-reverse-dcf", "research-report.md#valuation", "valuation section needs a reconciled Reverse DCF table with implied values, reality comparison and thesis-breaking thresholds")
+
+
+def source_type_matches(value: str, source_type: Any) -> bool:
+    if not nonblank(source_type):
+        return False
+    key = normalized_text(value)
+    candidates = (str(source_type),) + SOURCE_TYPE_ALIASES.get(str(source_type), ())
+    return any(normalized_text(candidate) in key for candidate in candidates)
+
+
+def source_title_matches(value: str, title: Any) -> bool:
+    if not substantive_text(title, 4):
+        return False
+    actual = normalized_text(value)
+    expected = normalized_text(title)
+    return bool(actual and expected and (actual in expected or expected in actual or SequenceMatcher(None, actual, expected, autojunk=False).ratio() >= 0.72))
+
+
+def source_date_or_period_matches(value: str, source: dict[str, Any]) -> bool:
+    published = source.get("published_at")
+    if nonblank(published) and published in value:
+        return True
+    source_text = f"{source.get('title', '')} {source.get('notes', '')}"
+    periods = set(re.findall(r"(?:fy)?20\d{2}(?:q[1-4]|h[12])?|20\d{2}(?:fy|q[1-4]|h[12])", source_text, flags=re.I))
+    normalized_value = normalized_text(value)
+    if any(normalized_text(period) in normalized_value for period in periods):
+        return True
+    if nonblank(published) or periods:
+        return False
+    return bool(re.search(r"\b20\d{2}(?:[-/]\d{2}(?:[-/]\d{2})?)?\b|\bFY20\d{2}\b|\b20\d{2}Q[1-4]\b", value, re.I))
+
+
+def specific_source_location(value: str) -> bool:
+    cleaned = clean_markdown_text(value)
+    if looks_like_placeholder(cleaned):
+        return False
+    patterns = (
+        r"\bpp?\.?\s*\d+",
+        r"\bpages?\s+\d+",
+        r"\bsections?\s+[\w.-]+",
+        r"\bitems?\s+\d+[a-z]?",
+        r"\bnotes?\s+\d+[a-z]?",
+        r"\btables?\s+\d+",
+        r"\bpart\s+[ivx]+",
+        r"\bmd&a\b",
+        r"\b\d{1,2}:\d{2}(?::\d{2})?\b",
+        r"第\s*\d+\s*页",
+        r"第\s*[\u4e00-\u9fff0-9]+\s*章",
+        r"页码\s*[:\uff1a]?\s*\d+",
+        r"章节\s*[:\uff1a]?\s*[\u4e00-\u9fff\w.-]{2,}",
+        r"表\s*\d+",
+    )
+    return any(re.search(pattern, cleaned, re.I) for pattern in patterns)
+
+
+def source_page_limit(source: dict[str, Any]) -> int:
+    for key in ("page_count", "pages", "total_pages"):
+        value = source.get(key)
+        if isinstance(value, int) and 1 <= value <= DEFAULT_SOURCE_PAGE_LIMIT:
+            return value
+    notes = str(source.get("notes", ""))
+    match = re.search(r"(?:total|共)?\s*(\d{1,5})\s*(?:pages?|页)", notes, re.I)
+    if match and 1 <= int(match.group(1)) <= DEFAULT_SOURCE_PAGE_LIMIT:
+        return int(match.group(1))
+    return DEFAULT_SOURCE_PAGE_LIMIT
+
+
+def source_location_matches(value: str, source: dict[str, Any]) -> bool:
+    if not specific_source_location(value):
+        return False
+    page_numbers: list[int] = []
+    page_patterns = (
+        r"\bpp?\.?\s*(\d+)(?:\s*[–—-]\s*(\d+))?",
+        r"\bpages?\s+(\d+)(?:\s*[–—-]\s*(\d+))?",
+        r"第\s*(\d+)\s*页",
+        r"页码\s*[:\uff1a]?\s*(\d+)(?:\s*[–—-]\s*(\d+))?",
+    )
+    for pattern in page_patterns:
+        for match in re.finditer(pattern, value, re.I):
+            page_numbers.extend(int(item) for item in match.groups() if item is not None)
+    if page_numbers:
+        limit = source_page_limit(source)
+        if any(page < 1 or page > limit for page in page_numbers):
+            return False
+    return True
+
+
+def validate_source_index(company: dict[str, Any], report: str, blocks: list[HeadingBlock], findings: list[Finding]) -> None:
+    source_block = next((block for block in blocks if heading_matches(block.title, REPORT_SOURCE_HEADINGS)), None)
+    if source_block is not None:
+        final_block = next((block for block in blocks if block.level == 2 and heading_matches(block.title, ("最终结论", "final conclusion"))), None)
+        if final_block is not None and source_block.start < final_block.start:
+            add(findings, "error", "report-source-index-order", "research-report.md#source-index", "source index must appear after the sixteenth required section")
+    citation_scope = report[:source_block.start] if source_block is not None else report
+    cited = {match.group(0) for match in re.finditer(r"\bSRC-[A-Za-z0-9_-]+\b", citation_scope, re.I)}
+    if not cited:
+        return
+    if source_block is None:
+        add(findings, "error", "report-source-index", "research-report.md", "a report citing SRC IDs needs a dedicated source index")
+        return
+    required_headers = {
+        "id": ("来源id", "source id", "id"),
+        "title": ("标题", "title"),
+        "publisher_type": ("发布者/类型", "发布者或类型", "publisher/type", "publisher or type", "source type"),
+        "date_period": ("日期/期间", "日期或期间", "date/period", "date or period"),
+        "url": ("url", "link", "链接"),
+        "location": ("页码/章节定位", "页码或章节定位", "location", "page/section"),
+    }
+    selected: tuple[list[list[str]], dict[str, int]] | None = None
+    for headers, rows in parse_markdown_tables(source_block.body):
+        columns = {key: header_column(headers, aliases) for key, aliases in required_headers.items()}
+        if all(index is not None for index in columns.values()) and len(set(columns.values())) == len(columns):
+            selected = (rows, {key: int(index) for key, index in columns.items()})
+            break
+    if selected is None:
+        add(findings, "error", "report-source-index-structure", "research-report.md#source-index", "source index needs ID, title, publisher/type, date/period, URL and page/section columns")
+        return
+    known = {str(item.get("id")): item for item in list_or_empty(company.get("sources")) if isinstance(item, dict) and nonblank(item.get("id"))}
+    rows, columns = selected
+    indexed: set[str] = set()
+    invalid: list[str] = []
+    for row in rows:
+        id_match = re.fullmatch(r"\s*(SRC-[A-Za-z0-9_-]+)\s*", clean_markdown_text(row[columns["id"]]), re.I)
+        if not id_match:
+            invalid.append("invalid-id")
+            continue
+        source_id = id_match.group(1)
+        canonical_id = next((item for item in known if item.lower() == source_id.lower()), source_id)
+        source = known.get(canonical_id)
+        if source is None or canonical_id in indexed:
+            invalid.append(source_id)
+            continue
+        title = clean_markdown_text(row[columns["title"]])
+        publisher_type = clean_markdown_text(row[columns["publisher_type"]])
+        date_period = clean_markdown_text(row[columns["date_period"]])
+        url_cell = row[columns["url"]]
+        location = clean_markdown_text(row[columns["location"]])
+        urls = [item.rstrip(".,;\uff1b") for item in re.findall(r"https?://[^\s)>]+", url_cell)]
+        expected_url = source.get("url")
+        url_matches = nonblank(expected_url) and any(item.rstrip("/") == str(expected_url).rstrip("/") for item in urls)
+        publisher_matches = nonblank(source.get("publisher")) and normalized_text(source.get("publisher")) in normalized_text(publisher_type)
+        type_matches = source_type_matches(publisher_type, source.get("source_type"))
+        if not (
+            source_title_matches(title, source.get("title"))
+            and publisher_matches
+            and type_matches
+            and source_date_or_period_matches(date_period, source)
+            and url_matches
+            and source_location_matches(location, source)
+        ):
+            invalid.append(canonical_id)
+            continue
+        indexed.add(canonical_id)
+    canonical_cited = {next((item for item in known if item.lower() == source_id.lower()), source_id) for source_id in cited}
+    unresolved = sorted(source_id for source_id in canonical_cited if source_id not in indexed)
+    if invalid or not indexed or not cited or unresolved:
+        add(findings, "error", "report-source-index-mapping", "research-report.md#source-index", f"every cited SRC ID needs complete, matching metadata; invalid={sorted(set(invalid))!r}, unresolved={unresolved!r}")
+
+
+def validate_report(company: dict[str, Any], report: str, mode: str, findings: list[Finding]) -> None:
+    report = mask_non_rendered_markdown(report)
+    lowered = report.lower()
+    blocks = parse_heading_blocks(report)
+    if mode == "full":
+        html_tags = sorted(set(raw_html_tags(report)))
+        if html_tags:
+            add(findings, "error", "report-raw-html", "research-report.md", f"formal Markdown permits only br tags; raw HTML tags found: {html_tags!r}")
+        allowed_urls = known_source_urls(company)
+        unknown_urls = sorted(url for url in extract_report_urls(report) if url.rstrip("/") not in allowed_urls)
+        if unknown_urls:
+            add(findings, "error", "report-source-url", "research-report.md", f"direct source URLs must match company.sources[].url: {unknown_urls!r}")
+        major = [block for block in blocks if block.level == 2]
+        positions: dict[str, int] = {}
+        bodies: dict[str, str] = {}
+        ambiguous: list[str] = []
+        for index, block in enumerate(major):
+            matches = [code for code, alternatives in REPORT_SECTIONS if heading_matches(block.title, alternatives)]
+            if len(matches) > 1:
+                ambiguous.append(block.title)
+            elif len(matches) == 1:
+                code = matches[0]
+                if code in positions:
+                    ambiguous.append(block.title)
+                else:
+                    positions[code] = index
+                    bodies[code] = block.body
+        if ambiguous:
+            add(findings, "error", "report-section-ambiguous", "research-report.md", f"required section headings must be unique and cannot combine modules: {ambiguous!r}")
+        for code, alternatives in REPORT_SECTIONS:
+            if code not in positions:
+                add(findings, "error", f"report-section-{code}", "research-report.md", f"missing level-two Markdown heading: {alternatives[0]}")
+        ordered_positions = [positions[code] for code, _ in REPORT_SECTIONS if code in positions]
+        if len(ordered_positions) == len(REPORT_SECTIONS) and ordered_positions != sorted(ordered_positions):
+            add(findings, "error", "report-section-order", "research-report.md", "the sixteen required level-two sections are not in protocol order")
+        section_bodies: list[str] = []
+        for code, _ in REPORT_SECTIONS:
+            if code not in bodies:
+                continue
+            body = report_prose_text(bodies[code])
             section_bodies.append(body)
-            if len(re.sub(r"\s+", "", body)) < 50 or looks_like_placeholder(body):
+            if len(normalized_text(body)) < 50 or looks_like_placeholder(body):
                 add(findings, "error", "report-section-thin", f"research-report.md#{code}", "section body is too thin to support a formal conclusion")
+            if code in REPORT_EVIDENCE_SECTIONS and not text_has_known_citation(company, bodies[code]):
+                add(findings, "error", "report-section-citation", f"research-report.md#{code}", "key evidence section needs an inline SRC ID or direct source URL")
         fingerprints: dict[str, int] = {}
         for body in section_bodies:
             fingerprint = normalized_text(body, replace_numbers=True)
-            if len(fingerprint) >= 40:
-                fingerprints[fingerprint] = fingerprints.get(fingerprint, 0) + 1
+            fingerprints[fingerprint] = fingerprints.get(fingerprint, 0) + 1
         if any(count >= 2 for count in fingerprints.values()) or has_near_duplicate_cluster(section_bodies, minimum_count=2, ratio=0.94):
             add(findings, "error", "repeated-report-section", "research-report.md", "two or more required sections repeat the same body with only numbers or citations changed")
+        if "one-page-conclusion" in bodies:
+            validate_one_page_report(bodies["one-page-conclusion"], findings)
+        if "moat" in bodies:
+            validate_moat_report(company, bodies["moat"], findings)
+        if "pre-mortem" in bodies:
+            validate_pre_mortem_report(company, bodies["pre-mortem"], findings)
+        if "valuation" in bodies:
+            validate_valuation_report(company, bodies["valuation"], findings)
+        if "final-conclusion" in bodies:
+            validate_conclusion_fields(bodies["final-conclusion"], findings, section="final-conclusion", code_prefix="report-final")
+            validate_final_scorecard(company, bodies["final-conclusion"], findings)
+        if "one-page-conclusion" in bodies and "final-conclusion" in bodies:
+            validate_conclusion_consistency(company, bodies["one-page-conclusion"], bodies["final-conclusion"], findings)
+        validate_source_index(company, report, blocks, findings)
     meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
     identities = [meta.get("company_name_cn"), meta.get("company_name_en"), meta.get("ticker")]
     if not any(nonblank(item) and item.lower() in lowered for item in identities):
         add(findings, "error", "report-company-identity", "research-report.md", "company name or ticker not found in report")
-    source_ids = [item.get("id") for item in company.get("sources", []) if isinstance(item, dict)]
+    source_ids = [item.get("id") for item in list_or_empty(company.get("sources")) if isinstance(item, dict)]
     has_source_id = any(nonblank(source_id) and source_id in report for source_id in source_ids)
     if source_ids and not has_source_id and re.search(r"https?://[^\s)>]+", report) is None:
         add(findings, "error", "report-citation", "research-report.md", "report needs source IDs or direct source links")
