@@ -37,23 +37,25 @@ class SpecAnchorTests(unittest.TestCase):
         self.git(repo, "config", "user.name", "Test")
         self.git(repo, "config", "user.email", "test@example.com")
         self.git(repo, "remote", "add", "origin", "https://github.com/bits-bean/doujiao-value-system.git")
-        protected_paths = (
-            "docs/project-instructions.md",
+        source_paths = (
             "docs/research-methodology.md",
-            "docs/automation-workflow.md",
             "schemas/company.schema.json",
         )
-        for path in protected_paths:
+        for path in source_paths:
             self.write(repo / path, f"trusted {path}\n")
         self.git(repo, "add", ".")
         self.git(repo, "commit", "-m", "trusted spec")
         anchor = self.git(repo, "rev-parse", "HEAD")
-        files = {path: self.git(repo, "rev-parse", f"HEAD:{path}") for path in protected_paths}
         lock = {
-            "repository": "bits-bean/doujiao-value-system",
-            "ref": "main",
-            "commit": anchor,
-            "files": files,
+            "lock_version": "2.0",
+            "research_protocol": {"authority": "research-doujiao-value-company"},
+            "company_schema": {
+                "repository": "bits-bean/doujiao-value-system",
+                "ref": "main",
+                "commit": anchor,
+                "path": "schemas/company.schema.json",
+                "blob_sha1": self.git(repo, "rev-parse", "HEAD:schemas/company.schema.json"),
+            },
         }
         return repo, lock
 
@@ -65,14 +67,23 @@ class SpecAnchorTests(unittest.TestCase):
             self.git(repo, "commit", "-m", "archive research")
             result = verify_spec_anchor(repo, lock)
             self.assertTrue(result["compatible"])
-            self.assertNotEqual(result["head_commit"], result["anchor_commit"])
+            self.assertNotEqual(result["head_commit"], result["schema_anchor_commit"])
 
-    def test_protected_file_change_is_rejected(self) -> None:
+    def test_system_method_change_does_not_change_skill_protocol(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo, lock = self.make_repo(Path(temp_dir))
             self.write(repo / "docs/research-methodology.md", "changed\n")
             self.git(repo, "add", ".")
             self.git(repo, "commit", "-m", "change method")
+            result = verify_spec_anchor(repo, lock)
+            self.assertTrue(result["compatible"])
+
+    def test_schema_change_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo, lock = self.make_repo(Path(temp_dir))
+            self.write(repo / "schemas/company.schema.json", "changed\n")
+            self.git(repo, "add", ".")
+            self.git(repo, "commit", "-m", "change schema")
             with self.assertRaises(SpecAnchorError):
                 verify_spec_anchor(repo, lock)
 
