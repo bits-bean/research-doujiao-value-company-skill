@@ -22,6 +22,7 @@ from validate_research_package import (
     file_sha256,
     git_blob_sha1_candidates,
     load_json,
+    load_trusted_spec_lock,
     nonblank,
     report_payload,
     schema_sha256_candidates,
@@ -69,8 +70,8 @@ def verify_previous_manifest(
         return None, [f"cannot read previous manifest: {exc}"]
     if not isinstance(manifest, dict):
         return None, ["previous manifest must be an object"]
-    if manifest.get("manifest_version") != "1.0" or manifest.get("status") != "frozen":
-        errors.append("previous manifest requires manifest_version 1.0 and status frozen")
+    if manifest.get("manifest_version") != "2.0" or manifest.get("status") != "frozen":
+        errors.append("previous manifest requires manifest_version 2.0 and status frozen; v1 is audit-only")
     if manifest.get("human_review_status") != "accepted":
         errors.append("previous frozen package must have accepted human review")
     warning_acknowledged = manifest.get("warning_acknowledged")
@@ -79,18 +80,18 @@ def verify_previous_manifest(
     if not valid_aware_datetime(manifest.get("frozen_at")):
         errors.append("previous manifest needs a timezone-aware frozen_at")
 
-    trusted_files = trusted_lock.get("files") if isinstance(trusted_lock.get("files"), dict) else {}
+    trusted_schema = trusted_lock.get("company_schema") if isinstance(trusted_lock.get("company_schema"), dict) else {}
     specification = manifest.get("specification")
     if not isinstance(specification, dict):
         errors.append("previous manifest specification block is missing")
     else:
         expected_specification = {
             "repository": EXPECTED_SPEC_REPOSITORY,
-            "ref": trusted_lock.get("ref"),
-            "commit": trusted_lock.get("commit"),
+            "ref": trusted_schema.get("ref"),
+            "commit": trusted_schema.get("commit"),
             "schema_path": EXPECTED_SCHEMA_PATH,
-            "schema_blob_sha1": trusted_files.get(EXPECTED_SCHEMA_PATH),
-            "schema_version": trusted_lock.get("schema_version"),
+            "schema_blob_sha1": trusted_schema.get("blob_sha1"),
+            "schema_version": trusted_schema.get("schema_version"),
         }
         for key, expected in expected_specification.items():
             if specification.get(key) != expected:
@@ -99,6 +100,8 @@ def verify_previous_manifest(
             errors.append("previous manifest specification schema_sha256 differs beyond one transport-added final LF")
         if str(specification.get("schema_blob_sha1", "")) not in git_blob_sha1_candidates(schema_path):
             errors.append("previous manifest Schema blob does not match the supplied Schema bytes")
+    if manifest.get("research_protocol") != trusted_lock.get("research_protocol"):
+        errors.append("previous manifest research_protocol does not match the current Skill trust lock")
 
     validation = manifest.get("validation")
     if not isinstance(validation, dict):
@@ -227,7 +230,7 @@ def verify_previous_manifest(
                 date.fromisoformat(research.get(key, ""))
             except (TypeError, ValueError):
                 errors.append(f"previous manifest research {key} must be a valid ISO date")
-        if previous_meta.get("schema_version") != trusted_lock.get("schema_version"):
+        if previous_meta.get("schema_version") != trusted_schema.get("schema_version"):
             errors.append("previous company.json schema_version does not match the trusted lock")
 
     validation_report_path = path.parent / "validation-report.json"
@@ -260,6 +263,25 @@ def verify_previous_manifest(
                 for key in ("validator", "mode", "errors", "warnings"):
                     if validation.get(key) != validation_report.get(key):
                         errors.append(f"previous manifest validation {key} does not match validation-report.json")
+
+    # Never trust the predecessor's self-reported zero-error result. Re-run the
+    # current full gate after its immutable files, protocol, and Schema anchor
+    # have been verified, then reconcile the fresh counts with the frozen record.
+    try:
+        fresh_findings = validate_research_package(path.parent, schema_path, "full")
+    except (OSError, ValueError) as exc:
+        errors.append(f"cannot run fresh full validation on previous package: {exc}")
+    else:
+        fresh_errors = [item for item in fresh_findings if item.severity == "error"]
+        fresh_warnings = [item for item in fresh_findings if item.severity == "warning"]
+        if fresh_errors:
+            codes = ", ".join(sorted({item.code for item in fresh_errors}))
+            errors.append(f"previous package fresh full validation failed: {codes}")
+        if isinstance(validation, dict):
+            if validation.get("errors") != len(fresh_errors) or validation.get("warnings") != len(fresh_warnings):
+                errors.append("previous manifest validation counts do not match fresh full validation")
+        if fresh_warnings and warning_acknowledged is not True:
+            errors.append("previous package fresh validation warnings were not acknowledged")
     return manifest, errors
 
 
@@ -327,9 +349,10 @@ def validate_incremental_transition(
 def build_manifest(
     root: Path,
     schema_path: Path,
-    spec_commit: str,
-    spec_ref: str,
+    schema_commit: str,
+    schema_ref: str,
     schema_blob_sha: str,
+    research_protocol: dict[str, Any],
     update_mode: str,
     validation: dict[str, Any],
     human_reviewed: bool,
@@ -347,20 +370,21 @@ def build_manifest(
         for name in names
     ]
     manifest = {
-        "manifest_version": "1.0",
+        "manifest_version": "2.0",
         "status": "frozen",
         "human_review_status": "accepted" if human_reviewed else "pending",
         "warning_acknowledged": warning_acknowledged,
         "frozen_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "specification": {
             "repository": EXPECTED_SPEC_REPOSITORY,
-            "ref": spec_ref,
-            "commit": spec_commit,
+            "ref": schema_ref,
+            "commit": schema_commit,
             "schema_path": EXPECTED_SCHEMA_PATH,
             "schema_sha256": file_sha256(schema_path),
             "schema_blob_sha1": schema_blob_sha,
             "schema_version": extract_schema_version(schema),
         },
+        "research_protocol": research_protocol,
         "research": {
             "company_name_cn": meta.get("company_name_cn"),
             "company_name_en": meta.get("company_name_en"),
@@ -392,7 +416,13 @@ def main() -> int:
     parser.add_argument("root", type=Path, help="Research package root")
     parser.add_argument("--schema", type=Path, required=True, help="Locked company.schema.json")
     parser.add_argument("--schema-blob-sha", required=True, help="Blob SHA returned for the locked Schema at the resolved commit")
-    parser.add_argument("--spec-commit", required=True, help="Locked 40-character Git commit SHA")
+    parser.add_argument(
+        "--schema-commit",
+        "--spec-commit",
+        dest="schema_commit",
+        required=True,
+        help="Locked 40-character Schema commit SHA (--spec-commit remains a compatibility alias)",
+    )
     parser.add_argument("--mode", choices=("full", "incremental"), default="full")
     parser.add_argument("--previous-manifest", type=Path, help="Required frozen predecessor for incremental mode")
     parser.add_argument("--official-trigger-source-id", help="Required new official source ID for incremental mode")
@@ -407,8 +437,8 @@ def main() -> int:
         parser.error(f"not a directory: {root}")
     if not schema_path.is_file():
         parser.error(f"schema does not exist: {schema_path}")
-    if re.fullmatch(r"[0-9a-fA-F]{40}", args.spec_commit) is None:
-        parser.error("--spec-commit must be an exact 40-character SHA")
+    if re.fullmatch(r"[0-9a-fA-F]{40}", args.schema_commit) is None:
+        parser.error("--schema-commit must be an exact 40-character SHA")
     if re.fullmatch(r"[0-9a-fA-F]{40}", args.schema_blob_sha) is None:
         parser.error("--schema-blob-sha must be an exact 40-character blob SHA")
     try:
@@ -417,21 +447,29 @@ def main() -> int:
         parser.error(f"cannot read bundled trusted specification lock: {exc}")
     if not isinstance(trusted_lock, dict):
         parser.error("bundled trusted specification lock is invalid")
-    trusted_files = trusted_lock.get("files") if isinstance(trusted_lock.get("files"), dict) else {}
+    lock_findings: list[Any] = []
+    validated_lock = load_trusted_spec_lock(lock_findings)
+    if validated_lock is None:
+        parser.error("bundled v2 trust lock or local authoritative protocol files failed integrity validation")
+    trusted_lock = validated_lock
+    trusted_schema = trusted_lock.get("company_schema") if isinstance(trusted_lock.get("company_schema"), dict) else {}
     if (
-        trusted_lock.get("repository") != EXPECTED_SPEC_REPOSITORY
-        or trusted_lock.get("ref") != "main"
-        or trusted_lock.get("commit") != args.spec_commit.lower()
-        or trusted_files.get(EXPECTED_SCHEMA_PATH) != args.schema_blob_sha.lower()
+        trusted_lock.get("lock_version") != "2.0"
+        or trusted_schema.get("repository") != EXPECTED_SPEC_REPOSITORY
+        or trusted_schema.get("ref") != "main"
+        or trusted_schema.get("commit") != args.schema_commit.lower()
+        or trusted_schema.get("path") != EXPECTED_SCHEMA_PATH
+        or trusted_schema.get("blob_sha1") != args.schema_blob_sha.lower()
+        or not isinstance(trusted_lock.get("research_protocol"), dict)
     ):
-        parser.error("resolved commit or Schema blob is not approved by this Skill release's trusted main lock")
+        parser.error("Schema commit/blob or research protocol is not approved by this Skill release's v2 trust lock")
     try:
         schema = load_json(schema_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"cannot read Schema: {exc}")
     if not isinstance(schema, dict) or schema.get("$schema") != EXPECTED_SCHEMA_DRAFT or schema.get("$id") != EXPECTED_SCHEMA_ID:
         parser.error("Schema identity is not the authoritative Doujiao Draft 2020-12 contract")
-    if extract_schema_version(schema) != trusted_lock.get("schema_version"):
+    if extract_schema_version(schema) != trusted_schema.get("schema_version"):
         parser.error("Schema version differs from the trusted Skill release lock")
     actual_blobs = git_blob_sha1_candidates(schema_path)
     if args.schema_blob_sha.lower() not in actual_blobs:
@@ -486,9 +524,10 @@ def main() -> int:
     manifest = build_manifest(
         root=root,
         schema_path=schema_path,
-        spec_commit=args.spec_commit.lower(),
-        spec_ref=trusted_lock["ref"],
+        schema_commit=args.schema_commit.lower(),
+        schema_ref=trusted_schema["ref"],
         schema_blob_sha=args.schema_blob_sha.lower(),
+        research_protocol=trusted_lock["research_protocol"],
         update_mode=args.mode,
         validation=validation,
         human_reviewed=args.human_reviewed,
