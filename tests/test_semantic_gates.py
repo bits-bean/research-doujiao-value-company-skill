@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,13 +18,17 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from validate_research_package import (  # noqa: E402
     FROZEN_HASH_FILES,
+    EXPECTED_SCHEMA_PATH,
+    EXPECTED_SPEC_REPOSITORY,
     REPORT_SECTIONS,
     Finding,
     FormulaEvaluationError,
     evaluate_custom_formula,
+    extract_schema_version,
     file_sha256,
     git_blob_sha1,
     is_official_report_schedule_source,
+    load_trusted_spec_lock,
     schema_sha256_candidates,
     validate_evidence,
     validate_calculations,
@@ -36,6 +42,26 @@ from validate_research_package import (  # noqa: E402
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_trusted_lock_rejects_extra_fields_at_every_level(self) -> None:
+        original = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
+        mutations = {
+            "top-level": lambda lock: lock.__setitem__("extra", True),
+            "research-protocol": lambda lock: lock["research_protocol"].__setitem__("name", "legacy"),
+            "company-schema": lambda lock: lock["company_schema"].__setitem__("extra", True),
+            "document": lambda lock: lock["research_protocol"]["documents"][0].__setitem__("extra", True),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp_dir:
+                lock = json.loads(json.dumps(original))
+                mutate(lock)
+                lock_path = Path(temp_dir) / "trusted-spec-lock.json"
+                write_json(lock_path, lock)
+                findings: list[Finding] = []
+                with patch("validate_research_package.TRUSTED_SPEC_LOCK_PATH", lock_path):
+                    loaded = load_trusted_spec_lock(findings)
+                self.assertIsNone(loaded)
+                self.assertTrue(any(item.code.startswith("trusted-") for item in findings), findings)
+
     def test_schema_sha256_allows_only_one_final_lf_transport_variant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             schema_path = Path(temp_dir) / "schema.json"
@@ -274,7 +300,7 @@ class SemanticGateTests(unittest.TestCase):
                 for name in FROZEN_HASH_FILES
             ]
             manifest = {
-                "manifest_version": "1.0",
+                "manifest_version": "2.0",
                 "status": "frozen",
                 "frozen_at": "2026-08-19T12:00:00Z",
                 "human_review_status": "pending",
@@ -288,13 +314,14 @@ class SemanticGateTests(unittest.TestCase):
                     "schema_sha256": file_sha256(schema_path),
                     "schema_version": "evil-version",
                 },
+                "research_protocol": {"authority": "attacker"},
                 "research": dict(company["meta"]),
                 "validation": {"validator": "test", "mode": "full", "errors": 0, "warnings": 0},
                 "files": files,
             }
             write_json(root / "research-manifest.json", manifest)
             findings: list[Finding] = []
-            validate_manifest(root, schema_path, company, findings)
+            validate_manifest(root, schema_path, company, "full", findings)
             codes = {item.code for item in findings}
             expected = {
                 "manifest-repository",
@@ -305,8 +332,65 @@ class SemanticGateTests(unittest.TestCase):
                 "manifest-schema-version",
                 "trusted-schema-local-mismatch",
                 "manifest-company-schema-version",
+                "manifest-research-protocol",
             }
             self.assertTrue(expected.issubset(codes), sorted(codes))
+
+    def test_v1_manifest_is_accepted_only_for_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            schema_path = root / "schema.json"
+            shutil.copyfile(ROOT / "references/specs/company.schema.json", schema_path)
+            schema_version = extract_schema_version(json.loads(schema_path.read_text(encoding="utf-8")))
+            company = {
+                "meta": {
+                    "schema_version": schema_version,
+                    "company_name_cn": "测试公司",
+                    "company_name_en": "Test Company",
+                    "ticker": "TEST",
+                    "exchange": "NYSE",
+                    "report_currency": "USD",
+                    "data_as_of": "2026-06-30",
+                    "valuation_date": "2026-08-19",
+                    "source_version": "test",
+                }
+            }
+            for name in FROZEN_HASH_FILES:
+                if name == "company.json":
+                    write_json(root / name, company)
+                elif name == "validation-report.json":
+                    write_json(root / name, {"validator": "test", "mode": "full", "errors": 0, "warnings": 0})
+                else:
+                    (root / name).write_text(f"{name}\n", encoding="utf-8")
+            manifest = {
+                "manifest_version": "1.0",
+                "status": "frozen",
+                "frozen_at": "2026-08-19T12:00:00Z",
+                "human_review_status": "accepted",
+                "warning_acknowledged": False,
+                "specification": {
+                    "repository": EXPECTED_SPEC_REPOSITORY,
+                    "ref": "main",
+                    "commit": "a" * 40,
+                    "schema_path": EXPECTED_SCHEMA_PATH,
+                    "schema_blob_sha1": git_blob_sha1(schema_path),
+                    "schema_sha256": file_sha256(schema_path),
+                    "schema_version": schema_version,
+                },
+                "research": dict(company["meta"]),
+                "validation": {"validator": "test", "mode": "full", "errors": 0, "warnings": 0},
+                "files": [
+                    {"path": name, "sha256": file_sha256(root / name), "size_bytes": (root / name).stat().st_size}
+                    for name in FROZEN_HASH_FILES
+                ],
+            }
+            write_json(root / "research-manifest.json", manifest)
+            audit_findings: list[Finding] = []
+            validate_manifest(root, schema_path, company, "audit", audit_findings)
+            self.assertNotIn("legacy-manifest-audit-only", {item.code for item in audit_findings})
+            full_findings: list[Finding] = []
+            validate_manifest(root, schema_path, company, "full", full_findings)
+            self.assertIn("legacy-manifest-audit-only", {item.code for item in full_findings})
 
 
 if __name__ == "__main__":
