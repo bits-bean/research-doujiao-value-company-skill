@@ -4,7 +4,8 @@
 
 ## 1. 规范与身份
 
-- 已锁定单一上游 commit，并读取正确路由文件。
+- 已按顺序完整读取当前 Skill 三份权威研究协议文档，且文档 SHA-256、大小与 `research_protocol` 摘要一致。
+- 已锁定 `doujiao-value-system` 的单一 Schema commit、blob、SHA-256 与 `schema_version`，Skill 内只读副本一致。
 - 公司法定名称、主要证券、ticker、交易所、财年、会计准则和报告币种无歧义。
 - 数据截至日、估值日和股价时间戳明确。
 - 行业适配框架已声明。
@@ -50,7 +51,7 @@
 
 ## 6. Schema 与语义
 
-- 使用锁定 commit 的 Draft 2020-12 Schema 验证。
+- 使用当前 Skill `company_schema` 锁定的 Draft 2020-12 Schema 只读副本验证。
 - `schema_version` 与 Schema const 一致，比例使用 decimal。
 - 所有 required 字段存在，无额外字段，格式正确。
 - `source_ids` 引用完整，财务期间不重复并按时间排列。
@@ -71,11 +72,11 @@
 
 - 机械验证为 0 error；警告已解释，不影响结论或被显式降级。
 - Too Hard 的每一项可豁免警告都必须在 `research-completeness.md` 独占一行，写出精确 finding code、原因、对结论的影响和待补证据或退出条件；笼统的“已知悉”不能解锁冻结。
-- manifest 哈希与实际文件一致，状态为 `frozen`。
-- manifest 必须列出完整且唯一的冻结文件集，并记录真实解析的 commit、Schema blob SHA 和 `full` 零错误验证；增量冻结还要核对上一 manifest 与官方触发来源。
+- 新 manifest 必须为 `manifest_version: 2.0`，哈希与实际文件一致，状态为 `frozen`；v1 只允许 audit。
+- manifest 必须列出完整且唯一的冻结文件集，`research_protocol` 与当前 Skill 信任锁完全一致，`specification` 只记录 Schema 锚点，并记录 `full` 零错误验证；增量冻结还要核对上一 v2 manifest 与官方触发来源。
 - 人工未审核时保持 `human_review_status: pending`。
 - 已冻结目录不再修改；任何修复生成新版本。
-- 下游使用同一 report、JSON、manifest 和规范 commit。
+- 下游使用同一 report、JSON、v2 manifest、研究协议与 Schema 锚点。
 
 ## 阻断项
 
@@ -86,12 +87,13 @@
 ## 9. GitHub 归档（仅获授权时）
 
 - 用户已明确授权本次 GitHub 写入，不能从研究或冻结请求推断授权。
-- manifest 为人工已接受的冻结版本，发布计划重新核验全部冻结文件、哈希和 Schema。
-- 目标严格限定为 `bits-bean/doujiao-value-system`；规范锚点是当前 `main` 的祖先，且全部受保护规范 blob 未变。
+- manifest 为人工已接受的 v2 冻结版本；v1 不得归档。发布计划重新核验全部冻结文件、哈希、研究协议和 Schema。
+- 目标严格限定为 `bits-bean/doujiao-value-system`；Schema 锚点是当前 `main` 的祖先，且当前 Schema blob 未变。system 仓库其他文档不再参与研究协议兼容判断。
 - 版本路径符合契约；只有用户明确授权提升时才允许修改当前正式路径。
-- 已检查远端最新 `main`、同名快照和当前正式 `company.json`，没有覆盖、回退、同日冲突或身份冲突。
+- 已在同一最新 `main` SHA 下检查同名快照、slug registry 正反向一一绑定及（若提升）统一 canonical state；不存在 observation 也带读取时 SHA，且没有 wrong slug、别名、身份、hash、回退或同日冲突。
+- 前序增量研究包已在当前受信研究协议与 Schema 下重新执行 `full` 验证，fresh errors/warnings 与冻结记录一致；未把自报零错误当作证据。
 - 默认经独立分支和 PR；直接 `main` 需要用户明确指定，并且只使用单一原子提交、非强制、仅快进更新。
-- 最终 diff 只包含一个新增版本目录和可选的 canonical `company.json`，不包含删除、重命名、其他路径或受保护规范文件变化。
+- 最终 diff 只包含一个新增版本目录和可选的 canonical `company.json`，不包含删除、重命名、其他路径或 Schema 文件变化。
 - 提交后按 commit 重新读取远端文件并核对全部目标路径与 SHA-256。
 
 任何权限不足、分支保护、远端并发更新、部分写入、哈希不一致或无法复核，都必须准确报告失败或部分完成，不得声称归档成功。
