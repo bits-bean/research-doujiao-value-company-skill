@@ -42,6 +42,18 @@ from validate_research_package import (  # noqa: E402
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_trusted_lock_rejects_zero_protocol_commit(self) -> None:
+        original = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
+        original["research_protocol"]["commit"] = "0" * 40
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock_path = Path(temp_dir) / "trusted-spec-lock.json"
+            write_json(lock_path, original)
+            findings: list[Finding] = []
+            with patch("validate_research_package.TRUSTED_SPEC_LOCK_PATH", lock_path):
+                loaded = load_trusted_spec_lock(findings)
+        self.assertIsNone(loaded)
+        self.assertIn("trusted-research-protocol-shape", {item.code for item in findings})
+
     def test_trusted_lock_rejects_extra_fields_at_every_level(self) -> None:
         original = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
         mutations = {
