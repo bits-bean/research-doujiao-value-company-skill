@@ -6,6 +6,7 @@
 - [必需文件](#必需文件)
 - [冻结语义](#冻结语义)
 - [下游交接](#下游交接)
+- [GitHub 归档](#github-归档)
 
 ## 版本化目录
 
@@ -141,3 +142,25 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 交给 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json` 和 manifest。下游先验证哈希、规范 commit、Schema 版本、公司身份、数据日与估值日一致，再生成内容。
 
 若 manifest 缺失、状态不是 `frozen`、文件集合不完整、哈希不匹配或 JSON 未通过 manifest commit 的同一 Schema，只能做草案或审查，不得声称正式内容交付。研究事实和 Schema 永远锁定 manifest commit；展示规则可读取较新的 `main`，但一旦新方法或 Schema 改变事实含义，必须先回到上游完成迁移和重新冻结。
+
+## GitHub 归档
+
+GitHub 归档是冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`。`archive-only` 只写版本快照；用户另行授权“设为当前正式版本”后，`archive-and-promote` 才写 canonical 路径：
+
+```text
+research/<company-slug>/<version>/
+├── research-report.md
+├── company.json
+├── research-completeness.md
+├── evidence-ledger.json
+├── calculation-ledger.json
+├── validation-report.json
+├── schema-gap-report.md        # 仅 manifest 列出时
+└── research-manifest.json
+
+companies/<company-slug>/company.json
+```
+
+版本快照必须逐字节保持冻结文件不变；不得向目录加入发布回执、制作记录或其他未冻结文件。若获授权提升，当前正式 `company.json` 必须是同一快照中 `company.json` 的精确副本。
+
+同名版本目录已经存在时，只有远端全部路径和哈希与发布计划完全一致才可视为幂等成功；否则创建新版本后缀，不能覆盖。当前正式数据的 `data_as_of` 与 `valuation_date` 都只允许前进；同一数据日但不同内容默认拒绝，只有人工接受的 `-vN` 修订版获得专项提升确认后才允许。公司身份、证券或 Schema 版本不一致拒绝。
