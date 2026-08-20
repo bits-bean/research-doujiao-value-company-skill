@@ -142,6 +142,7 @@ def main() -> int:
             or protocol.get("repository") != "bits-bean/doujiao-value-research-skill"
             or protocol.get("ref") != "main"
             or re.fullmatch(r"[0-9a-f]{40}", str(protocol.get("commit", ""))) is None
+            or protocol.get("commit") == "0" * 40
         ):
             fail("research_protocol has the wrong authority, repository, ref, or commit")
             errors += 1
