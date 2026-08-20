@@ -21,11 +21,16 @@ REQUIRED = (
     "references/evidence-and-calculation.md",
     "references/valuation-qa.md",
     "references/qa-gates.md",
+    "references/github-archive.md",
     "references/trusted-spec-lock.json",
     "scripts/validate_research_package.py",
     "scripts/freeze_research.py",
+    "scripts/prepare_github_archive.py",
+    "scripts/verify_spec_anchor.py",
     "scripts/validate_skill.py",
     "tests/test_incremental_chain.py",
+    "tests/test_github_archive.py",
+    "tests/test_spec_anchor.py",
     "tests/test_semantic_gates.py",
     "tests/test_validation_gates.py",
 )
@@ -114,7 +119,13 @@ def main() -> int:
         errors += 1
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        for script in ("validate_research_package.py", "freeze_research.py", "validate_skill.py"):
+        for script in (
+            "validate_research_package.py",
+            "freeze_research.py",
+            "prepare_github_archive.py",
+            "verify_spec_anchor.py",
+            "validate_skill.py",
+        ):
             try:
                 py_compile.compile(
                     str(ROOT / "scripts" / script),
