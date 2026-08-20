@@ -32,7 +32,7 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 ### research-report.md
 
-按上游 `research-methodology.md` 第 14 节的顺序覆盖 16 个部分，并包含来源 ID 或直接链接。报告必须分别给出企业质量、估值状态、研究状态、置信度、2—4 个关键前提和 thesis breakers。
+按本 Skill `references/specs/research-methodology.md` 第 14 节的顺序覆盖 16 个部分，并包含来源 ID 或直接链接。报告必须分别给出企业质量、估值状态、研究状态、置信度、2—4 个关键前提和 thesis breakers。
 
 ### company.json
 
@@ -127,9 +127,10 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 ## 冻结语义
 
-`research-manifest.json` 是 sidecar，不写入 `company.json`。冻结清单记录：
+`research-manifest.json` 是 sidecar，不写入 `company.json`。新冻结清单固定使用 `manifest_version: 2.0`，并分别记录：
 
-- 规范仓库、ref、精确 commit、Schema SHA-256 和 Git blob SHA；
+- `research_protocol`：当前研究 Skill 的 authority、repository、ref、发行 commit、`protocol_version`、聚合摘要及三份权威文档 SHA-256/大小；
+- `specification`：只记录权威 Schema 仓库、ref、精确 commit、路径、Schema SHA-256、Git blob SHA 与 `schema_version`；
 - `schema_version`、公司身份、数据日、估值日；
 - 报告、JSON、台账和验证报告的 SHA-256；
 - 验证错误与警告数量；
@@ -137,15 +138,17 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 `status: frozen` 仅表示快照不可变。默认 `human_review_status: pending`；只有实际人工审核后才标为 `accepted`。冻结不代表投资建议、网站已更新或内容已发布。
 
+历史 `manifest_version: 1.0` 只允许 `audit` 模式复核。它不能成为新增量版本的前序 manifest，不能重新冻结、GitHub 归档或作为当前正式下游交接；要继续使用必须按当前研究协议与 Schema 迁移并新建 v2 版本目录。
+
 ## 下游交接
 
-交给 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json` 和 manifest。下游先验证哈希、规范 commit、Schema 版本、公司身份、数据日与估值日一致，再生成内容。
+交给 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json` 和 v2 manifest。下游先验证文件哈希、`research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再生成内容。
 
-若 manifest 缺失、状态不是 `frozen`、文件集合不完整、哈希不匹配或 JSON 未通过 manifest commit 的同一 Schema，只能做草案或审查，不得声称正式内容交付。研究事实和 Schema 永远锁定 manifest commit；展示规则可读取较新的 `main`，但一旦新方法或 Schema 改变事实含义，必须先回到上游完成迁移和重新冻结。
+若 manifest 缺失、不是 v2、状态不是 `frozen`、文件集合不完整、哈希不匹配、研究协议不受信，或 JSON 未通过 manifest `specification` 指定的同一 Schema，只能做草案或审查，不得声称正式内容交付。研究事实由 manifest 中的研究协议与 Schema 双重锁定；展示规则可以独立升级，但新研究方法或 Schema 改变事实含义时必须先完成迁移和重新冻结。
 
 ## GitHub 归档
 
-GitHub 归档是冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`。`archive-only` 只写版本快照；用户另行授权“设为当前正式版本”后，`archive-and-promote` 才写 canonical 路径：
+GitHub 归档是 v2 冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`。v1 研究包不得归档。`archive-only` 只写版本快照；用户另行授权“设为当前正式版本”后，`archive-and-promote` 才写 canonical 路径：
 
 ```text
 research/<company-slug>/<version>/
@@ -163,4 +166,4 @@ companies/<company-slug>/company.json
 
 版本快照必须逐字节保持冻结文件不变；不得向目录加入发布回执、制作记录或其他未冻结文件。若获授权提升，当前正式 `company.json` 必须是同一快照中 `company.json` 的精确副本。
 
-同名版本目录已经存在时，只有远端全部路径和哈希与发布计划完全一致才可视为幂等成功；否则创建新版本后缀，不能覆盖。当前正式数据的 `data_as_of` 与 `valuation_date` 都只允许前进；同一数据日但不同内容默认拒绝，只有人工接受的 `-vN` 修订版获得专项提升确认后才允许。公司身份、证券或 Schema 版本不一致拒绝。
+同名版本目录已经存在时，只有远端全部路径和哈希与发布计划完全一致才可视为幂等成功；否则创建新版本后缀，不能覆盖。最终写入还必须在同一最新 `main` SHA 下验证 slug registry 的正向 slug→身份和反向身份→slug 一一绑定；仅通过 slug 正则不构成授权。`archive-and-promote` 的 canonical 存在/不存在 observation 也必须绑定该 SHA，存在时还要核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 都只允许前进；同一数据日但不同内容默认拒绝，只有人工接受的 `-vN` 修订版获得专项提升确认后才允许。公司身份、证券或 Schema 版本不一致拒绝。
