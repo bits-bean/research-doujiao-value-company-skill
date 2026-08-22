@@ -64,6 +64,7 @@ COMPANY_SCHEMA_KEYS = {
     "bundled_path",
 }
 CLASSIFICATIONS = {"fact", "management_claim", "third_party", "inference", "estimate"}
+VALUATION_CASH_FLOW_BASES = {"fcff", "fcfe", "owner_earnings", "distributable_common_cash"}
 CONFIDENCE = {"high", "medium", "low"}
 VERDICT_CONFIDENCE = CONFIDENCE | {"高", "中", "低"}
 BUSINESS_QUALITY = {"优秀", "良好", "一般", "较差", "无法判断"}
@@ -737,6 +738,7 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
         "enterprise_value": (("market_cap", "net_debt"), lambda x: x["market_cap"] + x["net_debt"]),
     }
     mapped = {"free_cash_flow": "free_cash_flow", "net_debt": "net_debt", "market_cap": "market_cap", "enterprise_value": "enterprise_value"}
+    starting_cash_records: list[tuple[int, dict[str, Any]]] = []
     for index, item in enumerate(items):
         path = f"calculation-ledger.json.calculations[{index}]"
         if not isinstance(item, dict):
@@ -761,6 +763,8 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
         if not isinstance(source_ids, list) or not source_ids or any(source_id not in known for source_id in source_ids):
             add(findings, "error", "calculation-source", path, "calculation needs nonempty, resolved source_ids")
         metric = item.get("metric")
+        if item.get("valuation_role") == "starting_cash_flow":
+            starting_cash_records.append((index, item))
         if metric == "custom":
             formula = item.get("formula")
             if not substantive_text(item.get("review_method"), 16) or looks_like_placeholder(item.get("review_method")):
@@ -800,6 +804,40 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
             add(findings, "error", "calculation-target-missing", path, "no matching numeric company.json field for this period")
         elif not close_enough(float(result), float(target_value)):
             add(findings, "error", "calculation-target-mismatch", path, f"ledger result {result} differs from company.json value {target_value}")
+
+    if mode == "full" and not is_unable(company):
+        if len(starting_cash_records) != 1:
+            add(
+                findings,
+                "error",
+                "missing-valuation-starting-cash-flow",
+                "calculation-ledger.json.calculations",
+                "full research requires exactly one reviewed valuation_role=starting_cash_flow record",
+            )
+        else:
+            index, record = starting_cash_records[0]
+            path = f"calculation-ledger.json.calculations[{index}]"
+            basis = record.get("cash_flow_basis")
+            formula = record.get("formula")
+            inputs = record.get("inputs")
+            forbidden_text = " ".join(
+                [str(basis or ""), str(formula or "")]
+                + ([str(key) for key in inputs] if isinstance(inputs, dict) else [])
+            ).lower()
+            if record.get("metric") != "custom" or basis not in VALUATION_CASH_FLOW_BASES:
+                add(findings, "error", "valuation-starting-cash-flow-basis", path, f"cash_flow_basis must be one of {sorted(VALUATION_CASH_FLOW_BASES)!r} on a custom calculation")
+            if re.search(r"(?:^|[^a-z])eps(?:$|[^a-z])|earnings\s*per\s*share|每股收益", forbidden_text, re.I):
+                add(findings, "error", "valuation-starting-cash-flow-eps", path, "EPS cannot be the starting cash flow for DCF or Reverse DCF")
+            result = record.get("result")
+            shares = record.get("diluted_shares")
+            per_share = record.get("per_share")
+            years = record.get("forecast_years")
+            if not numeric(shares) or float(shares) <= 0 or not numeric(per_share) or not isinstance(years, int) or isinstance(years, bool) or years <= 0:
+                add(findings, "error", "valuation-starting-cash-flow-fields", path, "requires positive diluted_shares, finite per_share and positive integer forecast_years")
+            elif numeric(result):
+                expected_per_share = float(result) * financial_scale / (float(shares) * share_scale)
+                if not close_enough(float(per_share), expected_per_share, max(0.0001, abs(expected_per_share) * 0.001)):
+                    add(findings, "error", "valuation-starting-cash-flow-per-share", path, f"per_share {per_share} does not reconcile to total cash flow and diluted shares ({expected_per_share})")
 
 
 def documented_material_gap(completeness: str) -> bool:
@@ -1036,9 +1074,9 @@ def validate_valuation(company: dict[str, Any], findings: list[Finding]) -> None
         leaves = flatten_leaves(reverse) if isinstance(reverse, dict) else []
         numeric_pairs = [(path, value) for path, value in leaves if numeric(value)]
         category_tokens = {
-            "growth": ("growth", "cagr", "revenue", "sales", "earnings", "增长", "收入", "营收", "盈利"),
+            "growth": ("growth", "cagr", "revenue", "sales", "cash_flow", "fcf", "fcfe", "增长", "收入", "营收", "现金流"),
             "profitability": ("margin", "roe", "roa", "roic", "rotce", "profit", "利润率", "回报率", "回报", "净利率"),
-            "capital_cash": ("capital", "reinvest", "cash", "capex", "turnover", "payout", "buyback", "资本", "再投资", "现金", "周转", "回购"),
+            "capital_cash": ("capital", "reinvest", "cash", "capex", "turnover", "payout", "retention", "buyback", "资本", "再投资", "现金", "周转", "留存", "分配", "回购"),
         }
         categories = {
             category
@@ -1049,6 +1087,8 @@ def validate_valuation(company: dict[str, Any], findings: list[Finding]) -> None
             isinstance(value, str) and (not value.strip() or looks_like_placeholder(value))
             for _, value in leaves
         )
+        if any(re.search(r"(?:^|[^a-z])eps(?:$|[^a-z])|earnings_per_share|每股收益", path, re.I) for path, _ in numeric_pairs):
+            add(findings, "error", "reverse-dcf-eps-input", "company.json.valuation.reverse_dcf", "Reverse DCF must solve for cash-flow and capital assumptions, not EPS")
         if not isinstance(reverse, dict) or len(numeric_pairs) < 2 or len(categories) < 2 or blank_or_placeholder:
             add(
                 findings,
@@ -1863,17 +1903,76 @@ def report_number_matches(actual: float | None, expected: Any) -> bool:
     return abs(actual - expected_number) <= max(0.0005, abs(expected_number) * 0.02)
 
 
-def validate_valuation_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+def validate_valuation_report(company: dict[str, Any], body: str, findings: list[Finding], calculations: Any = None) -> None:
     if is_unable(company) and re.search(r"无法判断|too hard", body, re.I) and gap_explained(body):
         return
     valuation = company.get("valuation") if isinstance(company.get("valuation"), dict) else {}
     tables = parse_markdown_tables(body)
+    start_record = next(
+        (
+            item
+            for item in list_or_empty(calculations.get("calculations") if isinstance(calculations, dict) else [])
+            if isinstance(item, dict) and item.get("valuation_role") == "starting_cash_flow"
+        ),
+        None,
+    )
+    input_headers = {
+        "basis": ("现金流口径", "cash flow basis"),
+        "period": ("基准期间", "基准期", "base period"),
+        "total": ("初期现金流总额", "起始现金流总额", "starting cash flow"),
+        "shares": ("稀释后股数", "diluted shares"),
+        "per_share": ("初期每股现金流", "起始每股现金流", "starting cash flow per share"),
+        "years": ("显性期", "显性预测期", "forecast years"),
+    }
+    input_valid = False
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in input_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        for row in rows:
+            basis_text = clean_markdown_text(row[int(columns["basis"])]).lower()
+            period_text = clean_markdown_text(row[int(columns["period"])]).lower()
+            total = parse_report_number(row[int(columns["total"])] )
+            shares = parse_report_number(row[int(columns["shares"])] )
+            per_share = parse_report_number(row[int(columns["per_share"])] )
+            years = parse_report_number(row[int(columns["years"])] )
+            if re.search(r"(?:^|[^a-z])eps(?:$|[^a-z])|earnings\s*per\s*share|每股收益", basis_text, re.I):
+                add(findings, "error", "report-valuation-eps-input", "research-report.md#valuation", "DCF input table cannot use EPS as its cash-flow basis")
+                continue
+            allowed_basis_aliases = ("fcff", "fcfe", "owner earnings", "所有者收益", "distributable common cash", "股东可分配现金", "可分配普通股现金")
+            row_valid = (
+                any(alias in basis_text for alias in allowed_basis_aliases)
+                and all(value is not None for value in (total, shares, per_share, years))
+                and float(shares) > 0
+                and float(years) > 0
+            )
+            if isinstance(start_record, dict):
+                basis = start_record.get("cash_flow_basis")
+                basis_aliases = {
+                    "fcff": ("fcff",),
+                    "fcfe": ("fcfe",),
+                    "owner_earnings": ("owner earnings", "owner earnings", "所有者收益"),
+                    "distributable_common_cash": ("distributable common cash", "股东可分配现金", "可分配普通股现金", "fcfe"),
+                }
+                row_valid = row_valid and any(alias in basis_text for alias in basis_aliases.get(str(basis), ()))
+                row_valid = row_valid and normalized_text(start_record.get("period")) in normalized_text(period_text)
+                row_valid = row_valid and report_number_matches(total, start_record.get("result"))
+                row_valid = row_valid and report_number_matches(shares, start_record.get("diluted_shares"))
+                row_valid = row_valid and report_number_matches(per_share, start_record.get("per_share"))
+                row_valid = row_valid and report_number_matches(years, start_record.get("forecast_years"))
+            input_valid = bool(row_valid)
+            if input_valid:
+                break
+        break
+    if not input_valid:
+        add(findings, "error", "report-valuation-inputs", "research-report.md#valuation", "valuation section needs one reconciled DCF input table with cash-flow basis, base period, starting total/per-share cash flow, diluted shares and forecast years")
+
     scenario_headers = {
         "scenario": ("情景", "场景", "scenario"),
-        "growth": ("收入增长", "营收增长", "revenue growth"),
-        "margin": ("利润率", "经营利润率", "margin"),
+        "growth": ("初期现金流增长", "现金流增长", "fcf增长", "fcfe增长", "可分配现金增长", "收入增长", "营收增长", "cash flow growth", "revenue growth"),
         "discount": ("折现率", "discount rate"),
         "terminal": ("永续增长", "终值增长", "terminal growth"),
+        "terminal_share": ("终值占比", "terminal value share"),
         "value": ("每股价值", "公允价值", "fair value"),
     }
     scenario_index: int | None = None
@@ -1895,12 +1994,12 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
             expected = expected_scenarios.get(kind)
             values = {
                 "revenue_growth": parse_report_number(row[int(columns["growth"])]),
-                "margin": parse_report_number(row[int(columns["margin"])]),
                 "discount_rate": parse_report_number(row[int(columns["discount"])]),
                 "terminal_growth": parse_report_number(row[int(columns["terminal"])]),
                 "fair_value_per_share": parse_report_number(row[int(columns["value"])]),
             }
-            if kind is None or kind in kinds or any(value is None for value in values.values()):
+            terminal_share = parse_report_number(row[int(columns["terminal_share"])] )
+            if kind is None or kind in kinds or any(value is None for value in values.values()) or terminal_share is None or not 0 <= float(terminal_share) <= 1:
                 invalid += 1
                 continue
             kinds.add(kind)
@@ -1909,7 +2008,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         scenario_valid = kinds == {"bear", "base", "bull"} and invalid == 0
         break
     if scenario_index is None or not scenario_valid or not re.search(r"\bdcf\b|现金流折现", body, re.I):
-        add(findings, "error", "report-valuation-scenarios", "research-report.md#valuation", "valuation section needs a three-scenario DCF table reconciled to company.valuation")
+        add(findings, "error", "report-valuation-scenarios", "research-report.md#valuation", "valuation section needs a three-scenario cash-flow DCF table with growth, discount rate, terminal growth, terminal-value share and values reconciled to company.valuation")
 
     sensitivity_headers = {
         "discount": ("折现率", "discount rate"),
@@ -1956,9 +2055,9 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
     }
     reverse = valuation.get("reverse_dcf") if isinstance(valuation.get("reverse_dcf"), dict) else {}
     category_tokens = {
-        "growth": ("growth", "cagr", "revenue", "sales", "earnings", "增长", "收入", "营收", "盈利"),
+        "growth": ("growth", "cagr", "revenue", "sales", "cash_flow", "fcf", "fcfe", "增长", "收入", "营收", "现金流"),
         "profitability": ("margin", "roe", "roa", "roic", "rotce", "profit", "利润率", "回报率", "回报", "净利率"),
-        "capital-cash": ("capital", "reinvest", "cash", "capex", "turnover", "payout", "buyback", "资本", "再投资", "现金", "周转", "回购"),
+        "capital-cash": ("capital", "reinvest", "cash", "capex", "turnover", "payout", "retention", "buyback", "资本", "再投资", "现金", "周转", "留存", "分配", "回购"),
     }
     expected_by_category: dict[str, list[float]] = {key: [] for key in category_tokens}
     for path, value in flatten_leaves(reverse):
@@ -1984,6 +2083,8 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
                 (name for name, tokens in category_tokens.items() if any(token in dimension for token in tokens)),
                 None,
             )
+            if re.search(r"(?:^|[^a-z])eps(?:$|[^a-z])|earnings\s*per\s*share|每股收益", dimension, re.I):
+                category = None
             expected_values = expected_by_category.get(category, []) if category else []
             if (
                 category is None
@@ -2158,7 +2259,7 @@ def validate_source_index(company: dict[str, Any], report: str, blocks: list[Hea
         add(findings, "error", "report-source-index-mapping", "research-report.md#source-index", f"every cited SRC ID needs complete, matching metadata; invalid={sorted(set(invalid))!r}, unresolved={unresolved!r}")
 
 
-def validate_report(company: dict[str, Any], report: str, mode: str, findings: list[Finding]) -> None:
+def validate_report(company: dict[str, Any], report: str, mode: str, findings: list[Finding], calculations: Any = None) -> None:
     report = mask_non_rendered_markdown(report)
     lowered = report.lower()
     blocks = parse_heading_blocks(report)
@@ -2216,7 +2317,7 @@ def validate_report(company: dict[str, Any], report: str, mode: str, findings: l
         if "pre-mortem" in bodies:
             validate_pre_mortem_report(company, bodies["pre-mortem"], findings)
         if "valuation" in bodies:
-            validate_valuation_report(company, bodies["valuation"], findings)
+            validate_valuation_report(company, bodies["valuation"], findings, calculations)
         if "final-conclusion" in bodies:
             validate_conclusion_fields(bodies["final-conclusion"], findings, section="final-conclusion", code_prefix="report-final")
             validate_final_scorecard(company, bodies["final-conclusion"], findings)
@@ -2557,7 +2658,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
     validate_research_modules(company, findings)
     validate_valuation(company, findings)
     validate_verdict_and_risks(company, findings)
-    validate_report(company, report, mode, findings)
+    validate_report(company, report, mode, findings, calculations)
     validate_too_hard_acknowledgements(company, completeness, findings)
     meta = company.get("meta")
     if isinstance(meta, dict):
@@ -2589,7 +2690,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
 
 def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Finding]) -> dict[str, Any]:
     return {
-        "validator": "research-doujiao-value-company/2.0",
+        "validator": "research-doujiao-value-company/2.1",
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "root": str(root),
         "schema": str(schema_path),

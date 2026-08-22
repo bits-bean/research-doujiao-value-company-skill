@@ -117,6 +117,32 @@ research/<company-slug>/<YYYY-MM-DD>/
 }
 ```
 
+非 Too Hard 的完整研究还必须有且只有一个 `valuation_role: "starting_cash_flow"` 的 `custom` 计算，作为 DCF 与 Reverse DCF 的统一起点：
+
+```json
+{
+  "id": "CALC-DCF-START",
+  "metric": "custom",
+  "valuation_role": "starting_cash_flow",
+  "cash_flow_basis": "distributable_common_cash",
+  "period": "FY2025",
+  "formula": "normalized_common_net_income - required_retained_common_equity",
+  "inputs": {
+    "normalized_common_net_income": 10833,
+    "required_retained_common_equity": 2166.6
+  },
+  "result": 8666.4,
+  "unit": "USD million",
+  "diluted_shares": 679,
+  "per_share": 12.7635,
+  "forecast_years": 10,
+  "review_method": "用普通股利润、目标监管资本与风险资产增长需求独立复核，并核对总额除以稀释后股数",
+  "source_ids": ["SRC-001"]
+}
+```
+
+`cash_flow_basis` 只使用 `fcff / fcfe / owner_earnings / distributable_common_cash`。`result` 是与公司财务单位一致的总额，`diluted_shares` 与公司股份单位一致，`per_share` 必须与两者按 `company.meta` 单位换算后相符；`forecast_years` 是正整数。不得使用 EPS、PE 或退出倍数充当起始现金流。
+
 `formula` 必须是可机械复算的受限算术表达式，可写为纯表达式或 `result = expression`。变量名必须与 `inputs` 完全一致；只允许有限数值、括号和 `+ - * / % **`，不允许函数、属性、索引、条件表达式或未使用输入。`result` 必须在允许误差内与复算结果一致。
 
 Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须在 `research-completeness.md` 单独记录，例如：
