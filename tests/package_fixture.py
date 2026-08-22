@@ -10,6 +10,7 @@ from validate_research_package import write_json
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_IDS = ["SRC-FY", "SRC-Q1"]
+M = 1_000_000
 
 
 def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
@@ -21,14 +22,14 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 
     financials = []
     for offset, year in enumerate(range(2016, 2026)):
-        revenue = 100 + offset * 10
-        gross_profit = 60 + offset * 6
-        operating_profit = 25 + offset * 2
-        net_income = 18 + offset * 2
-        operating_cash_flow = 30 + offset * 2
-        capex = 10 + offset
-        cash = 32 + offset * 2
-        debt = 28 - offset
+        revenue = (100 + offset * 10) * M
+        gross_profit = (60 + offset * 6) * M
+        operating_profit = (25 + offset * 2) * M
+        net_income = (18 + offset * 2) * M
+        operating_cash_flow = (30 + offset * 2) * M
+        capex = (10 + offset) * M
+        cash = (32 + offset * 2) * M
+        debt = (28 - offset) * M
         financials.append(
             {
                 "period": f"FY{year}",
@@ -48,12 +49,13 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "net_margin": net_income / revenue,
                 "roic": 0.14 + offset * 0.005,
                 "roe": 0.18 + offset * 0.004,
-                "diluted_shares": 109 - offset,
+                "diluted_shares": (109 - offset) * M,
                 "is_estimate": False,
                 "source_ids": ["SRC-FY"],
             }
         )
-    for period, period_type, revenue in (("2026Q1", "Q1", 52), ("TTM2026", "TTM", 202)):
+    for period, period_type, revenue_millions in (("2026Q1", "Q1", 52), ("TTM2026", "TTM", 202)):
+        revenue = revenue_millions * M
         financials.append(
             {
                 "period": period,
@@ -65,15 +67,15 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "operating_cash_flow": revenue * 0.28,
                 "capex_total": revenue * 0.08,
                 "free_cash_flow": revenue * 0.2,
-                "cash": 50,
-                "total_debt": 20,
-                "net_debt": -30,
+                "cash": 50 * M,
+                "total_debt": 20 * M,
+                "net_debt": -30 * M,
                 "gross_margin": 0.6,
                 "operating_margin": 0.24,
                 "net_margin": 0.18,
                 "roic": 0.19,
                 "roe": 0.22,
-                "diluted_shares": 100,
+                "diluted_shares": 100 * M,
                 "is_estimate": False,
                 "source_ids": ["SRC-Q1"],
             }
@@ -87,15 +89,15 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "exchange": "NYSE",
             "fiscal_year_end": "12-31",
             "report_currency": "USD",
-            "financial_unit": "million",
-            "share_unit": "million_shares",
+            "financial_unit": "unit",
+            "share_unit": "share",
             "ratio_convention": "decimal",
             "valuation_date": "2026-04-15",
             "data_as_of": "2026-03-31",
             "accounting_standard": "US GAAP",
             "display_language": "zh-CN",
             "source_version": "2026Q1",
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "theme": "light",
             "sankey_style": "app-economy-inspired-light",
         },
@@ -151,13 +153,13 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "fiscal_year": "FY2025",
             "basis": "income_statement",
             "nodes": [
-                {"id": "revenue", "label": "营业收入", "value": 190},
-                {"id": "costs", "label": "经营成本与费用", "value": 154},
-                {"id": "profit", "label": "净利润", "value": 36},
+                {"id": "revenue", "label": "营业收入", "value": 190 * M},
+                {"id": "costs", "label": "经营成本与费用", "value": 154 * M},
+                {"id": "profit", "label": "净利润", "value": 36 * M},
             ],
             "links": [
-                {"source": "revenue", "target": "costs", "value": 154},
-                {"source": "revenue", "target": "profit", "value": 36},
+                {"source": "revenue", "target": "costs", "value": 154 * M},
+                {"source": "revenue", "target": "profit", "value": 36 * M},
             ],
             "reconciled": True,
             "source_ids": ["SRC-FY"],
@@ -166,8 +168,8 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             {
                 "period": "FY2025",
                 "name": "Network Services",
-                "revenue": 190,
-                "operating_profit": 43,
+                "revenue": 190 * M,
+                "operating_profit": 43 * M,
                 "revenue_share": 1.0,
                 "growth_rate": 0.08,
                 "notes": "核心网络与会员服务合并披露。",
@@ -178,7 +180,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             {
                 "period": "FY2025",
                 "category": "buyback",
-                "amount": 18,
+                "amount": 18 * M,
                 "commentary": "在低于内部价值区间时回购并保持净现金。",
                 "source_ids": ["SRC-FY"],
             }
@@ -186,15 +188,15 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         "buyback_ledger": [
             {
                 "period": "FY2025",
-                "amount": 18,
-                "shares_repurchased": 2,
+                "amount": 18 * M,
+                "shares_repurchased": 2 * M,
                 "average_price": 9,
                 "shares_outstanding_change": -0.02,
                 "source_ids": ["SRC-FY"],
             }
         ],
         "debt_maturities": [
-            {"year": 2028, "amount": 8, "instrument": "senior notes", "interest_rate": 0.035, "source_ids": ["SRC-FY"]}
+            {"year": 2028, "amount": 8 * M, "instrument": "senior notes", "interest_rate": 0.035, "source_ids": ["SRC-FY"]}
         ],
         "moat": [
             {
@@ -252,9 +254,9 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         },
         "valuation": {
             "market_price": 10,
-            "diluted_shares": 100,
-            "market_cap": 1000,
-            "enterprise_value": 970,
+            "diluted_shares": 100 * M,
+            "market_cap": 1000 * M,
+            "enterprise_value": 970 * M,
             "multiples": {"pe": 25, "fcf_yield": 0.04},
             "dcf_scenarios": [
                 {"name": "悲观", "revenue_growth": 0.03, "margin": 0.18, "discount_rate": 0.11, "terminal_growth": 0.02, "fair_value_per_share": 7},
@@ -359,12 +361,13 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
     write_json(
         package / "calculation-ledger.json",
         {
+            "numeric_convention": "base_units",
             "calculations": [
-                {"id": "CALC-FCF", "metric": "free_cash_flow", "period": "FY2025", "formula": "operating_cash_flow - capex_total", "inputs": {"operating_cash_flow": 48, "capex_total": 19}, "result": 29, "unit": "USD million", "source_ids": ["SRC-FY"]},
-                {"id": "CALC-ND", "metric": "net_debt", "period": "FY2025", "formula": "total_debt - cash", "inputs": {"total_debt": 19, "cash": 50}, "result": -31, "unit": "USD million", "source_ids": ["SRC-FY"]},
-                {"id": "CALC-MC", "metric": "market_cap", "period": "2026-04-15", "formula": "market_price * diluted_shares", "inputs": {"market_price": 10, "diluted_shares": 100}, "result": 1000, "unit": "USD million", "source_ids": ["SRC-Q1"]},
-                {"id": "CALC-EV", "metric": "enterprise_value", "period": "2026-04-15", "formula": "market_cap + net_debt", "inputs": {"market_cap": 1000, "net_debt": -30}, "result": 970, "unit": "USD million", "source_ids": ["SRC-Q1"]},
-                {"id": "CALC-DCF-START", "metric": "custom", "valuation_role": "starting_cash_flow", "cash_flow_basis": "fcff", "period": "FY2025", "formula": "operating_cash_flow - capex_total", "inputs": {"operating_cash_flow": 48, "capex_total": 19}, "result": 29, "unit": "USD million", "diluted_shares": 100, "per_share": 0.29, "forecast_years": 10, "review_method": "逐项核对经营现金流、总资本开支与稀释后股数，并独立复算总额及每股金额。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-FCF", "metric": "free_cash_flow", "period": "FY2025", "formula": "operating_cash_flow - capex_total", "inputs": {"operating_cash_flow": 48 * M, "capex_total": 19 * M}, "result": 29 * M, "source_ids": ["SRC-FY"]},
+                {"id": "CALC-ND", "metric": "net_debt", "period": "FY2025", "formula": "total_debt - cash", "inputs": {"total_debt": 19 * M, "cash": 50 * M}, "result": -31 * M, "source_ids": ["SRC-FY"]},
+                {"id": "CALC-MC", "metric": "market_cap", "period": "2026-04-15", "formula": "market_price * diluted_shares", "inputs": {"market_price": 10, "diluted_shares": 100 * M}, "result": 1000 * M, "source_ids": ["SRC-Q1"]},
+                {"id": "CALC-EV", "metric": "enterprise_value", "period": "2026-04-15", "formula": "market_cap + net_debt", "inputs": {"market_cap": 1000 * M, "net_debt": -30 * M}, "result": 970 * M, "source_ids": ["SRC-Q1"]},
+                {"id": "CALC-DCF-START", "metric": "custom", "valuation_role": "starting_cash_flow", "cash_flow_basis": "fcff", "period": "FY2025", "formula": "operating_cash_flow - capex_total", "inputs": {"operating_cash_flow": 48 * M, "capex_total": 19 * M}, "result": 29 * M, "diluted_shares": 100 * M, "per_share": 0.29, "forecast_years": 10, "review_method": "逐项核对经营现金流、总资本开支与稀释后股数，并独立复算总额及每股金额。", "source_ids": ["SRC-FY"]},
             ]
         },
     )
@@ -409,20 +412,20 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 
 | 现金流口径 | 基准期间 | 初期现金流总额 | 稀释后股数 | 初期每股现金流 | 显性期 |
 |---|---|---|---|---|---|
-| FCFF | FY2025 | 29 | 100 | 0.29 | 10 |
+| FCFF | FY2025 | 0.29亿美元 | 1亿股 | 0.29美元/股 | 10年 |
 
 | 情景 | 初期现金流增长 | 折现率 | 永续增长 | 终值占比 | 每股价值 |
 |---|---|---|---|---|---|
-| 悲观 | 3% | 11% | 2% | 60% | 7 |
-| 基准 | 7% | 9% | 2.5% | 65% | 10 |
-| 乐观 | 10% | 8% | 3% | 70% | 14 |
+| 悲观 | 3% | 11% | 2% | 60% | 7美元/股 |
+| 基准 | 7% | 9% | 2.5% | 65% | 10美元/股 |
+| 乐观 | 10% | 8% | 3% | 70% | 14美元/股 |
 
 | 折现率 | 永续增长 | 每股价值 |
 |---|---|---|
-| 8% | 2% | 12 |
-| 8% | 3% | 14 |
-| 10% | 2% | 8 |
-| 10% | 3% | 9 |
+| 8% | 2% | 12美元/股 |
+| 8% | 3% | 14美元/股 |
+| 10% | 2% | 8美元/股 |
+| 10% | 3% | 9美元/股 |
 
 | Reverse DCF 假设 | 隐含值 | 历史比较 | 推翻阈值 |
 |---|---|---|---|

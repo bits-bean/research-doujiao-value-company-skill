@@ -56,7 +56,7 @@
 ## 6. 增量更新流程
 触发后：
 1. 读取当前研究 Skill 信任锁绑定的 `references/specs/company.schema.json` 只读副本；若 `doujiao-value-system` 权威 Schema 已变化，先更新并发布新版 Skill，不在本次更新中静默切换；
-2. 读取现有 `companies/<company-slug>/company.json`；
+2. 读取现有 `companies/<company-slug>/company.json`；若它属于旧 Schema 并使用千、百万或十亿缩放值，不得原地覆盖或直接与当前数值混算，应按旧 manifest 锁定的 Schema 解释后，在新的版本目录中机械换算为实际原始数值并重新校验、冻结；
 3. 获取新财报、业绩公告、投资者演示与业绩会；
 4. 建立“旧数据 vs 新数据”差异；
 5. 更新最新季度/半年度/年度数据；
@@ -136,7 +136,7 @@ API 返回失败时：
 
 不得因同一财报的多份官方材料重复新增同一期间。
 
-`schema_version` 由当前 Skill 信任锁绑定的 Schema 决定；研究协议版本与 Schema 版本分开管理。权威 Schema 更新后，必须先发布新版研究 Skill 才能用于新的正式冻结。
+`schema_version` 由当前 Skill 信任锁绑定的 Schema 决定；研究协议版本与 Schema 版本分开管理。权威 Schema 更新后，必须先发布新版研究 Skill 才能用于新的正式冻结。历史冻结包保持不可变，并继续由其 manifest 锁定的旧 Schema 解释；升级研究只能创建新版本，不能静默改写历史数字。
 
 ## 12. 人工审核
 在系统早期阶段，默认采用：

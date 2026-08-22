@@ -96,6 +96,41 @@ class SemanticGateTests(unittest.TestCase):
             {item.code for item in findings},
         )
 
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "初期现金流总额为186800000000，稀释后股数为9153000000，初期每股现金流为20.41。",
+            findings,
+        )
+        self.assertIn("report-display-unit-missing", {item.code for item in findings})
+
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "初期现金流总额为1,868亿元，稀释后股数为91.53亿股，初期每股现金流为20.41元/股。",
+            findings,
+        )
+        self.assertNotIn("report-display-unit-missing", {item.code for item in findings})
+
+    def test_chinese_report_tables_require_reader_facing_units(self) -> None:
+        bad = """这是一份面向中国投资者的正式研究报告。""" * 12 + """
+| 年份 | 营收 | 净利润 | 稀释后股数 | 净利率 |
+|---|---:|---:|---:|---:|
+| 2025 | 660000000000 | 194000000000 | 9153000000 | 0.29 |
+"""
+        findings: list[Finding] = []
+        validate_chinese_display_units(bad, findings)
+        self.assertIn("report-display-unit-missing", {item.code for item in findings})
+
+        good = """这是一份面向中国投资者的正式研究报告。""" * 12 + """
+| 年份 | 营收（亿元） | 净利润（亿元） | 稀释后股数（亿股） | 净利率 |
+|---|---:|---:|---:|---:|
+| 2025 | 6,600 | 1,940 | 91.53 | 29% |
+"""
+        findings = []
+        validate_chinese_display_units(good, findings)
+        self.assertNotIn("report-display-unit-missing", {item.code for item in findings})
+
     def test_cash_flow_first_valuation_gates_reject_missing_or_eps_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))
@@ -118,7 +153,7 @@ class SemanticGateTests(unittest.TestCase):
 
         input_table = """| 现金流口径 | 基准期间 | 初期现金流总额 | 稀释后股数 | 初期每股现金流 | 显性期 |
 |---|---|---|---|---|---|
-| FCFF | FY2025 | 29 | 100 | 0.29 | 10 |
+| FCFF | FY2025 | 0.29亿美元 | 1亿股 | 0.29美元/股 | 10年 |
 
 """
         no_inputs = report.replace(input_table, "", 1)
@@ -197,23 +232,47 @@ class SemanticGateTests(unittest.TestCase):
                 evaluate_custom_formula(formula, inputs)
 
         ledger = {
+            "numeric_convention": "base_units",
             "calculations": [{
                 "id": "CALC-ROIC-2025",
                 "metric": "custom",
                 "period": "FY2025",
                 "formula": "NOPAT / average_invested_capital",
-                "inputs": {"NOPAT": 120, "average_invested_capital": 800},
+                "inputs": {"NOPAT": 120_000_000, "average_invested_capital": 800_000_000},
                 "result": 0.25,
-                "unit": "decimal ratio",
                 "tolerance": 1,
                 "review_method": "逐项核对税后经营利润与期初期末投入资本平均值并独立复算",
                 "source_ids": ["SRC-001"],
             }]
         }
         findings: list[Finding] = []
-        validate_calculations(ledger, {"meta": {}, "financials": [], "valuation": {}}, {"SRC-001"}, "audit", findings)
+        validate_calculations(ledger, {"meta": {"financial_unit": "unit", "share_unit": "share"}, "financials": [], "valuation": {}}, {"SRC-001"}, "audit", findings)
         codes = {item.code for item in findings}
         self.assertTrue({"calculation-tolerance", "custom-calculation-mismatch"}.issubset(codes))
+
+    def test_calculation_ledger_requires_unscaled_base_values_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            ledger = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+        known = {item["id"] for item in company["sources"]}
+
+        missing_convention = copy.deepcopy(ledger)
+        missing_convention.pop("numeric_convention")
+        findings: list[Finding] = []
+        validate_calculations(missing_convention, company, known, "full", findings)
+        self.assertIn("calculation-numeric-convention", {item.code for item in findings})
+
+        scaled_unit_field = copy.deepcopy(ledger)
+        scaled_unit_field["calculations"][0]["unit"] = "USD million"
+        findings = []
+        validate_calculations(scaled_unit_field, company, known, "full", findings)
+        self.assertIn("calculation-unit-field", {item.code for item in findings})
+
+        scaled_meta = copy.deepcopy(company)
+        scaled_meta["meta"]["financial_unit"] = "million"
+        findings = []
+        validate_calculations(ledger, scaled_meta, known, "full", findings)
+        self.assertIn("company-base-unit-convention", {item.code for item in findings})
 
     def test_evidence_rejects_numeric_template_farming(self) -> None:
         claims = []
@@ -236,14 +295,14 @@ class SemanticGateTests(unittest.TestCase):
 
     def test_reverse_dcf_needs_operating_mix_comparison_and_sensitivity(self) -> None:
         company = {
-            "meta": {"report_currency": "USD", "financial_unit": "million", "share_unit": "million_shares"},
+            "meta": {"report_currency": "USD", "financial_unit": "unit", "share_unit": "share"},
             "verdict": {"research_status": "观察名单", "valuation_status": "接近合理"},
             "financials": [],
             "valuation": {
                 "market_price": 10,
-                "diluted_shares": 100,
-                "market_cap": 1000,
-                "enterprise_value": 1000,
+                "diluted_shares": 100_000_000,
+                "market_cap": 1_000_000_000,
+                "enterprise_value": 1_000_000_000,
                 "dcf_scenarios": [],
                 "dcf_sensitivity": [],
                 "reverse_dcf": {"revenue_growth": 0.1, "revenue_cagr": 0.1},

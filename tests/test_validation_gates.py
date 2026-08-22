@@ -81,8 +81,8 @@ class ValidationGateTests(unittest.TestCase):
                 "ticker": "VOID",
                 "exchange": "NYSE",
                 "report_currency": "USD",
-                "financial_unit": "million",
-                "share_unit": "million_shares",
+                "financial_unit": "unit",
+                "share_unit": "share",
                 "ratio_convention": "decimal",
                 "data_as_of": "2026-06-30",
                 "valuation_date": "2026-08-19",
@@ -137,7 +137,7 @@ class ValidationGateTests(unittest.TestCase):
         )
         write_json(
             root / "calculation-ledger.json",
-            {"calculations": [{"id": "CALC-001", "metric": "custom", "formula": "x", "unit": "USD", "source_ids": []}]},
+            {"numeric_convention": "base_units", "calculations": [{"id": "CALC-001", "metric": "custom", "formula": "x", "source_ids": []}]},
         )
         (root / "research-report.md").write_text(
             "# 空壳公司 VOID\n一页式结论 数据截至日 商业模式 十年财务 自由现金流 ROIC 护城河 长期生存 Stop Doing 资本配置 回购明细 治理 债务 Reverse DCF Pre-Mortem 待调查 领先指标 最终结论",

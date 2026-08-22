@@ -173,25 +173,15 @@
         },
         "financial_unit": {
           "type": "string",
-          "enum": [
-            "unit",
-            "thousand",
-            "million",
-            "billion"
-          ],
-          "default": "million",
-          "description": "除每股价格外，company.json 内货币金额统一采用的计量单位。推荐 million。"
+          "const": "unit",
+          "default": "unit",
+          "description": "除每股价格外，company.json 内货币金额必须写成报告币种的实际原始数值，不得按千、百万或十亿缩放。例如人民币100万元写为1000000。"
         },
         "share_unit": {
           "type": "string",
-          "enum": [
-            "share",
-            "thousand_shares",
-            "million_shares",
-            "billion_shares"
-          ],
-          "default": "million_shares",
-          "description": "股数类字段统一采用的计量单位。推荐 million_shares。"
+          "const": "share",
+          "default": "share",
+          "description": "股数类字段必须写成实际股数，不得按千股、百万股或十亿股缩放。例如100万股写为1000000。"
         },
         "ratio_convention": {
           "type": "string",
@@ -222,8 +212,8 @@
         },
         "schema_version": {
           "type": "string",
-          "const": "1.1.0",
-          "default": "1.1.0",
+          "const": "1.2.0",
+          "default": "1.2.0",
           "description": "company.json 数据协议版本。"
         },
         "theme": {
@@ -1009,15 +999,15 @@
         },
         "diluted_shares": {
           "$ref": "#/$defs/nullableNumber",
-          "description": "稀释后股数，单位遵循 meta.share_unit。"
+          "description": "稀释后实际股数；不得使用千股、百万股或十亿股缩放值。"
         },
         "market_cap": {
           "$ref": "#/$defs/nullableNumber",
-          "description": "市值，单位遵循 meta.financial_unit。"
+          "description": "以 report_currency 表示的实际市值；不得使用千、百万或十亿缩放值。"
         },
         "enterprise_value": {
           "$ref": "#/$defs/nullableNumber",
-          "description": "企业价值，单位遵循 meta.financial_unit。"
+          "description": "以 report_currency 表示的实际企业价值；不得使用千、百万或十亿缩放值。"
         },
         "multiples": {
           "type": "object",

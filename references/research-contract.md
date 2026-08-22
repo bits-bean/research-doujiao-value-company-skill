@@ -4,6 +4,7 @@
 
 - [版本化目录](#版本化目录)
 - [必需文件](#必需文件)
+- [中文展示单位契约](#中文展示单位契约)
 - [冻结语义](#冻结语义)
 - [下游交接](#下游交接)
 - [GitHub 归档](#github-归档)
@@ -85,23 +86,23 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 ```json
 {
+  "numeric_convention": "base_units",
   "calculations": [
     {
       "id": "CALC-001",
       "metric": "free_cash_flow",
       "period": "FY2025",
       "formula": "operating_cash_flow - capex_total",
-      "inputs": {"operating_cash_flow": 100, "capex_total": 25},
-      "result": 75,
-      "unit": "million USD",
-      "tolerance": 0.01,
+      "inputs": {"operating_cash_flow": 100000000, "capex_total": 25000000},
+      "result": 75000000,
+      "tolerance": 100,
       "source_ids": ["SRC-001"]
     }
   ]
 }
 ```
 
-标准 `metric` 优先使用 `free_cash_flow / net_debt / market_cap / enterprise_value / custom`。每项计算都必须有期间、非空输入、有限数值结果、单位和来源；标准计算结果必须回写并匹配同期间的 `company.json` 字段。`custom` 还必须提供 `review_method`，说明公式、口径与独立复核方法，例如：
+根级 `numeric_convention` 必须且只能是 `base_units`。金额写报告币种的实际数值，股数写实际股数，比例写十进制小数；例如100万美元写 `1000000`，100万股写 `1000000`，25%写 `0.25`。不得用千、百万、十亿缩放数字，也不得在单条计算中添加 `unit` 字段。标准 `metric` 优先使用 `free_cash_flow / net_debt / market_cap / enterprise_value / custom`。每项计算都必须有期间、非空输入、有限数值结果和来源；标准计算结果必须回写并匹配同期间的 `company.json` 字段。`custom` 还必须提供 `review_method`，说明公式、口径与独立复核方法，例如：
 
 ```json
 {
@@ -109,9 +110,8 @@ research/<company-slug>/<YYYY-MM-DD>/
   "metric": "custom",
   "period": "FY2025",
   "formula": "NOPAT / average_invested_capital",
-  "inputs": {"NOPAT": 120, "average_invested_capital": 800},
+  "inputs": {"NOPAT": 120000000, "average_invested_capital": 800000000},
   "result": 0.15,
-  "unit": "decimal ratio",
   "review_method": "与年报税前利润、有效税率及期初期末投入资本逐项复核",
   "source_ids": ["SRC-001"]
 }
@@ -128,12 +128,11 @@ research/<company-slug>/<YYYY-MM-DD>/
   "period": "FY2025",
   "formula": "normalized_common_net_income - required_retained_common_equity",
   "inputs": {
-    "normalized_common_net_income": 10833,
-    "required_retained_common_equity": 2166.6
+    "normalized_common_net_income": 10833000000,
+    "required_retained_common_equity": 2166600000
   },
-  "result": 8666.4,
-  "unit": "USD million",
-  "diluted_shares": 679,
+  "result": 8666400000,
+  "diluted_shares": 679000000,
   "per_share": 12.7635,
   "forecast_years": 10,
   "review_method": "用普通股利润、目标监管资本与风险资产增长需求独立复核，并核对总额除以稀释后股数",
@@ -141,7 +140,7 @@ research/<company-slug>/<YYYY-MM-DD>/
 }
 ```
 
-`cash_flow_basis` 只使用 `fcff / fcfe / owner_earnings / distributable_common_cash`。`result` 是与公司财务单位一致的总额，`diluted_shares` 与公司股份单位一致，`per_share` 必须与两者按 `company.meta` 单位换算后相符；`forecast_years` 是正整数。不得使用 EPS、PE 或退出倍数充当起始现金流。
+`cash_flow_basis` 只使用 `fcff / fcfe / owner_earnings / distributable_common_cash`。`result` 是报告币种的实际总额，`diluted_shares` 是实际股数，`per_share = result / diluted_shares`；`forecast_years` 是正整数。不得使用 EPS、PE 或退出倍数充当起始现金流。
 
 `formula` 必须是可机械复算的受限算术表达式，可写为纯表达式或 `result = expression`。变量名必须与 `inputs` 完全一致；只允许有限数值、括号和 `+ - * / % **`，不允许函数、属性、索引、条件表达式或未使用输入。`result` 必须在允许误差内与复算结果一致。
 
@@ -156,6 +155,31 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 ### schema-gap-report.md
 
 只有 Schema 无法表达重要信息、字段语义不清、重复或与方法论冲突时生成。说明现状、影响、建议和兼容方案；不得擅自修改 Schema。
+
+## 中文展示单位契约
+
+展示层与储存层严格分开：
+
+- **面向人的展示层**：`research-report.md`、`research-completeness.md`、`schema-gap-report.md`、研究摘要、最终回复及由本 Skill 直接生成的表格 / 图表，全部使用中国投资者自然阅读的单位。
+- **机器储存层**：新研究的 `company.json` 与 `calculation-ledger.json` 只存实际原始数值；金额为 `report_currency` 的实际数值，股数为实际股数，比例为 decimal。不得使用 thousand / million / billion 缩放值，也不得把展示层“亿、万股、%”写回机器数据。
+
+展示层按下表转换，保留原报告币种，不自动换算人民币：
+
+| 数值类型 | 中文展示 | 示例 |
+|---|---|---|
+| 公司级金额 | 优先亿元；数万亿元量级可用万亿元；小额才用元 / 万元 | `186800000000` → `1,868亿元` |
+| 股数 | 总股本 / 稀释后股数优先亿股，较小变动可用万股 | `9153000000` → `91.53亿股` |
+| 股价与每股值 | 人民币用元/股；外币用港元/股、美元/股等 | `20.41` → `20.41元/股` |
+| 比例 | decimal 转为百分比；变化量区分百分点和基点 | `0.25` → `25%`；`0.005` 的利润率变化 → `0.5个百分点` |
+| 倍数 | 使用“倍” | `12.5x` → `12.5倍` |
+| 人数、客户、卡量、交易笔数 | 按规模使用万 / 亿，并写清对象 | `120000000` → `1.2亿用户` |
+| 行业实物指标 | 保留可比口径，单位改为中文常用写法 | `mbpd` → `百万桶/日`，首次出现解释 |
+
+同一表格 / 图表使用同一币种、同一缩放单位和一致精度，单位放在标题、表头或图例；叙述中的独立数字必须自身带单位。数字通常保留不超过两位小数并使用千分位，来源要求更多精度时可保留，但不得制造虚假精确。外币换算人民币只有在分析确有需要时进行，并注明汇率、日期与来源。
+
+以下情况一律视为展示错误：把 `million / billion / 百万元 / 百万股` 直接写进中文成品；把底层 `186800000000`、`9153000000` 等裸数字放入金额或股数字段；表格既无统一单位也不给单元格标单位；把 `0.25` 原样展示而不是写成 `25%`；把百分比变化误写成百分点。DCF 输入表必须同时显示已换算的初期现金总额、稀释后股数、每股现金流和预测年限，并由验证器反向换算到台账值复核。
+
+历史冻结包保持不可变。旧包若由其 manifest 锁定的旧 Schema 声明 `million`、`million_shares` 等缩放单位，审计时必须按旧锁解释；创建新版研究时再把金额和股数机械换算为实际原始数值，重新验证并冻结，禁止原地修改或把旧值直接当作新口径。
 
 ## 冻结语义
 

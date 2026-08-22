@@ -743,6 +743,14 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
     if not isinstance(calculations, dict) or not isinstance(calculations.get("calculations"), list):
         add(findings, "error", "calculation-ledger-shape", "calculation-ledger.json", "expected an object with calculations[]")
         return
+    if calculations.get("numeric_convention") != "base_units":
+        add(
+            findings,
+            "error",
+            "calculation-numeric-convention",
+            "calculation-ledger.json.numeric_convention",
+            "must equal 'base_units'; monetary amounts and share counts must be actual unscaled values",
+        )
     items = calculations["calculations"]
     required_count = 2 if is_unable(company) else 4
     if mode == "full" and len(items) < required_count:
@@ -750,11 +758,19 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
     seen: set[str] = set()
     financials = {item.get("period"): item for item in company.get("financials", []) if isinstance(item, dict)}
     valuation = company.get("valuation") if isinstance(company.get("valuation"), dict) else {}
-    financial_scale, share_scale = unit_scale(company)
+    meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
+    if meta.get("financial_unit") != "unit" or meta.get("share_unit") != "share":
+        add(
+            findings,
+            "error",
+            "company-base-unit-convention",
+            "company.json.meta",
+            "financial_unit must be 'unit' and share_unit must be 'share' for current research packages",
+        )
     formulas = {
         "free_cash_flow": (("operating_cash_flow", "capex_total"), lambda x: x["operating_cash_flow"] - x["capex_total"]),
         "net_debt": (("total_debt", "cash"), lambda x: x["total_debt"] - x["cash"]),
-        "market_cap": (("market_price", "diluted_shares"), lambda x: x["market_price"] * x["diluted_shares"] * share_scale / financial_scale),
+        "market_cap": (("market_price", "diluted_shares"), lambda x: x["market_price"] * x["diluted_shares"]),
         "enterprise_value": (("market_cap", "net_debt"), lambda x: x["market_cap"] + x["net_debt"]),
     }
     mapped = {"free_cash_flow": "free_cash_flow", "net_debt": "net_debt", "market_cap": "market_cap", "enterprise_value": "enterprise_value"}
@@ -771,9 +787,17 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
             add(findings, "error", "duplicate-calculation-id", path, f"duplicate id {item_id!r}")
         else:
             seen.add(item_id)
-        for field, minimum in (("period", 4), ("formula", 5), ("unit", 3)):
+        for field, minimum in (("period", 4), ("formula", 5)):
             if not substantive_text(item.get(field), minimum):
                 add(findings, "error", "calculation-documentation", f"{path}.{field}", f"{field} is too short to be auditable")
+        if "unit" in item:
+            add(
+                findings,
+                "error",
+                "calculation-unit-field",
+                f"{path}.unit",
+                "per-calculation unit fields are forbidden; use base numeric values and root numeric_convention='base_units'",
+            )
         inputs, result = item.get("inputs"), item.get("result")
         if not isinstance(inputs, dict) or not inputs or any(value is None or (isinstance(value, str) and not value.strip()) for value in inputs.values()):
             add(findings, "error", "calculation-input", path, "inputs must be a nonempty object without blank values")
@@ -855,7 +879,7 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
             if not numeric(shares) or float(shares) <= 0 or not numeric(per_share) or not isinstance(years, int) or isinstance(years, bool) or years <= 0:
                 add(findings, "error", "valuation-starting-cash-flow-fields", path, "requires positive diluted_shares, finite per_share and positive integer forecast_years")
             elif numeric(result):
-                expected_per_share = float(result) * financial_scale / (float(shares) * share_scale)
+                expected_per_share = float(result) / float(shares)
                 if not close_enough(float(per_share), expected_per_share, max(0.0001, abs(expected_per_share) * 0.001)):
                     add(findings, "error", "valuation-starting-cash-flow-per-share", path, f"per_share {per_share} does not reconcile to total cash flow and diluted shares ({expected_per_share})")
 
@@ -1353,7 +1377,13 @@ def canonical_confidence(value: Any) -> str | None:
 
 def parse_report_number(value: Any) -> float | None:
     cleaned = clean_markdown_text(value).replace(",", "")
-    match = re.fullmatch(r"\s*[$¥€£]?\s*(-?\d+(?:\.\d+)?)\s*(%)?\s*(?:USD|CNY|RMB|美元|元)?\s*", cleaned, re.I)
+    match = re.fullmatch(
+        r"\s*[$¥€£]?\s*(-?\d+(?:\.\d+)?)\s*(%)?\s*"
+        r"(?:USD|CNY|RMB|HKD|EUR|GBP|JPY|人民币元|美元|港元|欧元|英镑|日元|元)?"
+        r"(?:\s*/\s*股)?\s*",
+        cleaned,
+        re.I,
+    )
     if not match:
         return None
     number = float(match.group(1))
@@ -1923,10 +1953,124 @@ def report_number_matches(actual: float | None, expected: Any) -> bool:
     return abs(actual - expected_number) <= max(0.0005, abs(expected_number) * 0.02)
 
 
-def validate_chinese_display_units(report: str, findings: list[Finding]) -> None:
-    """Keep storage units out of a Chinese reader-facing report."""
+DISPLAY_MONEY_UNIT_RE = re.compile(
+    r"(?:万亿元|亿元|万元|万亿(?:美元|港元|欧元|英镑|日元)|亿(?:美元|港元|欧元|英镑|日元)|"
+    r"万(?:美元|港元|欧元|英镑|日元)|人民币元|美元|港元|欧元|英镑|日元|元)"
+)
+DISPLAY_SHARE_UNIT_RE = re.compile(r"(?:亿股|万股|股)")
+DISPLAY_PER_SHARE_UNIT_RE = re.compile(r"(?:人民币元|美元|港元|欧元|英镑|日元|元)\s*/\s*股")
+DISPLAY_PERCENT_UNIT_RE = re.compile(r"(?:%|个百分点|个?基点)")
+
+DISPLAY_COLUMN_PATTERNS = (
+    (
+        "per_share",
+        re.compile(r"(?:每股|股价|回购均价|市场价格|今日价值|公允价值)(?!.*(?:增长|涨跌))", re.I),
+    ),
+    (
+        "shares",
+        re.compile(r"(?:稀释后股数|总股本|股份数|股数|回购股数|发行股数)", re.I),
+    ),
+    (
+        "percent",
+        re.compile(
+            r"(?:增长率|增速|利润率|毛利率|净利率|回报率|收益率|折现率|终值增长|永续增长|"
+            r"初期现金流增长|起始现金流增长|终值占比|占比|比例|税率|ROIC|ROE|ROTCE|CET1|FCF\s*Yield)",
+            re.I,
+        ),
+    ),
+    ("duration", re.compile(r"(?:显性期|预测期|持有期|年限|期限)", re.I)),
+    (
+        "money",
+        re.compile(
+            r"(?:营收|总收入|收入金额|成本|费用|利润|现金流|FCFF|FCFE|Owner Earnings|"
+            r"现金|债务|市值|企业价值|资本开支|回购金额|分红|初期.*总额|起始.*总额|"
+            r"金额|价值总额|净资产|普通股权益)",
+            re.I,
+        ),
+    ),
+)
+
+
+def display_column_kind(header: str) -> str | None:
+    cleaned = clean_markdown_text(header)
+    if re.search(r"(?:口径|期间|日期|来源|说明|比较|阈值)", cleaned, re.I):
+        return None
+    for kind, pattern in DISPLAY_COLUMN_PATTERNS:
+        if pattern.search(cleaned):
+            return kind
+    return None
+
+
+def display_unit_present(value: str, kind: str, *, header: bool = False) -> bool:
+    cleaned = clean_markdown_text(value)
+    if kind == "money":
+        unit_pattern = DISPLAY_MONEY_UNIT_RE
+    elif kind == "shares":
+        unit_pattern = DISPLAY_SHARE_UNIT_RE
+    elif kind == "per_share":
+        unit_pattern = DISPLAY_PER_SHARE_UNIT_RE
+    elif kind == "percent":
+        unit_pattern = DISPLAY_PERCENT_UNIT_RE
+    elif kind == "duration":
+        unit_pattern = re.compile(r"年")
+    else:
+        return False
+    if header:
+        return bool(
+            re.search(rf"[（(][^）)]*{unit_pattern.pattern}[^）)]*[）)]", cleaned, re.I)
+            or re.search(rf"(?:单位\s*[:：]|/)\s*{unit_pattern.pattern}", cleaned, re.I)
+        )
+    return unit_pattern.search(cleaned) is not None
+
+
+def display_unit_token(value: str, kind: str, header: str = "") -> str | None:
+    for source, is_header in ((value, False), (header, True)):
+        if not source or not display_unit_present(source, kind, header=is_header):
+            continue
+        pattern = {
+            "money": DISPLAY_MONEY_UNIT_RE,
+            "shares": DISPLAY_SHARE_UNIT_RE,
+            "per_share": DISPLAY_PER_SHARE_UNIT_RE,
+            "duration": re.compile(r"年"),
+        }.get(kind)
+        if pattern is not None:
+            match = pattern.search(clean_markdown_text(source))
+            if match:
+                return match.group(0)
+    return None
+
+
+def parse_localized_display_number(value: Any, kind: str, header: str = "") -> float | None:
+    """Parse a Chinese display value into base currency units, shares, per-share value or years."""
+    cleaned = clean_markdown_text(value).replace(",", "").strip()
+    match = re.search(r"[-+]?\d+(?:\.\d+)?", cleaned)
+    if match is None:
+        return None
+    number = float(match.group(0))
+    token = display_unit_token(cleaned, kind, header)
+    if token is None:
+        return None
+    if kind == "money":
+        if "万亿" in token:
+            return number * 1e12
+        if "亿" in token:
+            return number * 1e8
+        if token.startswith("万") or token == "万元":
+            return number * 1e4
+        return number
+    if kind == "shares":
+        if token == "亿股":
+            return number * 1e8
+        if token == "万股":
+            return number * 1e4
+        return number
+    return number
+
+
+def validate_chinese_display_units(report: str, findings: list[Finding], path: str = "research-report.md") -> None:
+    """Keep storage units and unlabeled storage-scale values out of Chinese reader-facing text."""
     cjk_count = len(re.findall(r"[\u3400-\u9fff]", report))
-    if cjk_count < 100:
+    if cjk_count < 10:
         return
     matches = sorted(
         {
@@ -1940,9 +2084,73 @@ def validate_chinese_display_units(report: str, findings: list[Finding]) -> None
             findings,
             "error",
             "report-display-units-not-localized",
-            "research-report.md",
-            "Chinese reports must convert storage-scale units to 元/万/亿/万亿 and 亿股/万股; "
+            path,
+            "Chinese reader-facing text must convert storage-scale units to 元/万/亿/万亿 and 亿股/万股; "
             f"found {matches!r}",
+        )
+
+    table_violations: set[str] = set()
+    for headers, rows in parse_markdown_tables(report):
+        for index, header in enumerate(headers):
+            kind = display_column_kind(header)
+            if kind is None:
+                continue
+            header_has_unit = display_unit_present(header, kind, header=True)
+            for row in rows:
+                if index >= len(row):
+                    continue
+                cell = clean_markdown_text(row[index])
+                if not re.search(r"\d", cell):
+                    continue
+                if header_has_unit or display_unit_present(cell, kind):
+                    continue
+                table_violations.add(f"{clean_markdown_text(header)}={cell}")
+    if table_violations:
+        add(
+            findings,
+            "error",
+            "report-display-unit-missing",
+            path,
+            "Numeric money, share, per-share, percentage and duration columns need a Chinese unit in the header or every numeric cell; "
+            f"found {sorted(table_violations)[:8]!r}",
+        )
+
+    prose = "\n".join(line for line in report.splitlines() if not line.lstrip().startswith("|"))
+    contextual_patterns = (
+        (
+            "money",
+            re.compile(
+                r"(?:初期|起始)?(?:可分配)?(?:现金流)?总额|市值|企业价值|净债务|总债务|"
+                r"现金余额|营业收入|总收入|营收|净利润|自由现金流|资本开支|回购金额",
+                re.I,
+            ),
+        ),
+        ("shares", re.compile(r"稀释后股数|总股本|回购股数|发行股数", re.I)),
+        ("per_share", re.compile(r"初期每股现金流|每股价值|股价|回购均价", re.I)),
+        (
+            "percent",
+            re.compile(r"增长率|利润率|收益率|折现率|终值增长|永续增长|终值占比|ROIC|ROE", re.I),
+        ),
+    )
+    prose_violations: set[str] = set()
+    for kind, label_pattern in contextual_patterns:
+        pattern = re.compile(
+            rf"(?P<label>{label_pattern.pattern})\s*(?:约为|为|[:：])?\s*"
+            r"(?P<number>[-+]?\d[\d,]*(?:\.\d+)?)",
+            re.I,
+        )
+        for match in pattern.finditer(prose):
+            tail = prose[match.start("number"):match.end("number") + 14]
+            if not display_unit_present(tail, kind):
+                prose_violations.add(f"{match.group('label')}={match.group('number')}")
+    if prose_violations:
+        add(
+            findings,
+            "error",
+            "report-display-unit-missing",
+            path,
+            "Standalone financial figures must carry Chinese reader-facing units instead of exposing bare storage values; "
+            f"found {sorted(prose_violations)[:8]!r}",
         )
 
 
@@ -1968,6 +2176,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         "years": ("显性期", "显性预测期", "forecast years"),
     }
     input_valid = False
+    financial_scale, share_scale = unit_scale(company)
     for headers, rows in tables:
         columns = {key: header_column(headers, aliases) for key, aliases in input_headers.items()}
         if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
@@ -1975,10 +2184,14 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         for row in rows:
             basis_text = clean_markdown_text(row[int(columns["basis"])]).lower()
             period_text = clean_markdown_text(row[int(columns["period"])]).lower()
-            total = parse_report_number(row[int(columns["total"])] )
-            shares = parse_report_number(row[int(columns["shares"])] )
-            per_share = parse_report_number(row[int(columns["per_share"])] )
-            years = parse_report_number(row[int(columns["years"])] )
+            total_index = int(columns["total"])
+            shares_index = int(columns["shares"])
+            per_share_index = int(columns["per_share"])
+            years_index = int(columns["years"])
+            total = parse_localized_display_number(row[total_index], "money", headers[total_index])
+            shares = parse_localized_display_number(row[shares_index], "shares", headers[shares_index])
+            per_share = parse_localized_display_number(row[per_share_index], "per_share", headers[per_share_index])
+            years = parse_localized_display_number(row[years_index], "duration", headers[years_index])
             if re.search(r"(?:^|[^a-z])eps(?:$|[^a-z])|earnings\s*per\s*share|每股收益", basis_text, re.I):
                 add(findings, "error", "report-valuation-eps-input", "research-report.md#valuation", "DCF input table cannot use EPS as its cash-flow basis")
                 continue
@@ -1999,8 +2212,10 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
                 }
                 row_valid = row_valid and any(alias in basis_text for alias in basis_aliases.get(str(basis), ()))
                 row_valid = row_valid and normalized_text(start_record.get("period")) in normalized_text(period_text)
-                row_valid = row_valid and report_number_matches(total, start_record.get("result"))
-                row_valid = row_valid and report_number_matches(shares, start_record.get("diluted_shares"))
+                expected_total = float(start_record.get("result")) * financial_scale if numeric(start_record.get("result")) else None
+                expected_shares = float(start_record.get("diluted_shares")) * share_scale if numeric(start_record.get("diluted_shares")) else None
+                row_valid = row_valid and report_number_matches(total, expected_total)
+                row_valid = row_valid and report_number_matches(shares, expected_shares)
                 row_valid = row_valid and report_number_matches(per_share, start_record.get("per_share"))
                 row_valid = row_valid and report_number_matches(years, start_record.get("forecast_years"))
             input_valid = bool(row_valid)
@@ -2696,6 +2911,16 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
     except UnicodeDecodeError:
         add(findings, "error", "text-encoding", str(root), "text files must be UTF-8")
         return findings
+    if mode == "full":
+        validate_chinese_display_units(mask_non_rendered_markdown(completeness), findings, "research-completeness.md")
+        gap_path = root / "schema-gap-report.md"
+        if gap_path.is_file() and not gap_path.is_symlink():
+            try:
+                gap_text = gap_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                add(findings, "error", "text-encoding", "schema-gap-report.md", "text files must be UTF-8")
+            else:
+                validate_chinese_display_units(mask_non_rendered_markdown(gap_text), findings, "schema-gap-report.md")
     validate_completeness(completeness, findings)
     validate_financials(company, completeness, mode, findings)
     validate_sankey(company, findings)
