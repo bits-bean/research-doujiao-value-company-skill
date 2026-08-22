@@ -4,9 +4,9 @@
     "authority": "research-doujiao-value-company",
     "repository": "bits-bean/doujiao-value-research-skill",
     "ref": "main",
-    "commit": "71f281ee7bb0932cd1357a0d62140bb66f2e4680",
-    "protocol_version": "1.1.0",
-    "digest_sha256": "3dc5ec77939ccfde3839c911286b8306c57fd5f1780916c235f0452414246688",
+    "commit": "1508e0ba827f1ee6693bd9b5f8db7dc29bb2dc68",
+    "protocol_version": "1.2.0",
+    "digest_sha256": "e5c21227775d7506db967f2df4f166fe1e2d51ebe5aabcbe8b283f755c0e2046",
     "documents": [
       {
         "path": "references/specs/automation-workflow.md",
@@ -15,13 +15,13 @@
       },
       {
         "path": "references/specs/project-instructions.md",
-        "sha256": "272d1c0a4aa63e07f18fcfce508a99a120bf1796d6592edb9ee5fc2c50299e0b",
-        "size_bytes": 10468
+        "sha256": "2cc7eb489f8e6a2a7f13e5232b276d9eb34d9d0b8ff80ce048cdf320a9747f8a",
+        "size_bytes": 10925
       },
       {
         "path": "references/specs/research-methodology.md",
-        "sha256": "7c8ebda4113e132f5848e4102f63ce4a264f20f67be4e6647a2bbf828f94b110",
-        "size_bytes": 14129
+        "sha256": "1115c57188beb802826336914e548f05312b45a1f7f97c90c0b9c289ae570fbd",
+        "size_bytes": 16541
       }
     ]
   },
