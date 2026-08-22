@@ -39,6 +39,7 @@ from validate_research_package import (  # noqa: E402
     validate_calculations,
     validate_manifest,
     validate_report,
+    validate_chinese_display_units,
     validate_too_hard_acknowledgements,
     validate_valuation,
     validate_verdict_and_risks,
@@ -72,6 +73,29 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_chinese_report_rejects_database_scale_display_units(self) -> None:
+        findings: list[Finding] = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "初期股东可分配现金为8666.4百万美元，稀释后股数为679 million shares。",
+            findings,
+        )
+        self.assertIn(
+            "report-display-units-not-localized",
+            {item.code for item in findings},
+        )
+
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "初期股东可分配现金为86.664亿美元，稀释后股数为6.79亿股。",
+            findings,
+        )
+        self.assertNotIn(
+            "report-display-units-not-localized",
+            {item.code for item in findings},
+        )
+
     def test_cash_flow_first_valuation_gates_reject_missing_or_eps_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))

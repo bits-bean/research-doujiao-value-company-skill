@@ -151,6 +151,26 @@ SOURCE_TYPE_ALIASES = {
     "other": ("other", "其他"),
 }
 
+NONLOCALIZED_CHINESE_UNIT_PATTERNS = (
+    re.compile(
+        r"\b(?:USD|CNY|RMB|HKD|EUR|GBP|JPY|US\$)\s*"
+        r"(?:thousand|million|billion|trillion)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:thousand|million|billion|trillion)\s*"
+        r"(?:USD|CNY|RMB|HKD|EUR|GBP|JPY|US dollars?|shares?)\b",
+        re.I,
+    ),
+    re.compile(r"百万\s*(?:美元|港元|人民币|欧元|英镑|日元|元|股)"),
+    re.compile(
+        r"(?:单位|口径)\s*[:：]?\s*(?:USD|CNY|RMB|HKD|EUR|GBP|JPY|US\$)?\s*"
+        r"(?:thousand|million|billion|trillion)\b",
+        re.I,
+    ),
+    re.compile(r"(?:单位|口径)\s*[:：]?\s*百万(?:美元|港元|人民币|欧元|英镑|日元|元|股)?"),
+)
+
 
 @dataclass
 class Finding:
@@ -1903,6 +1923,29 @@ def report_number_matches(actual: float | None, expected: Any) -> bool:
     return abs(actual - expected_number) <= max(0.0005, abs(expected_number) * 0.02)
 
 
+def validate_chinese_display_units(report: str, findings: list[Finding]) -> None:
+    """Keep storage units out of a Chinese reader-facing report."""
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", report))
+    if cjk_count < 100:
+        return
+    matches = sorted(
+        {
+            match.group(0).strip()
+            for pattern in NONLOCALIZED_CHINESE_UNIT_PATTERNS
+            for match in pattern.finditer(report)
+        }
+    )
+    if matches:
+        add(
+            findings,
+            "error",
+            "report-display-units-not-localized",
+            "research-report.md",
+            "Chinese reports must convert storage-scale units to 元/万/亿/万亿 and 亿股/万股; "
+            f"found {matches!r}",
+        )
+
+
 def validate_valuation_report(company: dict[str, Any], body: str, findings: list[Finding], calculations: Any = None) -> None:
     if is_unable(company) and re.search(r"无法判断|too hard", body, re.I) and gap_explained(body):
         return
@@ -2264,6 +2307,7 @@ def validate_report(company: dict[str, Any], report: str, mode: str, findings: l
     lowered = report.lower()
     blocks = parse_heading_blocks(report)
     if mode == "full":
+        validate_chinese_display_units(report, findings)
         html_tags = sorted(set(raw_html_tags(report)))
         if html_tags:
             add(findings, "error", "report-raw-html", "research-report.md", f"formal Markdown permits only br tags; raw HTML tags found: {html_tags!r}")

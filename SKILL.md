@@ -46,19 +46,13 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 5. 现金流估值
 
-完整读取 [valuation-qa.md](references/valuation-qa.md)。所有 DCF 都必须从可分配现金流开始，而不是从每股收益或退出倍数开始。
-
-- 普通企业：选择 FCFF、FCFE 或 Owner Earnings，并解释现金流与折现率的匹配。
-- 银行、信用卡发行商和其他受资本约束金融公司：显式计算 `普通股净利润 − 维持目标资本与资产增长所需留存 = 可分配普通股现金（FCFE）`；保险使用资本 / 偿付约束后的 FCFE。
-- 报告和计算台账必须列出起始现金流总额及每股值、基准期间、稀释后股数、显性期、初期增长、折现率 / 权益成本、终值增长、终值占比和情景结果。
-- EPS、PE、P/TBV 或退出倍数只能交叉验证；禁止作为 DCF 起始现金流、折现对象或 Reverse DCF 求解目标。
-- Reverse DCF 反推现金流增长与资本保留 / 可分配率等经营组合，并与历史、行业和推翻阈值比较。
+完整读取 [valuation-qa.md](references/valuation-qa.md)，以计算台账中唯一的 `valuation_role: starting_cash_flow` 作为 DCF 与 Reverse DCF 共用起点。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业使用“正常化普通股净利润 − 必要留存资本”的可分配普通股现金。总额先折现、再除以稀释后股数；EPS 与倍数只作交叉验证。报告的输入表、三情景、敏感性和 Reverse DCF 必须与该起点复算一致。
 
 ## 6. 正式研究包
 
 按 [research-contract.md](references/research-contract.md) 建立新版本目录。`research-report.md` 采用方法论第 14 节的固定 16 节，脱离 JSON 和台账仍可独立阅读、理解及核实。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
 
-`company.json` 严格通过锁定 Schema，不新增字段。Schema 暂时无法表达的估值口径保留在报告、计算台账和 `schema-gap-report.md`，不得把旧字段静默改义。
+`company.json` 严格通过锁定 Schema，不新增字段。Schema 暂时无法表达的估值口径保留在报告、计算台账和 `schema-gap-report.md`，不得把旧字段静默改义。中文报告展示金额和股数时使用元、万、亿、万亿等中国投资者常用单位；底层 JSON 与台账仍保持 Schema 规定的单位。
 
 ## 7. 验收与冻结
 
