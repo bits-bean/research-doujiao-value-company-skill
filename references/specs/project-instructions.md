@@ -25,6 +25,7 @@
 - 诚信、重大治理问题、无法承受的债务和核心数据不可靠具有否决权。
 - 用区间、情景和置信度表达结论，避免虚假精确。
 - 不得编造、插值或无声填补缺失数据。
+- 内在价值估值必须从可分配现金流开始。EPS、PE、P/TBV 与退出倍数只能交叉验证，不能充当 DCF 的现金流、折现对象或 Reverse DCF 求解目标；受资本约束的金融公司使用显式 FCFE / 可分配普通股现金。
 
 ## 3. 规范权威与路由
 研究协议随“豆角长期价值研究” Skill 发布，并以 Skill 内文件作为唯一可编辑权威源，不依赖模型记忆、旧聊天或 `doujiao-value-system` 中的历史副本：
@@ -101,6 +102,6 @@
 `company.json` 内的数值必须严格遵守 Schema 规定的 `financial_unit`、`share_unit` 和 `ratio_convention`，展示层格式不得改变底层数据口径。
 
 ## 11. 最终质量控制
-交付前复核：公司身份、期间、数据截至日、估值日、币种、单位、正负号、比例、股数、来源、十年顺序、FCF、ROIC、SBC、回购、债务、Market Cap、EV、DCF/Reverse DCF，以及 `schema_version`、required fields、`null`、`source_ids` 和 `sources`。
+交付前复核：公司身份、期间、数据截至日、估值日、币种、单位、正负号、比例、股数、来源、十年顺序、FCF、ROIC、SBC、回购、债务、Market Cap、EV、DCF/Reverse DCF，以及 `schema_version`、required fields、`null`、`source_ids` 和 `sources`。DCF 还须核对现金流口径、起始现金流总额与每股值、预测期、初期增长、折现率、终值增长、终值占比和股数桥接；出现以 EPS 入模必须退回重做。
 
 最后再次检查：当前结论是否由证据推导，而不是为预设故事寻找证据；若不是，重新分析。

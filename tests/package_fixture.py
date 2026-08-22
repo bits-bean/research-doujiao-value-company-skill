@@ -268,10 +268,10 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 {"discount_rate": 0.1, "terminal_growth": 0.03, "fair_value_per_share": 9},
             ],
             "reverse_dcf": {
-                "implied_revenue_cagr": 0.07,
-                "implied_operating_margin": 0.22,
-                "comparison_to_history": "隐含增长接近历史五年区间，利润率略高于历史中位数但仍低于优秀同业。",
-                "sensitivity_and_threshold": "利润率最敏感；若连续三年低于百分之十八，当前价格将显得高估并推翻基准判断。",
+                "implied_fcff_cagr": 0.07,
+                "implied_reinvestment_rate": 0.22,
+                "comparison_to_history": "隐含可分配现金增长接近历史五年区间，资本再投资率略高于历史中位数。",
+                "sensitivity_and_threshold": "资本再投资最敏感；若现金流增长连续三年低于百分之三，当前价格将显得高估。",
             },
             "fair_value_range": {"low": 7, "base": 10, "high": 14, "currency": "USD"},
             "expected_returns": [
@@ -364,6 +364,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 {"id": "CALC-ND", "metric": "net_debt", "period": "FY2025", "formula": "total_debt - cash", "inputs": {"total_debt": 19, "cash": 50}, "result": -31, "unit": "USD million", "source_ids": ["SRC-FY"]},
                 {"id": "CALC-MC", "metric": "market_cap", "period": "2026-04-15", "formula": "market_price * diluted_shares", "inputs": {"market_price": 10, "diluted_shares": 100}, "result": 1000, "unit": "USD million", "source_ids": ["SRC-Q1"]},
                 {"id": "CALC-EV", "metric": "enterprise_value", "period": "2026-04-15", "formula": "market_cap + net_debt", "inputs": {"market_cap": 1000, "net_debt": -30}, "result": 970, "unit": "USD million", "source_ids": ["SRC-Q1"]},
+                {"id": "CALC-DCF-START", "metric": "custom", "valuation_role": "starting_cash_flow", "cash_flow_basis": "fcff", "period": "FY2025", "formula": "operating_cash_flow - capex_total", "inputs": {"operating_cash_flow": 48, "capex_total": 19}, "result": 29, "unit": "USD million", "diluted_shares": 100, "per_share": 0.29, "forecast_years": 10, "review_method": "逐项核对经营现金流、总资本开支与稀释后股数，并独立复算总额及每股金额。", "source_ids": ["SRC-FY"]},
             ]
         },
     )
@@ -404,13 +405,17 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         ("治理、债务与红旗", "净现金提供缓冲，但监管、数据治理和激励结构仍需季度复核。若管理层改变资本纪律或隐藏关键损失，将构成治理红旗。"),
         (
             "Reverse DCF 与估值",
-            """Reverse DCF 显示现价要求中个位数增长和稳定利润率，与历史大致相符但安全边际有限。DCF 情景与敏感性逐项对应 company.json 的结构化估值输入。
+            """Reverse DCF 显示现价要求中个位数可分配现金增长和稳定再投资率，与历史大致相符但安全边际有限。DCF 情景与敏感性逐项对应 company.json 的结构化估值输入。
 
-| 情景 | 收入增长 | 利润率 | 折现率 | 永续增长 | 每股价值 |
+| 现金流口径 | 基准期间 | 初期现金流总额 | 稀释后股数 | 初期每股现金流 | 显性期 |
 |---|---|---|---|---|---|
-| 悲观 | 3% | 18% | 11% | 2% | 7 |
-| 基准 | 7% | 22% | 9% | 2.5% | 10 |
-| 乐观 | 10% | 25% | 8% | 3% | 14 |
+| FCFF | FY2025 | 29 | 100 | 0.29 | 10 |
+
+| 情景 | 初期现金流增长 | 折现率 | 永续增长 | 终值占比 | 每股价值 |
+|---|---|---|---|---|---|
+| 悲观 | 3% | 11% | 2% | 60% | 7 |
+| 基准 | 7% | 9% | 2.5% | 65% | 10 |
+| 乐观 | 10% | 8% | 3% | 70% | 14 |
 
 | 折现率 | 永续增长 | 每股价值 |
 |---|---|---|
@@ -421,8 +426,8 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 
 | Reverse DCF 假设 | 隐含值 | 历史比较 | 推翻阈值 |
 |---|---|---|---|
-| 收入增长 | 7% | 接近历史五年中位增长区间 | 连续三年低于3%则现价要求过高 |
-| 经营利润率 | 22% | 略高于历史利润率中位数 | 连续三年低于18%则推翻基准判断 |""",
+| FCFF增长 | 7% | 接近历史五年可分配现金增长区间 | 连续三年低于3%则现价要求过高 |
+| 资本再投资率 | 22% | 略高于历史资本再投资中位数 | 连续三年高于35%则推翻基准判断 |""",
         ),
         (
             "Pre-Mortem 事前验尸",

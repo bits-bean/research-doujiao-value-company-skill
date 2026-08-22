@@ -72,6 +72,41 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_cash_flow_first_valuation_gates_reject_missing_or_eps_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+        known = {item["id"] for item in company["sources"]}
+
+        missing = copy.deepcopy(calculations)
+        missing["calculations"] = [item for item in missing["calculations"] if item.get("valuation_role") != "starting_cash_flow"]
+        findings: list[Finding] = []
+        validate_calculations(missing, company, known, "full", findings)
+        self.assertIn("missing-valuation-starting-cash-flow", {item.code for item in findings})
+
+        eps = copy.deepcopy(calculations)
+        start = next(item for item in eps["calculations"] if item.get("valuation_role") == "starting_cash_flow")
+        start["cash_flow_basis"] = "eps"
+        findings = []
+        validate_calculations(eps, company, known, "full", findings)
+        self.assertTrue({"valuation-starting-cash-flow-basis", "valuation-starting-cash-flow-eps"}.issubset({item.code for item in findings}))
+
+        input_table = """| 现金流口径 | 基准期间 | 初期现金流总额 | 稀释后股数 | 初期每股现金流 | 显性期 |
+|---|---|---|---|---|---|
+| FCFF | FY2025 | 29 | 100 | 0.29 | 10 |
+
+"""
+        no_inputs = report.replace(input_table, "", 1)
+        findings = []
+        validate_report(company, no_inputs, "full", findings, calculations)
+        self.assertIn("report-valuation-inputs", {item.code for item in findings})
+
+        eps_report = report.replace("| FCFF | FY2025 |", "| EPS | FY2025 |", 1)
+        findings = []
+        validate_report(company, eps_report, "full", findings, calculations)
+        self.assertIn("report-valuation-eps-input", {item.code for item in findings})
+
     def test_trusted_lock_rejects_zero_protocol_commit(self) -> None:
         original = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
         original["research_protocol"]["commit"] = "0" * 40
