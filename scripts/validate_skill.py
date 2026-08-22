@@ -108,7 +108,7 @@ def main() -> int:
     for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", skill_text):
         if "://" in target or target.startswith("#"):
             continue
-        resolved = (ROOT / target).resolve()
+        resolved = (ROOT / target.split("#", 1)[0]).resolve()
         try:
             resolved.relative_to(ROOT)
         except ValueError:
