@@ -39,6 +39,7 @@ from validate_research_package import (  # noqa: E402
     validate_calculations,
     validate_manifest,
     validate_report,
+    validate_sankey,
     validate_chinese_display_units,
     validate_too_hard_acknowledgements,
     validate_valuation,
@@ -73,6 +74,114 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_sankey_requires_profit_statement_hierarchy_and_reconciliation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, _, company = make_valid_unfrozen_package(Path(temp_dir))
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings)
+        self.assertFalse({item.code for item in findings})
+
+        one_sided = copy.deepcopy(company)
+        sankey = one_sided["income_statement_sankey"]
+        sankey["nodes"] = [node for node in sankey["nodes"] if node["id"] not in {"product_revenue", "subscription_revenue"}]
+        sankey["links"] = [link for link in sankey["links"] if link["target"] != "revenue"]
+        findings = []
+        validate_sankey(one_sided, findings)
+        self.assertIn("sankey-profit-statement-roles", {item.code for item in findings})
+
+        mismatched = copy.deepcopy(company)
+        mismatched["income_statement_sankey"]["nodes"][0]["value"] = 119 * 1_000_000
+        findings = []
+        validate_sankey(mismatched, findings)
+        self.assertIn("sankey-node-value-mismatch", {item.code for item in findings})
+
+        flat = copy.deepcopy(company)
+        sankey = flat["income_statement_sankey"]
+        sankey["nodes"] = [node for node in sankey["nodes"] if node["id"] != "pretax_profit"]
+        sankey["links"] = [
+            link for link in sankey["links"]
+            if link["source"] != "pretax_profit" and link["target"] != "pretax_profit"
+        ]
+        sankey["links"].extend(
+            [
+                {"source": "revenue", "target": "income_tax", "value": 14 * 1_000_000},
+                {"source": "revenue", "target": "profit", "value": 36 * 1_000_000},
+            ]
+        )
+        findings = []
+        validate_sankey(flat, findings)
+        codes = {item.code for item in findings}
+        self.assertIn("sankey-profit-statement-roles", codes)
+        self.assertIn("sankey-profit-statement-hierarchy", codes)
+
+        unbalanced_pretax = copy.deepcopy(company)
+        tax_link = next(
+            link for link in unbalanced_pretax["income_statement_sankey"]["links"]
+            if link["target"] == "income_tax"
+        )
+        tax_link["value"] = 15 * 1_000_000
+        findings = []
+        validate_sankey(unbalanced_pretax, findings)
+        self.assertTrue(
+            {"sankey-node-value-mismatch", "sankey-not-reconciled"}.issubset(
+                {item.code for item in findings}
+            )
+        )
+
+        financial_mismatch = copy.deepcopy(company)
+        latest_fy = next(item for item in financial_mismatch["financials"] if item["period"] == "FY2025")
+        latest_fy["revenue"] = 191 * 1_000_000
+        findings = []
+        validate_sankey(financial_mismatch, findings)
+        self.assertIn("sankey-financial-statement-mismatch", {item.code for item in findings})
+
+    def test_american_express_fy2025_sankey_equations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, _, company = make_valid_unfrozen_package(Path(temp_dir))
+
+        revenue_sources = {
+            "discount_revenue": 37_401_000_000,
+            "net_interest_income": 17_364_000_000,
+            "net_card_fees": 9_993_000_000,
+            "services_and_other": 7_471_000_000,
+        }
+        company["income_statement_sankey"] = {
+            "fiscal_year": "FY2025",
+            "basis": "income_statement",
+            "nodes": [
+                *[
+                    {"id": node_id, "label": node_id, "value": value, "category": "revenue_source"}
+                    for node_id, value in revenue_sources.items()
+                ],
+                {"id": "total_revenue", "label": "总收入", "value": 72_229_000_000, "category": "revenue_total"},
+                {"id": "costs_and_expenses", "label": "成本费用", "value": 58_434_000_000, "category": "expense"},
+                {"id": "pretax_profit", "label": "税前利润", "value": 13_795_000_000, "category": "pretax_profit"},
+                {"id": "income_tax", "label": "所得税", "value": 2_962_000_000, "category": "income_tax"},
+                {"id": "net_income", "label": "净利润", "value": 10_833_000_000, "category": "net_income"},
+            ],
+            "links": [
+                *[
+                    {"source": node_id, "target": "total_revenue", "value": value}
+                    for node_id, value in revenue_sources.items()
+                ],
+                {"source": "total_revenue", "target": "costs_and_expenses", "value": 58_434_000_000},
+                {"source": "total_revenue", "target": "pretax_profit", "value": 13_795_000_000},
+                {"source": "pretax_profit", "target": "income_tax", "value": 2_962_000_000},
+                {"source": "pretax_profit", "target": "net_income", "value": 10_833_000_000},
+            ],
+            "reconciled": True,
+            "source_ids": ["SRC-FY"],
+        }
+        latest_fy = next(item for item in company["financials"] if item["period"] == "FY2025")
+        latest_fy["revenue"] = 72_229_000_000
+        latest_fy["net_income"] = 10_833_000_000
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings)
+        self.assertFalse(findings)
+
+
     def test_chinese_report_rejects_database_scale_display_units(self) -> None:
         findings: list[Finding] = []
         validate_chinese_display_units(

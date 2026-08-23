@@ -45,6 +45,17 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 严格通过锁定 commit 的 `schemas/company.schema.json`。不得加入研究包状态、冻结哈希、制作说明或平台内容；这些属于 sidecar 文件。
 
+`income_statement_sankey` 必须由同一财年的真实利润表恒等式生成，不按版面需要自由连线。用 `category` 固定节点角色：收入分项为 `revenue_source`，总收入为 `revenue_total`，成本费用为 `expense`，税前利润为 `pretax_profit`，所得税为 `income_tax`，净利润为 `net_income`。只允许以下路径：
+
+`revenue_source → revenue_total → expense + pretax_profit → income_tax + net_income`
+
+其中总收入、税前利润、所得税和净利润各一个，收入分项和成本费用可有多个；不得出现 `revenue_total → income_tax` 或 `revenue_total → net_income`。所有金额使用实际原始数值，`reconciled: true` 只在每个节点值均与相连流量一致、每个中间节点流入等于流出且下列恒等式同时成立时使用：
+
+- 收入分项合计 = 总收入；
+- 总收入 = 成本费用合计 + 税前利润；
+- 税前利润 = 所得税 + 净利润；
+- 总收入和净利润分别与 `financials` 中同财年的 `revenue`、`net_income` 一致。
+
 ### research-completeness.md
 
 至少列出：

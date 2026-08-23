@@ -1000,6 +1000,7 @@ def validate_sankey(company: dict[str, Any], findings: list[Finding]) -> None:
         add(findings, "warning" if is_unable(company) else "error", "empty-sankey", "company.json.income_statement_sankey", "formal research requires nonempty Sankey nodes and links, or an acknowledged Too Hard gap")
         return
     ids = [node.get("id") for node in nodes if isinstance(node, dict)]
+    node_by_id = {node.get("id"): node for node in nodes if isinstance(node, dict)}
     if len(ids) != len(set(ids)):
         add(findings, "error", "duplicate-sankey-node", "company.json.income_statement_sankey.nodes", "node IDs must be unique")
     node_ids = set(ids)
@@ -1014,10 +1015,167 @@ def validate_sankey(company: dict[str, Any], findings: list[Finding]) -> None:
         if numeric(value):
             outgoing[source] = outgoing.get(source, 0.0) + float(value)
             incoming[target] = incoming.get(target, 0.0) + float(value)
-    if sankey.get("reconciled") is True:
-        for node_id in node_ids.intersection(incoming).intersection(outgoing):
-            if not close_enough(incoming[node_id], outgoing[node_id]):
-                add(findings, "error", "sankey-not-reconciled", "company.json.income_statement_sankey", f"node {node_id!r} has incoming {incoming[node_id]} and outgoing {outgoing[node_id]}")
+    source_nodes = set(outgoing) - set(incoming)
+    sink_nodes = set(incoming) - set(outgoing)
+    bridge_nodes = set(incoming).intersection(outgoing)
+    if not source_nodes or not sink_nodes or not bridge_nodes:
+        add(
+            findings,
+            "warning" if is_unable(company) and sankey.get("reconciled") is False else "error",
+            "sankey-one-sided",
+            "company.json.income_statement_sankey",
+            "income-statement Sankey must show revenue sources -> total revenue -> expenses + pretax profit -> income tax + net income",
+        )
+
+    role_ids: dict[str, list[Any]] = {
+        "revenue_source": [],
+        "revenue_total": [],
+        "expense": [],
+        "pretax_profit": [],
+        "income_tax": [],
+        "net_income": [],
+    }
+    unknown_roles: list[Any] = []
+    for node_id, node in node_by_id.items():
+        role = node.get("category")
+        if role in role_ids:
+            role_ids[role].append(node_id)
+        else:
+            unknown_roles.append(node_id)
+    exact_roles = ("revenue_total", "pretax_profit", "income_tax", "net_income")
+    roles_valid = (
+        not unknown_roles
+        and bool(role_ids["revenue_source"])
+        and bool(role_ids["expense"])
+        and all(len(role_ids[role]) == 1 for role in exact_roles)
+    )
+    if not roles_valid:
+        add(
+            findings,
+            "error",
+            "sankey-profit-statement-roles",
+            "company.json.income_statement_sankey.nodes",
+            "categories must contain one or more revenue_source and expense nodes, plus exactly one revenue_total, pretax_profit, income_tax, and net_income node",
+        )
+
+    role_by_id = {
+        node_id: role
+        for role, role_node_ids in role_ids.items()
+        for node_id in role_node_ids
+    }
+    allowed_role_edges = {
+        ("revenue_source", "revenue_total"),
+        ("revenue_total", "expense"),
+        ("revenue_total", "pretax_profit"),
+        ("pretax_profit", "income_tax"),
+        ("pretax_profit", "net_income"),
+    }
+    actual_edges: set[tuple[Any, Any]] = set()
+    invalid_edges: list[str] = []
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        source, target = link.get("source"), link.get("target")
+        actual_edges.add((source, target))
+        source_role, target_role = role_by_id.get(source), role_by_id.get(target)
+        if source_role is not None and target_role is not None and (source_role, target_role) not in allowed_role_edges:
+            invalid_edges.append(f"{source}->{target}")
+
+    missing_required_edges: list[str] = []
+    if roles_valid:
+        revenue_total = role_ids["revenue_total"][0]
+        pretax_profit = role_ids["pretax_profit"][0]
+        income_tax = role_ids["income_tax"][0]
+        net_income = role_ids["net_income"][0]
+        required_edges = {
+            *((node_id, revenue_total) for node_id in role_ids["revenue_source"]),
+            *((revenue_total, node_id) for node_id in role_ids["expense"]),
+            (revenue_total, pretax_profit),
+            (pretax_profit, income_tax),
+            (pretax_profit, net_income),
+        }
+        missing_required_edges = [f"{source}->{target}" for source, target in required_edges - actual_edges]
+    if invalid_edges or missing_required_edges:
+        detail = []
+        if invalid_edges:
+            detail.append(f"invalid edges: {sorted(invalid_edges)!r}")
+        if missing_required_edges:
+            detail.append(f"missing edges: {sorted(missing_required_edges)!r}")
+        add(
+            findings,
+            "error",
+            "sankey-profit-statement-hierarchy",
+            "company.json.income_statement_sankey.links",
+            "only revenue sources -> total revenue -> expenses + pretax profit -> income tax + net income is allowed; " + "; ".join(detail),
+        )
+
+    if sankey.get("reconciled") is not True:
+        add(
+            findings,
+            "warning" if is_unable(company) else "error",
+            "sankey-not-marked-reconciled",
+            "company.json.income_statement_sankey.reconciled",
+            "a formal income-statement Sankey must be marked reconciled only after every node and intermediate subtotal balances",
+        )
+        return
+
+    for node_id in node_ids.intersection(set(incoming).union(outgoing)):
+        node_value = node_by_id.get(node_id, {}).get("value")
+        for direction, flow_value in (("incoming", incoming.get(node_id)), ("outgoing", outgoing.get(node_id))):
+            if numeric(node_value) and numeric(flow_value) and not close_enough(float(node_value), float(flow_value)):
+                add(
+                    findings,
+                    "error",
+                    "sankey-node-value-mismatch",
+                    "company.json.income_statement_sankey",
+                    f"node {node_id!r} value {node_value} does not match {direction} flow {flow_value}",
+                )
+    for node_id in bridge_nodes:
+        if not close_enough(incoming[node_id], outgoing[node_id]):
+            add(findings, "error", "sankey-not-reconciled", "company.json.income_statement_sankey", f"node {node_id!r} has incoming {incoming[node_id]} and outgoing {outgoing[node_id]}")
+    source_total = sum(outgoing[node_id] for node_id in source_nodes)
+    sink_total = sum(incoming[node_id] for node_id in sink_nodes)
+    if not close_enough(source_total, sink_total):
+        add(
+            findings,
+            "error",
+            "sankey-total-mismatch",
+            "company.json.income_statement_sankey",
+            f"revenue sources total {source_total} does not equal final uses total {sink_total}",
+        )
+
+    if roles_valid:
+        revenue_total = role_ids["revenue_total"][0]
+        net_income = role_ids["net_income"][0]
+        fiscal_year = sankey.get("fiscal_year")
+        matching_financials = [
+            item for item in list_or_empty(company.get("financials"))
+            if isinstance(item, dict) and item.get("period") == fiscal_year
+        ]
+        if len(matching_financials) != 1:
+            add(
+                findings,
+                "error",
+                "sankey-financial-period",
+                "company.json.income_statement_sankey.fiscal_year",
+                "Sankey fiscal_year must match exactly one company.financials period",
+            )
+        else:
+            financial = matching_financials[0]
+            comparisons = (
+                ("revenue", revenue_total, financial.get("revenue")),
+                ("net_income", net_income, financial.get("net_income")),
+            )
+            for metric, node_id, financial_value in comparisons:
+                node_value = node_by_id[node_id].get("value")
+                if numeric(node_value) and numeric(financial_value) and not close_enough(float(node_value), float(financial_value)):
+                    add(
+                        findings,
+                        "error",
+                        "sankey-financial-statement-mismatch",
+                        "company.json.income_statement_sankey",
+                        f"{metric} node {node_value} does not match company.financials {financial_value} for {fiscal_year}",
+                    )
 
 
 def validate_research_modules(company: dict[str, Any], findings: list[Finding]) -> None:
