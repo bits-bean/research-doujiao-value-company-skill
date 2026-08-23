@@ -42,6 +42,7 @@ REQUIRED = (
     "references/source-routing.md",
     "references/research-contract.md",
     "references/evidence-and-calculation.md",
+    "references/income-statement-sankey.md",
     "references/valuation-qa.md",
     "references/qa-gates.md",
     "references/github-archive.md",

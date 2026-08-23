@@ -78,6 +78,7 @@ TOO_HARD_WARNING_CODES = {
     "missing-latest-period",
     "missing-ttm",
     "empty-sankey",
+    "sankey-one-sided",
     "moat-coverage",
     "unscored-moat",
     "management-score-coverage",
@@ -115,6 +116,45 @@ REPORT_EVIDENCE_SECTIONS = {
     "business-model", "ten-year-financials", "cash-flow", "roic", "moat", "durability",
     "culture-management", "buyback-ledger", "governance-debt", "valuation", "pre-mortem", "monitoring",
 }
+REPORT_INTERNAL_IMPLEMENTATION_TOKENS = (
+    "company.json",
+    "calculation-ledger.json",
+    "evidence-ledger.json",
+    "research-manifest.json",
+    "validation-report.json",
+    "schema-gap-report.md",
+    "research-completeness.md",
+    "schema字段",
+    "schema 字段",
+    "validate_research_package.py",
+    "验证器兼容",
+    "校验器兼容",
+)
+REPORT_GLOSSARY_TERMS = (
+    "Thesis breakers",
+    "Reverse DCF",
+    "Owner Earnings",
+    "Pre-Mortem",
+    "P/TBV",
+    "ROTCE",
+    "CET1",
+    "FCFF",
+    "FCFE",
+    "ROIC",
+    "AFFO",
+    "REIT",
+    "NOPAT",
+    "WACC",
+    "SBC",
+    "FCF",
+    "EPS",
+    "ROE",
+    "RWA",
+    "NAV",
+    "PE",
+    "EV",
+    "DCF",
+)
 MOAT_CORE_DIMENSIONS = (
     ("pricing-power", ("定价权", "pricing power")),
     ("hard-to-replicate", ("难复制", "不可复制", "hard to replicate", "hard to copy")),
@@ -739,6 +779,158 @@ def unit_scale(company: dict[str, Any]) -> tuple[float, float]:
     return financial.get(meta.get("financial_unit"), 1.0), shares.get(meta.get("share_unit"), 1.0)
 
 
+def validate_dcf_calculation_chain(
+    calculations: dict[str, Any],
+    company: dict[str, Any],
+    start_record: dict[str, Any],
+    findings: list[Finding],
+) -> None:
+    """Require three independently reproducible annual DCF paths and value bridges."""
+    years = start_record.get("forecast_years")
+    if not isinstance(years, int) or isinstance(years, bool) or years <= 0:
+        return
+    valuation = company.get("valuation") if isinstance(company.get("valuation"), dict) else {}
+    scenarios = {
+        scenario_kind(item.get("name")): item
+        for item in list_or_empty(valuation.get("dcf_scenarios"))
+        if isinstance(item, dict) and scenario_kind(item.get("name")) is not None
+    }
+    items = [item for item in calculations.get("calculations", []) if isinstance(item, dict)]
+    annual: dict[tuple[str, int], dict[str, Any]] = {}
+    terminal: dict[str, dict[str, Any]] = {}
+    equity: dict[str, dict[str, Any]] = {}
+    annual_invalid = False
+    terminal_invalid = False
+    equity_invalid = False
+
+    for item in items:
+        role = item.get("valuation_role")
+        if role not in {"annual_discounted_cash_flow", "terminal_present_value", "equity_value_bridge"}:
+            continue
+        kind = scenario_kind(item.get("valuation_scenario"))
+        if kind is None:
+            if role == "annual_discounted_cash_flow":
+                annual_invalid = True
+            elif role == "terminal_present_value":
+                terminal_invalid = True
+            else:
+                equity_invalid = True
+            continue
+        if role == "annual_discounted_cash_flow":
+            year = item.get("forecast_year")
+            inputs = item.get("inputs") if isinstance(item.get("inputs"), dict) else {}
+            key = (kind, year) if isinstance(year, int) and not isinstance(year, bool) else None
+            if (
+                key is None
+                or key in annual
+                or not numeric(inputs.get("cash_flow"))
+                or not numeric(inputs.get("discount_factor"))
+                or not numeric(item.get("result"))
+            ):
+                annual_invalid = True
+                continue
+            annual[key] = item
+        elif role == "terminal_present_value":
+            if kind in terminal:
+                terminal_invalid = True
+            terminal[kind] = item
+        else:
+            if kind in equity:
+                equity_invalid = True
+            equity[kind] = item
+
+    expected_years = set(range(1, years + 1))
+    for kind in ("bear", "base", "bull"):
+        scenario = scenarios.get(kind)
+        actual_years = {year for scenario_kind_value, year in annual if scenario_kind_value == kind}
+        if actual_years != expected_years or not isinstance(scenario, dict):
+            annual_invalid = True
+            continue
+        discount_rate = scenario.get("discount_rate")
+        if not numeric(discount_rate):
+            annual_invalid = True
+            continue
+        for year in expected_years:
+            record = annual[(kind, year)]
+            inputs = record["inputs"]
+            expected_factor = (1 + float(discount_rate)) ** (-year)
+            if not close_enough(float(inputs["discount_factor"]), expected_factor, max(1e-6, expected_factor * 0.002)):
+                annual_invalid = True
+
+        terminal_record = terminal.get(kind)
+        if not isinstance(terminal_record, dict):
+            terminal_invalid = True
+        else:
+            inputs = terminal_record.get("inputs") if isinstance(terminal_record.get("inputs"), dict) else {}
+            final_annual = annual[(kind, years)]
+            final_cash_flow = final_annual["inputs"]["cash_flow"]
+            required = ("last_year_cash_flow", "terminal_growth_rate", "discount_rate", "discount_factor")
+            if (
+                any(not numeric(inputs.get(key)) for key in required)
+                or not numeric(terminal_record.get("result"))
+                or not report_number_matches(float(inputs.get("last_year_cash_flow", 0)), final_cash_flow)
+                or not report_number_matches(float(inputs.get("terminal_growth_rate", 0)), scenario.get("terminal_growth"))
+                or not report_number_matches(float(inputs.get("discount_rate", 0)), scenario.get("discount_rate"))
+                or not close_enough(
+                    float(inputs.get("discount_factor", 0)),
+                    float(final_annual["inputs"]["discount_factor"]),
+                    max(1e-6, abs(float(final_annual["inputs"]["discount_factor"])) * 0.002),
+                )
+                or float(inputs.get("terminal_growth_rate", 0)) >= float(inputs.get("discount_rate", 0))
+            ):
+                terminal_invalid = True
+
+        equity_record = equity.get(kind)
+        if not isinstance(equity_record, dict) or not isinstance(terminal_record, dict):
+            equity_invalid = True
+            continue
+        inputs = equity_record.get("inputs") if isinstance(equity_record.get("inputs"), dict) else {}
+        explicit_pv = sum(float(annual[(kind, year)]["result"]) for year in expected_years)
+        terminal_pv = terminal_record.get("result")
+        shares = equity_record.get("diluted_shares")
+        per_share = equity_record.get("per_share")
+        if (
+            not numeric(inputs.get("explicit_period_present_value"))
+            or not numeric(inputs.get("terminal_present_value"))
+            or not numeric(terminal_pv)
+            or not numeric(equity_record.get("result"))
+            or not numeric(shares)
+            or float(shares) <= 0
+            or not numeric(per_share)
+            or not report_number_matches(float(inputs["explicit_period_present_value"]), explicit_pv)
+            or not report_number_matches(float(inputs["terminal_present_value"]), terminal_pv)
+            or not report_number_matches(float(per_share), float(equity_record["result"]) / float(shares))
+            or not report_number_matches(float(shares), start_record.get("diluted_shares"))
+            or not report_number_matches(float(per_share), scenario.get("fair_value_per_share"))
+        ):
+            equity_invalid = True
+
+    if annual_invalid or len(annual) != years * 3:
+        add(
+            findings,
+            "error",
+            "valuation-annual-cash-flow-chain",
+            "calculation-ledger.json.calculations",
+            "bear/base/bull each need one reconciled annual_discounted_cash_flow record for every forecast year",
+        )
+    if terminal_invalid or set(terminal) != {"bear", "base", "bull"}:
+        add(
+            findings,
+            "error",
+            "valuation-terminal-value-chain",
+            "calculation-ledger.json.calculations",
+            "each DCF scenario needs one terminal_present_value record tied to its final-year cash flow, discount rate and terminal growth",
+        )
+    if equity_invalid or set(equity) != {"bear", "base", "bull"}:
+        add(
+            findings,
+            "error",
+            "valuation-equity-value-chain",
+            "calculation-ledger.json.calculations",
+            "each DCF scenario needs one equity_value_bridge reconciling explicit PV, terminal PV, diluted shares and fair value per share",
+        )
+
+
 def validate_calculations(calculations: Any, company: dict[str, Any], known: set[str], mode: str, findings: list[Finding]) -> None:
     if not isinstance(calculations, dict) or not isinstance(calculations.get("calculations"), list):
         add(findings, "error", "calculation-ledger-shape", "calculation-ledger.json", "expected an object with calculations[]")
@@ -882,6 +1074,7 @@ def validate_calculations(calculations: Any, company: dict[str, Any], known: set
                 expected_per_share = float(result) / float(shares)
                 if not close_enough(float(per_share), expected_per_share, max(0.0001, abs(expected_per_share) * 0.001)):
                     add(findings, "error", "valuation-starting-cash-flow-per-share", path, f"per_share {per_share} does not reconcile to total cash flow and diluted shares ({expected_per_share})")
+            validate_dcf_calculation_chain(calculations, company, record, findings)
 
 
 def documented_material_gap(completeness: str) -> bool:
@@ -991,7 +1184,12 @@ def validate_financials(company: dict[str, Any], completeness: str, mode: str, f
                 add(findings, "error", "fcf-mismatch", f"company.json.financials[{index}]", f"FCF {fcf} does not equal OCF - capex ({expected})")
 
 
-def validate_sankey(company: dict[str, Any], findings: list[Finding]) -> None:
+def validate_sankey(
+    company: dict[str, Any],
+    findings: list[Finding],
+    calculations: Any | None = None,
+    known: set[str] | None = None,
+) -> None:
     sankey = company.get("income_statement_sankey")
     if not isinstance(sankey, dict):
         return
@@ -999,130 +1197,115 @@ def validate_sankey(company: dict[str, Any], findings: list[Finding]) -> None:
     if not isinstance(nodes, list) or not nodes or not isinstance(links, list) or not links:
         add(findings, "warning" if is_unable(company) else "error", "empty-sankey", "company.json.income_statement_sankey", "formal research requires nonempty Sankey nodes and links, or an acknowledged Too Hard gap")
         return
-    ids = [node.get("id") for node in nodes if isinstance(node, dict)]
-    node_by_id = {node.get("id"): node for node in nodes if isinstance(node, dict)}
+
+    valid_roles = {
+        "revenue_source",
+        "revenue_total",
+        "cost_expense",
+        "cost_subtotal",
+        "pretax_costs_total",
+        "profit_subtotal",
+        "pretax_profit",
+        "income_tax",
+        "net_income",
+    }
+    node_records = [node for node in nodes if isinstance(node, dict)]
+    ids = [node.get("id") for node in node_records]
+    node_by_id = {node.get("id"): node for node in node_records}
+    if len(node_records) != len(nodes) or any(not nonblank(node_id) for node_id in ids):
+        add(findings, "error", "sankey-node-shape", "company.json.income_statement_sankey.nodes", "every Sankey node must be an object with a nonblank id")
     if len(ids) != len(set(ids)):
         add(findings, "error", "duplicate-sankey-node", "company.json.income_statement_sankey.nodes", "node IDs must be unique")
     node_ids = set(ids)
-    incoming: dict[Any, float] = {}
-    outgoing: dict[Any, float] = {}
-    for index, link in enumerate(links):
-        if not isinstance(link, dict):
-            continue
-        source, target, value = link.get("source"), link.get("target"), link.get("value")
-        if source not in node_ids or target not in node_ids:
-            add(findings, "error", "sankey-node-reference", f"company.json.income_statement_sankey.links[{index}]", "link references an unknown node")
-        if numeric(value):
-            outgoing[source] = outgoing.get(source, 0.0) + float(value)
-            incoming[target] = incoming.get(target, 0.0) + float(value)
-    source_nodes = set(outgoing) - set(incoming)
-    sink_nodes = set(incoming) - set(outgoing)
-    bridge_nodes = set(incoming).intersection(outgoing)
-    if not source_nodes or not sink_nodes or not bridge_nodes:
-        add(
-            findings,
-            "warning" if is_unable(company) and sankey.get("reconciled") is False else "error",
-            "sankey-one-sided",
-            "company.json.income_statement_sankey",
-            "income-statement Sankey must show revenue sources -> total revenue -> expenses + pretax profit -> income tax + net income",
-        )
 
-    role_ids: dict[str, list[Any]] = {
-        "revenue_source": [],
-        "revenue_total": [],
-        "expense": [],
-        "pretax_profit": [],
-        "income_tax": [],
-        "net_income": [],
-    }
-    unknown_roles: list[Any] = []
-    for node_id, node in node_by_id.items():
+    role_ids: dict[str, list[Any]] = {role: [] for role in valid_roles}
+    for index, node in enumerate(node_records):
         role = node.get("category")
-        if role in role_ids:
-            role_ids[role].append(node_id)
+        if role not in valid_roles:
+            add(
+                findings,
+                "error",
+                "sankey-role",
+                f"company.json.income_statement_sankey.nodes[{index}].category",
+                f"unsupported category {role!r}; expected one of {sorted(valid_roles)!r}",
+            )
         else:
-            unknown_roles.append(node_id)
-    exact_roles = ("revenue_total", "pretax_profit", "income_tax", "net_income")
-    roles_valid = (
-        not unknown_roles
-        and bool(role_ids["revenue_source"])
-        and bool(role_ids["expense"])
-        and all(len(role_ids[role]) == 1 for role in exact_roles)
-    )
-    if not roles_valid:
-        add(
-            findings,
-            "error",
-            "sankey-profit-statement-roles",
-            "company.json.income_statement_sankey.nodes",
-            "categories must contain one or more revenue_source and expense nodes, plus exactly one revenue_total, pretax_profit, income_tax, and net_income node",
-        )
+            role_ids[role].append(node.get("id"))
+        if not numeric(node.get("value")) or float(node.get("value", 0)) < 0:
+            add(findings, "error", "sankey-node-value", f"company.json.income_statement_sankey.nodes[{index}].value", "node values must be finite, nonnegative base-unit amounts")
+
+    roles_valid = True
+    for role in ("revenue_total", "pretax_profit", "income_tax", "net_income"):
+        if len(role_ids[role]) != 1:
+            roles_valid = False
+            add(findings, "error", "sankey-role", "company.json.income_statement_sankey.nodes", f"requires exactly one {role} node")
+    for role in ("revenue_source", "cost_expense"):
+        if not role_ids[role]:
+            roles_valid = False
+            add(findings, "error", "sankey-role", "company.json.income_statement_sankey.nodes", f"requires at least one {role} node")
+    if len(role_ids["pretax_costs_total"]) > 1:
+        roles_valid = False
+        add(findings, "error", "sankey-role", "company.json.income_statement_sankey.nodes", "at most one pretax_costs_total node is allowed")
 
     role_by_id = {
         node_id: role
         for role, role_node_ids in role_ids.items()
         for node_id in role_node_ids
     }
-    allowed_role_edges = {
-        ("revenue_source", "revenue_total"),
-        ("revenue_total", "expense"),
-        ("revenue_total", "pretax_profit"),
-        ("pretax_profit", "income_tax"),
-        ("pretax_profit", "net_income"),
-    }
+    incoming: dict[Any, float] = {node_id: 0.0 for node_id in node_ids}
+    outgoing: dict[Any, float] = {node_id: 0.0 for node_id in node_ids}
+    parents: dict[Any, set[Any]] = {node_id: set() for node_id in node_ids}
+    children: dict[Any, set[Any]] = {node_id: set() for node_id in node_ids}
     actual_edges: set[tuple[Any, Any]] = set()
-    invalid_edges: list[str] = []
-    for link in links:
+    for index, link in enumerate(links):
         if not isinstance(link, dict):
+            add(findings, "error", "sankey-link-shape", f"company.json.income_statement_sankey.links[{index}]", "link must be an object")
             continue
-        source, target = link.get("source"), link.get("target")
+        source, target, value = link.get("source"), link.get("target"), link.get("value")
+        if source not in node_ids or target not in node_ids:
+            add(findings, "error", "sankey-node-reference", f"company.json.income_statement_sankey.links[{index}]", "link references an unknown node")
+            continue
+        if source == target or (source, target) in actual_edges:
+            add(findings, "error", "sankey-link-shape", f"company.json.income_statement_sankey.links[{index}]", "self-links and duplicate links are forbidden")
+        if not numeric(value) or float(value) < 0:
+            add(findings, "error", "sankey-link-value", f"company.json.income_statement_sankey.links[{index}].value", "link values must be finite, nonnegative base-unit amounts")
+            continue
         actual_edges.add((source, target))
-        source_role, target_role = role_by_id.get(source), role_by_id.get(target)
-        if source_role is not None and target_role is not None and (source_role, target_role) not in allowed_role_edges:
-            invalid_edges.append(f"{source}->{target}")
+        amount = float(value)
+        outgoing[source] += amount
+        incoming[target] += amount
+        children[source].add(target)
+        parents[target].add(source)
 
-    missing_required_edges: list[str] = []
-    if roles_valid:
-        revenue_total = role_ids["revenue_total"][0]
-        pretax_profit = role_ids["pretax_profit"][0]
-        income_tax = role_ids["income_tax"][0]
-        net_income = role_ids["net_income"][0]
-        required_edges = {
-            *((node_id, revenue_total) for node_id in role_ids["revenue_source"]),
-            *((revenue_total, node_id) for node_id in role_ids["expense"]),
-            (revenue_total, pretax_profit),
-            (pretax_profit, income_tax),
-            (pretax_profit, net_income),
-        }
-        missing_required_edges = [f"{source}->{target}" for source, target in required_edges - actual_edges]
-    if invalid_edges or missing_required_edges:
-        detail = []
-        if invalid_edges:
-            detail.append(f"invalid edges: {sorted(invalid_edges)!r}")
-        if missing_required_edges:
-            detail.append(f"missing edges: {sorted(missing_required_edges)!r}")
-        add(
-            findings,
-            "error",
-            "sankey-profit-statement-hierarchy",
-            "company.json.income_statement_sankey.links",
-            "only revenue sources -> total revenue -> expenses + pretax profit -> income tax + net income is allowed; " + "; ".join(detail),
-        )
+    indegree = {node_id: len(parents[node_id]) for node_id in node_ids}
+    queue = [node_id for node_id, degree in indegree.items() if degree == 0]
+    visited = 0
+    while queue:
+        current = queue.pop()
+        visited += 1
+        for child in children[current]:
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                queue.append(child)
+    if visited != len(node_ids):
+        add(findings, "error", "sankey-cycle", "company.json.income_statement_sankey.links", "income-statement Sankey must be acyclic")
 
     if sankey.get("reconciled") is not True:
         add(
             findings,
             "warning" if is_unable(company) else "error",
-            "sankey-not-marked-reconciled",
+            "sankey-not-reconciled",
             "company.json.income_statement_sankey.reconciled",
             "a formal income-statement Sankey must be marked reconciled only after every node and intermediate subtotal balances",
         )
-        return
 
-    for node_id in node_ids.intersection(set(incoming).union(outgoing)):
+    for node_id in node_ids:
         node_value = node_by_id.get(node_id, {}).get("value")
-        for direction, flow_value in (("incoming", incoming.get(node_id)), ("outgoing", outgoing.get(node_id))):
-            if numeric(node_value) and numeric(flow_value) and not close_enough(float(node_value), float(flow_value)):
+        for direction, flow_value, has_flow in (
+            ("incoming", incoming[node_id], bool(parents[node_id])),
+            ("outgoing", outgoing[node_id], bool(children[node_id])),
+        ):
+            if has_flow and numeric(node_value) and not close_enough(float(node_value), flow_value):
                 add(
                     findings,
                     "error",
@@ -1130,23 +1313,82 @@ def validate_sankey(company: dict[str, Any], findings: list[Finding]) -> None:
                     "company.json.income_statement_sankey",
                     f"node {node_id!r} value {node_value} does not match {direction} flow {flow_value}",
                 )
-    for node_id in bridge_nodes:
-        if not close_enough(incoming[node_id], outgoing[node_id]):
-            add(findings, "error", "sankey-not-reconciled", "company.json.income_statement_sankey", f"node {node_id!r} has incoming {incoming[node_id]} and outgoing {outgoing[node_id]}")
-    source_total = sum(outgoing[node_id] for node_id in source_nodes)
-    sink_total = sum(incoming[node_id] for node_id in sink_nodes)
-    if not close_enough(source_total, sink_total):
-        add(
-            findings,
-            "error",
-            "sankey-total-mismatch",
-            "company.json.income_statement_sankey",
-            f"revenue sources total {source_total} does not equal final uses total {sink_total}",
-        )
 
     if roles_valid:
         revenue_total = role_ids["revenue_total"][0]
+        pretax_profit = role_ids["pretax_profit"][0]
+        income_tax = role_ids["income_tax"][0]
         net_income = role_ids["net_income"][0]
+
+        for node_id in role_ids["revenue_source"]:
+            if parents[node_id] or children[node_id] != {revenue_total}:
+                add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"revenue source {node_id!r} must connect only to total revenue")
+        if parents[revenue_total] != set(role_ids["revenue_source"]):
+            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "total revenue must receive every revenue source and no other node")
+        if len(parents[pretax_profit]) != 1:
+            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "pretax profit must have exactly one parent in the profit bridge")
+        if children[pretax_profit] != {income_tax, net_income} or parents[income_tax] != {pretax_profit} or parents[net_income] != {pretax_profit}:
+            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "pretax profit must split only into income tax and net income")
+        if children[income_tax] or children[net_income]:
+            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "income tax and net income must be terminal nodes")
+
+        cost_roles = {"cost_expense", "cost_subtotal", "pretax_costs_total"}
+        profit_chain: list[Any] = []
+        current = revenue_total
+        seen_profit_nodes = {current}
+        while current != pretax_profit:
+            current_children = children[current]
+            profit_successors = [child for child in current_children if role_by_id.get(child) in {"profit_subtotal", "pretax_profit"}]
+            cost_children = [child for child in current_children if role_by_id.get(child) in cost_roles]
+            other_children = current_children - set(profit_successors) - set(cost_children)
+            if len(profit_successors) != 1 or not cost_children or other_children:
+                add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"{current!r} must split into at least one cost branch and exactly one next profit node")
+                break
+            successor = profit_successors[0]
+            if current == revenue_total and successor == pretax_profit:
+                if len(cost_children) != 1 or role_by_id.get(cost_children[0]) != "pretax_costs_total":
+                    add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", "minimum hierarchy requires total revenue -> calculated pretax cost total + pretax profit")
+            elif any(role_by_id.get(child) == "pretax_costs_total" for child in cost_children):
+                add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", "a profit-subtotal ladder cannot also draw a duplicate pretax cost total branch")
+            if successor in seen_profit_nodes:
+                add(findings, "error", "sankey-cycle", "company.json.income_statement_sankey.links", "profit bridge contains a cycle")
+                break
+            seen_profit_nodes.add(successor)
+            if role_by_id.get(successor) == "profit_subtotal":
+                profit_chain.append(successor)
+            current = successor
+        if set(profit_chain) != set(role_ids["profit_subtotal"]):
+            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "every profit_subtotal must appear exactly once on the total-revenue-to-pretax-profit chain")
+
+        for node_id in role_ids["cost_subtotal"] + role_ids["pretax_costs_total"]:
+            if len(parents[node_id]) != 1 or not children[node_id] or any(role_by_id.get(child) not in {"cost_subtotal", "cost_expense"} for child in children[node_id]):
+                add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", f"cost subtotal {node_id!r} must have one parent and expand only to disclosed cost/expense leaves or lower cost subtotals")
+        for node_id in role_ids["cost_expense"]:
+            if children[node_id] or len(parents[node_id]) != 1:
+                add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", f"cost/expense {node_id!r} must be a terminal item with exactly one parent")
+
+        reachable = {revenue_total}
+        pending = [revenue_total]
+        while pending:
+            current = pending.pop()
+            for child in children[current]:
+                if child not in reachable:
+                    reachable.add(child)
+                    pending.append(child)
+        expected_reachable = node_ids - set(role_ids["revenue_source"])
+        if reachable != expected_reachable:
+            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"all non-revenue-source nodes must be reachable from total revenue; mismatch {sorted(reachable ^ expected_reachable)!r}")
+
+        revenue_value = node_by_id[revenue_total].get("value")
+        pretax_value = node_by_id[pretax_profit].get("value")
+        tax_value = node_by_id[income_tax].get("value")
+        net_value = node_by_id[net_income].get("value")
+        cost_leaf_total = sum(float(node_by_id[node_id].get("value", 0)) for node_id in role_ids["cost_expense"] if numeric(node_by_id[node_id].get("value")))
+        if numeric(revenue_value) and numeric(pretax_value) and not close_enough(float(revenue_value) - cost_leaf_total, float(pretax_value)):
+            add(findings, "error", "sankey-equation-mismatch", "company.json.income_statement_sankey", f"pretax profit {pretax_value} must equal total revenue {revenue_value} minus all disclosed pretax cost/expense leaves {cost_leaf_total}")
+        if numeric(pretax_value) and numeric(tax_value) and numeric(net_value) and not close_enough(float(pretax_value) - float(tax_value), float(net_value)):
+            add(findings, "error", "sankey-equation-mismatch", "company.json.income_statement_sankey", f"net income {net_value} must equal pretax profit {pretax_value} minus income tax {tax_value}")
+
         fiscal_year = sankey.get("fiscal_year")
         matching_financials = [
             item for item in list_or_empty(company.get("financials"))
@@ -1176,6 +1418,90 @@ def validate_sankey(company: dict[str, Any], findings: list[Finding]) -> None:
                         "company.json.income_statement_sankey",
                         f"{metric} node {node_value} does not match company.financials {financial_value} for {fiscal_year}",
                     )
+
+    ledger = calculations.get("income_statement_sankey") if isinstance(calculations, dict) else None
+    calculation_items = calculations.get("calculations") if isinstance(calculations, dict) else None
+    if not isinstance(ledger, dict) or not isinstance(calculation_items, list):
+        add(findings, "error", "sankey-disclosure-ledger", "calculation-ledger.json.income_statement_sankey", "requires a disclosure inventory and calculated-node bindings")
+        return
+    if ledger.get("fiscal_year") != sankey.get("fiscal_year") or not substantive_text(ledger.get("review_method"), 16):
+        add(findings, "error", "sankey-disclosure-ledger", "calculation-ledger.json.income_statement_sankey", "fiscal_year must match and review_method must document line-by-line annual-report review")
+
+    known_sources = known if known is not None else set()
+
+    def resolved_source_ids(value: Any) -> bool:
+        return isinstance(value, list) and bool(value) and (not known_sources or all(source_id in known_sources for source_id in value))
+
+    root_source_ids = sankey.get("source_ids")
+    ledger_source_ids = ledger.get("source_ids")
+    if not resolved_source_ids(root_source_ids) or not resolved_source_ids(ledger_source_ids):
+        add(findings, "error", "sankey-disclosure-ledger", "calculation-ledger.json.income_statement_sankey.source_ids", "Sankey and disclosure ledger require nonempty resolved source_ids")
+
+    disclosed = ledger.get("disclosed_line_items")
+    calculated = ledger.get("calculated_nodes")
+    if not isinstance(disclosed, list) or not disclosed or not isinstance(calculated, list):
+        add(findings, "error", "sankey-disclosure-ledger", "calculation-ledger.json.income_statement_sankey", "disclosed_line_items must be nonempty and calculated_nodes must be an array")
+        return
+
+    disclosed_ids: set[Any] = set()
+    calculated_ids: set[Any] = set()
+    all_item_sources: set[Any] = set(ledger_source_ids) if isinstance(ledger_source_ids, list) else set()
+    for index, item in enumerate(disclosed):
+        path = f"calculation-ledger.json.income_statement_sankey.disclosed_line_items[{index}]"
+        if not isinstance(item, dict):
+            add(findings, "error", "sankey-disclosed-item", path, "disclosed item must be an object")
+            continue
+        node_id = item.get("node_id")
+        source_ids = item.get("source_ids")
+        if node_id in disclosed_ids or node_id not in node_ids:
+            add(findings, "error", "sankey-disclosed-item", path, "node_id must be unique and resolve to a graph node")
+        else:
+            disclosed_ids.add(node_id)
+        if not numeric(item.get("value")) or node_id in node_by_id and numeric(node_by_id[node_id].get("value")) and not close_enough(float(item.get("value", 0)), float(node_by_id[node_id]["value"])):
+            add(findings, "error", "sankey-disclosed-item", path, "disclosed value must match the graph node")
+        if not resolved_source_ids(source_ids) or not substantive_text(item.get("location"), 4):
+            add(findings, "error", "sankey-disclosed-item", path, "each disclosed line item requires resolved source_ids and a precise annual-report location")
+        if isinstance(source_ids, list):
+            all_item_sources.update(source_ids)
+
+    calculations_by_id = {
+        item.get("id"): item
+        for item in calculation_items
+        if isinstance(item, dict) and nonblank(item.get("id"))
+    }
+    for index, item in enumerate(calculated):
+        path = f"calculation-ledger.json.income_statement_sankey.calculated_nodes[{index}]"
+        if not isinstance(item, dict):
+            add(findings, "error", "sankey-calculated-node", path, "calculated-node binding must be an object")
+            continue
+        node_id, calculation_id = item.get("node_id"), item.get("calculation_id")
+        record = calculations_by_id.get(calculation_id)
+        if node_id in calculated_ids or node_id not in node_ids:
+            add(findings, "error", "sankey-calculated-node", path, "node_id must be unique and resolve to a graph node")
+        else:
+            calculated_ids.add(node_id)
+        label = node_by_id.get(node_id, {}).get("label")
+        if not isinstance(label, str) or not re.search(r"计算值|calculated", label, re.I):
+            add(findings, "error", "sankey-calculated-node", path, "calculated aggregate node label must state 计算值/calculated")
+        if (
+            not isinstance(record, dict)
+            or record.get("metric") != "custom"
+            or record.get("sankey_node_id") != node_id
+            or record.get("period") != sankey.get("fiscal_year")
+            or not numeric(record.get("result"))
+            or node_id not in node_by_id
+            or not numeric(node_by_id.get(node_id, {}).get("value"))
+            or not close_enough(float(record.get("result", 0)), float(node_by_id.get(node_id, {}).get("value", 0)))
+            or not resolved_source_ids(record.get("source_ids"))
+        ):
+            add(findings, "error", "sankey-calculated-node", path, "binding must resolve to a same-period custom calculation with matching node, result and sources")
+        if isinstance(record, dict) and isinstance(record.get("source_ids"), list):
+            all_item_sources.update(record["source_ids"])
+
+    if disclosed_ids & calculated_ids or disclosed_ids | calculated_ids != node_ids:
+        add(findings, "error", "sankey-provenance-coverage", "calculation-ledger.json.income_statement_sankey", f"every graph node must appear exactly once as disclosed or calculated; mismatch {sorted((disclosed_ids | calculated_ids) ^ node_ids)!r}")
+    if isinstance(root_source_ids, list) and not all_item_sources.issubset(set(root_source_ids)):
+        add(findings, "error", "sankey-provenance-coverage", "company.json.income_statement_sankey.source_ids", "root source_ids must cover every disclosed and calculated node source")
 
 
 def validate_research_modules(company: dict[str, Any], findings: list[Finding]) -> None:
@@ -2131,8 +2457,9 @@ DISPLAY_COLUMN_PATTERNS = (
     (
         "percent",
         re.compile(
-            r"(?:增长率|增速|利润率|毛利率|净利率|回报率|收益率|折现率|终值增长|永续增长|"
-            r"初期现金流增长|起始现金流增长|终值占比|占比|比例|税率|ROIC|ROE|ROTCE|CET1|FCF\s*Yield)",
+            r"(?:增长率|增速|收入增长|营收增长|现金流增长|利润增长|利润率|毛利率|净利率|回报率|收益率|"
+            r"折现率|终值增长|永续增长|初期现金流增长|起始现金流增长|终值占比|占比|比例|税率|"
+            r"ROIC|ROE|ROTCE|CET1|FCF\s*Yield)",
             re.I,
         ),
     ),
@@ -2141,7 +2468,7 @@ DISPLAY_COLUMN_PATTERNS = (
         "money",
         re.compile(
             r"(?:营收|总收入|收入金额|成本|费用|利润|现金流|FCFF|FCFE|Owner Earnings|"
-            r"现金|债务|市值|企业价值|资本开支|回购金额|分红|初期.*总额|起始.*总额|"
+            r"现金|债务|市值|企业价值|资本开支|回购金额|分红|基准日.*总额|估值基准日.*总额|初期.*总额|起始.*总额|"
             r"金额|价值总额|净资产|普通股权益)",
             re.I,
         ),
@@ -2153,6 +2480,9 @@ def display_column_kind(header: str) -> str | None:
     cleaned = clean_markdown_text(header)
     if re.search(r"(?:口径|期间|日期|来源|说明|比较|阈值)", cleaned, re.I):
         return None
+    for kind in ("per_share", "shares", "percent", "money"):
+        if display_unit_present(cleaned, kind, header=True):
+            return kind
     for kind, pattern in DISPLAY_COLUMN_PATTERNS:
         if pattern.search(cleaned):
             return kind
@@ -2192,9 +2522,9 @@ def display_unit_token(value: str, kind: str, header: str = "") -> str | None:
             "duration": re.compile(r"年"),
         }.get(kind)
         if pattern is not None:
-            match = pattern.search(clean_markdown_text(source))
-            if match:
-                return match.group(0)
+            matches = list(pattern.finditer(clean_markdown_text(source)))
+            if matches:
+                return matches[-1 if is_header else 0].group(0)
     return None
 
 
@@ -2278,13 +2608,13 @@ def validate_chinese_display_units(report: str, findings: list[Finding], path: s
         (
             "money",
             re.compile(
-                r"(?:初期|起始)?(?:可分配)?(?:现金流)?总额|市值|企业价值|净债务|总债务|"
+                r"(?:估值基准日|基准日|初期|起始)?(?:可分配)?(?:现金流)?总额|市值|企业价值|净债务|总债务|"
                 r"现金余额|营业收入|总收入|营收|净利润|自由现金流|资本开支|回购金额",
                 re.I,
             ),
         ),
         ("shares", re.compile(r"稀释后股数|总股本|回购股数|发行股数", re.I)),
-        ("per_share", re.compile(r"初期每股现金流|每股价值|股价|回购均价", re.I)),
+        ("per_share", re.compile(r"基准日每股现金|初期每股现金流|每股价值|股价|回购均价", re.I)),
         (
             "percent",
             re.compile(r"增长率|利润率|收益率|折现率|终值增长|永续增长|终值占比|ROIC|ROE", re.I),
@@ -2312,6 +2642,286 @@ def validate_chinese_display_units(report: str, findings: list[Finding], path: s
         )
 
 
+FORECAST_YEAR_RANGE_RE = re.compile(
+    r"(?:第\s*)?(\d+)\s*(?:[—–-]|至|到)\s*(?:第\s*)?(\d+)\s*年",
+    re.I,
+)
+VAGUE_VALUATION_STAGE_RE = re.compile(
+    r"初期|前期|中期|后期|早期|后续阶段|第一阶段|第二阶段|长期增长",
+    re.I,
+)
+
+
+def forecast_years_from_text(value: str) -> set[int]:
+    years: set[int] = set()
+    for match in FORECAST_YEAR_RANGE_RE.finditer(clean_markdown_text(value)):
+        start, end = int(match.group(1)), int(match.group(2))
+        if 1 <= start <= end <= 100:
+            years.update(range(start, end + 1))
+    return years
+
+
+def parse_forecast_year(value: Any) -> int | None:
+    match = re.search(r"(?:第\s*)?(\d+)\s*年", clean_markdown_text(value), re.I)
+    if match is None:
+        return None
+    year = int(match.group(1))
+    return year if 1 <= year <= 100 else None
+
+
+def validate_report_reader_contract(report: str, findings: list[Finding]) -> None:
+    lowered = report.lower()
+    leaked = sorted({token for token in REPORT_INTERNAL_IMPLEMENTATION_TOKENS if token.lower() in lowered})
+    if leaked:
+        add(
+            findings,
+            "error",
+            "report-internal-implementation-leak",
+            "research-report.md",
+            "investor-facing prose must move Schema/JSON/validator workflow explanations to sidecar files; "
+            f"found {leaked!r}",
+        )
+
+    non_heading_lines = [line for line in report.splitlines() if not re.match(r"^\s*#", line)]
+    missing_annotations: list[str] = []
+    for term in REPORT_GLOSSARY_TERMS:
+        term_expression = rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])"
+        term_pattern = re.compile(term_expression, re.I)
+        first_line = next((line for line in non_heading_lines if term_pattern.search(line)), None)
+        if first_line is None:
+            continue
+        annotation_patterns = (
+            re.compile(rf"[（(]\s*{term_expression}\s*[:：][^）)\n]{{6,}}[）)]", re.I),
+            re.compile(rf"{term_expression}\s*[（(][^）)\n]{{6,}}[）)]", re.I),
+        )
+        if not any(pattern.search(first_line) for pattern in annotation_patterns):
+            missing_annotations.append(term)
+    if missing_annotations:
+        add(
+            findings,
+            "error",
+            "report-term-first-use-annotation",
+            "research-report.md",
+            "professional terms need a same-line Chinese full name and plain-language parenthetical at first prose use; "
+            f"missing {missing_annotations!r}",
+        )
+
+
+def validate_report_valuation_detail(
+    company: dict[str, Any],
+    body: str,
+    tables: list[tuple[list[str], list[list[str]]]],
+    forecast_years: int | None,
+    calculations: Any,
+    findings: list[Finding],
+) -> None:
+    if not isinstance(forecast_years, int) or forecast_years <= 0:
+        return
+    expected_years = set(range(1, forecast_years + 1))
+    expected_keys = {(kind, year) for kind in ("bear", "base", "bull") for year in expected_years}
+    calculation_items = list_or_empty(calculations.get("calculations") if isinstance(calculations, dict) else [])
+    ledger_annual = {
+        (scenario_kind(item.get("valuation_scenario")), item.get("forecast_year")): item
+        for item in calculation_items
+        if isinstance(item, dict)
+        and item.get("valuation_role") == "annual_discounted_cash_flow"
+        and scenario_kind(item.get("valuation_scenario")) is not None
+        and isinstance(item.get("forecast_year"), int)
+        and not isinstance(item.get("forecast_year"), bool)
+    }
+    ledger_terminal = {
+        scenario_kind(item.get("valuation_scenario")): item
+        for item in calculation_items
+        if isinstance(item, dict)
+        and item.get("valuation_role") == "terminal_present_value"
+        and scenario_kind(item.get("valuation_scenario")) is not None
+    }
+    ledger_equity = {
+        scenario_kind(item.get("valuation_scenario")): item
+        for item in calculation_items
+        if isinstance(item, dict)
+        and item.get("valuation_role") == "equity_value_bridge"
+        and scenario_kind(item.get("valuation_scenario")) is not None
+    }
+
+    annual_headers = {
+        "scenario": ("情景", "场景", "scenario"),
+        "year": ("预测年度", "预测年份", "forecast year"),
+        "cash_flow": ("可分配现金流", "可分配现金", "cash flow"),
+        "discount_factor": ("折现因子", "discount factor"),
+        "present_value": ("现金流现值", "当年现值", "present value"),
+    }
+    annual_rows: dict[tuple[str, int], tuple[float, float, float]] = {}
+    annual_invalid = False
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in annual_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        for row in rows:
+            kind = scenario_kind(row[int(columns["scenario"])])
+            year = parse_forecast_year(row[int(columns["year"])])
+            cash_index = int(columns["cash_flow"])
+            pv_index = int(columns["present_value"])
+            cash_flow = parse_localized_display_number(row[cash_index], "money", headers[cash_index])
+            discount_factor = parse_report_number(row[int(columns["discount_factor"])])
+            present_value = parse_localized_display_number(row[pv_index], "money", headers[pv_index])
+            key = (kind, year) if kind is not None and year is not None else None
+            if key is None or key in annual_rows or any(value is None for value in (cash_flow, discount_factor, present_value)):
+                annual_invalid = True
+                continue
+            annual_rows[key] = (float(cash_flow), float(discount_factor), float(present_value))
+            if not report_number_matches(float(present_value), float(cash_flow) * float(discount_factor)):
+                annual_invalid = True
+            expected = ledger_annual.get(key)
+            if isinstance(expected, dict):
+                inputs = expected.get("inputs") if isinstance(expected.get("inputs"), dict) else {}
+                if (
+                    not report_number_matches(float(cash_flow), inputs.get("cash_flow"))
+                    or not report_number_matches(float(discount_factor), inputs.get("discount_factor"))
+                    or not report_number_matches(float(present_value), expected.get("result"))
+                ):
+                    annual_invalid = True
+        break
+    if annual_invalid or set(annual_rows) != expected_keys or (ledger_annual and set(ledger_annual) != expected_keys):
+        add(
+            findings,
+            "error",
+            "report-valuation-yearly-path",
+            "research-report.md#valuation",
+            "valuation section needs bear/base/bull rows for every forecast year with reconciled cash flow, discount factor and present value",
+        )
+
+    terminal_headers = {
+        "scenario": ("情景", "场景", "scenario"),
+        "last_cash": ("最后一年现金流", "末年现金流", "final year cash flow"),
+        "terminal_growth": ("永续增长", "终值增长", "terminal growth"),
+        "discount": ("折现率", "discount rate"),
+        "terminal_value": ("预测期末终值", "末年终值", "terminal value at"),
+        "discount_factor": ("末年折现因子", "terminal discount factor"),
+        "terminal_pv": ("终值现值", "terminal present value"),
+    }
+    terminal_rows: dict[str, tuple[float, float, float, float, float, float]] = {}
+    terminal_invalid = False
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in terminal_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        for row in rows:
+            kind = scenario_kind(row[int(columns["scenario"])])
+            money_values: dict[str, float | None] = {}
+            for key in ("last_cash", "terminal_value", "terminal_pv"):
+                index = int(columns[key])
+                money_values[key] = parse_localized_display_number(row[index], "money", headers[index])
+            terminal_growth = parse_report_number(row[int(columns["terminal_growth"])])
+            discount = parse_report_number(row[int(columns["discount"])])
+            discount_factor = parse_report_number(row[int(columns["discount_factor"])])
+            values = (
+                money_values["last_cash"], terminal_growth, discount,
+                money_values["terminal_value"], discount_factor, money_values["terminal_pv"],
+            )
+            if kind is None or kind in terminal_rows or any(value is None for value in values):
+                terminal_invalid = True
+                continue
+            numeric_values = tuple(float(value) for value in values)
+            terminal_rows[kind] = numeric_values
+            last_cash, growth, rate, terminal_value, factor, terminal_pv = numeric_values
+            if rate <= growth or not report_number_matches(terminal_value, last_cash * (1 + growth) / (rate - growth)) or not report_number_matches(terminal_pv, terminal_value * factor):
+                terminal_invalid = True
+            expected = ledger_terminal.get(kind)
+            if isinstance(expected, dict):
+                inputs = expected.get("inputs") if isinstance(expected.get("inputs"), dict) else {}
+                if (
+                    not report_number_matches(last_cash, inputs.get("last_year_cash_flow"))
+                    or not report_number_matches(growth, inputs.get("terminal_growth_rate"))
+                    or not report_number_matches(rate, inputs.get("discount_rate"))
+                    or not report_number_matches(factor, inputs.get("discount_factor"))
+                    or not report_number_matches(terminal_pv, expected.get("result"))
+                ):
+                    terminal_invalid = True
+        break
+    if terminal_invalid or set(terminal_rows) != {"bear", "base", "bull"} or (ledger_terminal and set(ledger_terminal) != {"bear", "base", "bull"}):
+        add(
+            findings,
+            "error",
+            "report-valuation-terminal-bridge",
+            "research-report.md#valuation",
+            "valuation section needs a three-scenario terminal bridge from final-year cash flow through terminal value to discounted terminal present value",
+        )
+
+    value_headers = {
+        "scenario": ("情景", "场景", "scenario"),
+        "explicit_pv": ("显性期现金流现值", "显性期现值", "explicit period present value"),
+        "terminal_pv": ("终值现值", "terminal present value"),
+        "equity_value": ("股权价值", "equity value"),
+        "shares": ("稀释后股数", "diluted shares"),
+        "per_share": ("每股价值", "fair value per share"),
+    }
+    value_rows: dict[str, tuple[float, float, float, float, float, float]] = {}
+    value_invalid = False
+    expected_scenarios = {
+        scenario_kind(item.get("name")): item
+        for item in list_or_empty((company.get("valuation") or {}).get("dcf_scenarios") if isinstance(company.get("valuation"), dict) else [])
+        if isinstance(item, dict) and scenario_kind(item.get("name")) is not None
+    }
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in value_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        net_debt_column = header_column(headers, ("净债务调整", "净债务", "net debt"))
+        for row in rows:
+            kind = scenario_kind(row[int(columns["scenario"])])
+            parsed: dict[str, float | None] = {}
+            for key in ("explicit_pv", "terminal_pv", "equity_value"):
+                index = int(columns[key])
+                parsed[key] = parse_localized_display_number(row[index], "money", headers[index])
+            shares_index = int(columns["shares"])
+            per_share_index = int(columns["per_share"])
+            shares = parse_localized_display_number(row[shares_index], "shares", headers[shares_index])
+            per_share = parse_localized_display_number(row[per_share_index], "per_share", headers[per_share_index])
+            net_debt = 0.0
+            if net_debt_column is not None:
+                parsed_net_debt = parse_localized_display_number(row[int(net_debt_column)], "money", headers[int(net_debt_column)])
+                if parsed_net_debt is None:
+                    value_invalid = True
+                else:
+                    net_debt = float(parsed_net_debt)
+            values = (parsed["explicit_pv"], parsed["terminal_pv"], net_debt, parsed["equity_value"], shares, per_share)
+            if kind is None or kind in value_rows or any(value is None for value in values):
+                value_invalid = True
+                continue
+            numeric_values = tuple(float(value) for value in values)
+            value_rows[kind] = numeric_values
+            explicit_pv, terminal_pv, net_debt, equity_value, shares, per_share = numeric_values
+            if (
+                shares <= 0
+                or not report_number_matches(equity_value, explicit_pv + terminal_pv - net_debt)
+                or not report_number_matches(per_share, equity_value / shares)
+                or not report_number_matches(per_share, expected_scenarios.get(kind, {}).get("fair_value_per_share"))
+            ):
+                value_invalid = True
+            expected = ledger_equity.get(kind)
+            if isinstance(expected, dict):
+                inputs = expected.get("inputs") if isinstance(expected.get("inputs"), dict) else {}
+                if (
+                    not report_number_matches(explicit_pv, inputs.get("explicit_period_present_value"))
+                    or not report_number_matches(terminal_pv, inputs.get("terminal_present_value"))
+                    or ("net_debt" in inputs and not report_number_matches(net_debt, inputs.get("net_debt")))
+                    or not report_number_matches(equity_value, expected.get("result"))
+                    or not report_number_matches(shares, expected.get("diluted_shares"))
+                    or not report_number_matches(per_share, expected.get("per_share"))
+                ):
+                    value_invalid = True
+        break
+    if value_invalid or set(value_rows) != {"bear", "base", "bull"} or (ledger_equity and set(ledger_equity) != {"bear", "base", "bull"}):
+        add(
+            findings,
+            "error",
+            "report-valuation-value-bridge",
+            "research-report.md#valuation",
+            "valuation section needs a three-scenario bridge from explicit PV and terminal PV through any net-debt adjustment to equity and per-share value",
+        )
+
+
 def validate_valuation_report(company: dict[str, Any], body: str, findings: list[Finding], calculations: Any = None) -> None:
     if is_unable(company) and re.search(r"无法判断|too hard", body, re.I) and gap_explained(body):
         return
@@ -2325,12 +2935,35 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         ),
         None,
     )
+    forecast_years = (
+        start_record.get("forecast_years")
+        if isinstance(start_record, dict)
+        and isinstance(start_record.get("forecast_years"), int)
+        and not isinstance(start_record.get("forecast_years"), bool)
+        else None
+    )
+    vague_stage_lines = sorted(
+        {
+            clean_markdown_text(line)
+            for line in body.splitlines()
+            if VAGUE_VALUATION_STAGE_RE.search(line) and not FORECAST_YEAR_RANGE_RE.search(line)
+        }
+    )
+    if vague_stage_lines:
+        add(
+            findings,
+            "error",
+            "report-valuation-vague-stage",
+            "research-report.md#valuation",
+            "valuation assumptions cannot use vague stage labels without an exact start-to-end forecast-year range; "
+            f"found {vague_stage_lines[:6]!r}",
+        )
     input_headers = {
         "basis": ("现金流口径", "cash flow basis"),
         "period": ("基准期间", "基准期", "base period"),
-        "total": ("初期现金流总额", "起始现金流总额", "starting cash flow"),
+        "total": ("估值基准日现金总额", "基准日现金总额", "初期现金流总额", "起始现金流总额", "starting cash flow"),
         "shares": ("稀释后股数", "diluted shares"),
-        "per_share": ("初期每股现金流", "起始每股现金流", "starting cash flow per share"),
+        "per_share": ("基准日每股现金", "估值基准日每股现金", "初期每股现金流", "起始每股现金流", "starting cash flow per share"),
         "years": ("显性期", "显性预测期", "forecast years"),
     }
     input_valid = False
@@ -2378,6 +3011,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
                 row_valid = row_valid and report_number_matches(years, start_record.get("forecast_years"))
             input_valid = bool(row_valid)
             if input_valid:
+                forecast_years = int(float(years))
                 break
         break
     if not input_valid:
@@ -2385,7 +3019,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
 
     scenario_headers = {
         "scenario": ("情景", "场景", "scenario"),
-        "growth": ("初期现金流增长", "现金流增长", "fcf增长", "fcfe增长", "可分配现金增长", "收入增长", "营收增长", "cash flow growth", "revenue growth"),
+        "growth": ("现金流增长", "fcf增长", "fcfe增长", "可分配现金增长", "收入增长", "营收增长", "cash flow growth", "revenue growth"),
         "discount": ("折现率", "discount rate"),
         "terminal": ("永续增长", "终值增长", "terminal growth"),
         "terminal_share": ("终值占比", "terminal value share"),
@@ -2393,6 +3027,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
     }
     scenario_index: int | None = None
     scenario_valid = False
+    stage_years_valid = False
     expected_scenarios = {
         scenario_kind(item.get("name")): item
         for item in list_or_empty(valuation.get("dcf_scenarios"))
@@ -2405,6 +3040,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         scenario_index = table_index
         kinds: set[str] = set()
         invalid = 0
+        covered_by_scenario: dict[str, set[int]] = {}
         for row in rows:
             kind = scenario_kind(row[int(columns["scenario"])])
             expected = expected_scenarios.get(kind)
@@ -2419,12 +3055,29 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
                 invalid += 1
                 continue
             kinds.add(kind)
+            covered_by_scenario[kind] = forecast_years_from_text(" ".join(headers + row))
             if isinstance(expected, dict) and any(not report_number_matches(actual, expected.get(key)) for key, actual in values.items()):
                 invalid += 1
         scenario_valid = kinds == {"bear", "base", "bull"} and invalid == 0
+        if isinstance(forecast_years, int) and forecast_years > 0:
+            expected_forecast_years = set(range(1, forecast_years + 1))
+            stage_years_valid = (
+                set(covered_by_scenario) == {"bear", "base", "bull"}
+                and all(years == expected_forecast_years for years in covered_by_scenario.values())
+            )
         break
     if scenario_index is None or not scenario_valid or not re.search(r"\bdcf\b|现金流折现", body, re.I):
         add(findings, "error", "report-valuation-scenarios", "research-report.md#valuation", "valuation section needs a three-scenario cash-flow DCF table with growth, discount rate, terminal growth, terminal-value share and values reconciled to company.valuation")
+    if not stage_years_valid:
+        add(
+            findings,
+            "error",
+            "report-valuation-stage-years",
+            "research-report.md#valuation",
+            "each DCF scenario must label assumptions with exact forecast-year ranges covering every year in the explicit forecast",
+        )
+
+    validate_report_valuation_detail(company, body, tables, forecast_years, calculations, findings)
 
     sensitivity_headers = {
         "discount": ("折现率", "discount rate"),
@@ -2681,6 +3334,7 @@ def validate_report(company: dict[str, Any], report: str, mode: str, findings: l
     blocks = parse_heading_blocks(report)
     if mode == "full":
         validate_chinese_display_units(report, findings)
+        validate_report_reader_contract(report, findings)
         html_tags = sorted(set(raw_html_tags(report)))
         if html_tags:
             add(findings, "error", "report-raw-html", "research-report.md", f"formal Markdown permits only br tags; raw HTML tags found: {html_tags!r}")
@@ -3081,7 +3735,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
                 validate_chinese_display_units(mask_non_rendered_markdown(gap_text), findings, "schema-gap-report.md")
     validate_completeness(completeness, findings)
     validate_financials(company, completeness, mode, findings)
-    validate_sankey(company, findings)
+    validate_sankey(company, findings, calculations, known)
     validate_research_modules(company, findings)
     validate_valuation(company, findings)
     validate_verdict_and_risks(company, findings)
@@ -3117,7 +3771,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
 
 def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Finding]) -> dict[str, Any]:
     return {
-        "validator": "research-doujiao-value-company/2.1",
+        "validator": "research-doujiao-value-company/2.2",
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "root": str(root),
         "schema": str(schema_path),
