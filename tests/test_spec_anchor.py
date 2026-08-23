@@ -62,7 +62,7 @@ class SpecAnchorTests(unittest.TestCase):
     def test_data_only_commit_can_advance_main(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo, lock = self.make_repo(Path(temp_dir))
-            self.write(repo / "research/test/2026-01-15/company.json", "{}\n")
+            self.write(repo / "companies/test/company.json", "{}\n")
             self.git(repo, "add", ".")
             self.git(repo, "commit", "-m", "archive research")
             result = verify_spec_anchor(repo, lock)
