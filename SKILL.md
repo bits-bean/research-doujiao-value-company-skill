@@ -46,11 +46,15 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 5. 现金流估值
 
-完整读取 [valuation-qa.md](references/valuation-qa.md)，以计算台账中唯一的 `valuation_role: starting_cash_flow` 作为 DCF 与 Reverse DCF 共用起点。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业使用“正常化普通股净利润 − 必要留存资本”的可分配普通股现金。总额先折现、再除以稀释后股数；EPS 与倍数只作交叉验证。报告的输入表、三情景、敏感性和 Reverse DCF 必须与该起点复算一致。
+完整读取 [valuation-qa.md](references/valuation-qa.md)，以计算台账中唯一的 `valuation_role: starting_cash_flow` 作为 DCF 与 Reverse DCF 共用起点。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业使用“正常化普通股净利润 − 必要留存资本”的可分配普通股现金。总额先折现、再除以稀释后股数；EPS 与倍数只作交叉验证。
+
+估值正文必须让读者沿一条连续算式复核：估值基准日可分配现金 → 每个预测年度的经营驱动与可分配现金 → 折现因子与现金流现值 → 终值及其现值 → 股权价值 → 稀释后每股价值。悲观、基准、乐观三个情景都必须逐年列示，不得只给增长率与最终答案。任何分段假设都写成“第1—5年”“第6—10年”等明确范围；“初期、前期、中期、后期、第一阶段、长期增长”等词若没有紧邻的起止年度，不得作为估值假设名称。计算台账保存同一组逐年记录和价值桥接，报告展示值必须与其复算一致。
 
 ## 6. 正式研究包
 
-按 [research-contract.md](references/research-contract.md) 建立新版本目录。`research-report.md` 采用方法论第 14 节的固定 16 节，脱离 JSON 和台账仍可独立阅读、理解及核实。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+按 [research-contract.md](references/research-contract.md) 建立新版本目录。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+
+正文只保留投资判断所需的事实、假设、计算过程、限制与反证。Schema 字段映射、JSON 文件名、验证器兼容、归档或生成流程等内部实现说明写入 `schema-gap-report.md`、`research-completeness.md`、台账或 manifest，不塞进研究叙事；但字段背后的真实经济假设仍须在正文直接说清。例如正文应写“第1—5年收入与普通股利润都按8%增长”，而不是解释某个 Schema 字段为何暂存同一数值。
 
 `company.json` 严格通过锁定 Schema，不新增字段。Schema 暂时无法表达的估值口径保留在报告、计算台账和 `schema-gap-report.md`，不得把旧字段静默改义。新研究的 `company.json` 与 `calculation-ledger.json` 统一存实际原始数值：人民币100万元写 `1000000`，100万股写 `1000000`，比例仍写 `0.25`；不得使用千、百万或十亿缩放值，计算台账也不得逐条添加 `unit`。所有面向中国读者的文字、表格、图表和最终回复再按 [research-contract.md](references/research-contract.md#中文展示单位契约) 换算：公司级金额优先用亿元，超大规模可用万亿元，股数用万股 / 亿股，每股值用原币种 / 股，比例用百分比。
 
