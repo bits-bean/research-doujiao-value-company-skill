@@ -39,6 +39,7 @@ from validate_research_package import (  # noqa: E402
     validate_calculations,
     validate_manifest,
     validate_report,
+    validate_sankey,
     validate_chinese_display_units,
     validate_too_hard_acknowledgements,
     validate_valuation,
@@ -73,11 +74,33 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_sankey_requires_revenue_sources_bridge_and_uses(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, _, company = make_valid_unfrozen_package(Path(temp_dir))
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings)
+        self.assertFalse({item.code for item in findings})
+
+        one_sided = copy.deepcopy(company)
+        sankey = one_sided["income_statement_sankey"]
+        sankey["nodes"] = [node for node in sankey["nodes"] if node["id"] not in {"product_revenue", "subscription_revenue"}]
+        sankey["links"] = [link for link in sankey["links"] if link["target"] != "revenue"]
+        findings = []
+        validate_sankey(one_sided, findings)
+        self.assertIn("sankey-one-sided", {item.code for item in findings})
+
+        mismatched = copy.deepcopy(company)
+        mismatched["income_statement_sankey"]["nodes"][0]["value"] = 119 * 1_000_000
+        findings = []
+        validate_sankey(mismatched, findings)
+        self.assertIn("sankey-node-value-mismatch", {item.code for item in findings})
+
     def test_chinese_report_rejects_database_scale_display_units(self) -> None:
         findings: list[Finding] = []
         validate_chinese_display_units(
             "这是一份面向中国投资者的正式研究报告。" * 12
-            + "初期股东可分配现金为8666.4百万美元，稀释后股数为679 million shares。",
+            + "估值基准日股东可分配现金为8666.4百万美元，稀释后股数为679 million shares。",
             findings,
         )
         self.assertIn(
@@ -88,7 +111,7 @@ class SemanticGateTests(unittest.TestCase):
         findings = []
         validate_chinese_display_units(
             "这是一份面向中国投资者的正式研究报告。" * 12
-            + "初期股东可分配现金为86.664亿美元，稀释后股数为6.79亿股。",
+            + "估值基准日股东可分配现金为86.664亿美元，稀释后股数为6.79亿股。",
             findings,
         )
         self.assertNotIn(
@@ -99,7 +122,7 @@ class SemanticGateTests(unittest.TestCase):
         findings = []
         validate_chinese_display_units(
             "这是一份面向中国投资者的正式研究报告。" * 12
-            + "初期现金流总额为186800000000，稀释后股数为9153000000，初期每股现金流为20.41。",
+            + "估值基准日现金总额为186800000000，稀释后股数为9153000000，基准日每股现金为20.41。",
             findings,
         )
         self.assertIn("report-display-unit-missing", {item.code for item in findings})
@@ -107,7 +130,7 @@ class SemanticGateTests(unittest.TestCase):
         findings = []
         validate_chinese_display_units(
             "这是一份面向中国投资者的正式研究报告。" * 12
-            + "初期现金流总额为1,868亿元，稀释后股数为91.53亿股，初期每股现金流为20.41元/股。",
+            + "估值基准日现金总额为1,868亿元，稀释后股数为91.53亿股，基准日每股现金为20.41元/股。",
             findings,
         )
         self.assertNotIn("report-display-unit-missing", {item.code for item in findings})
@@ -151,7 +174,7 @@ class SemanticGateTests(unittest.TestCase):
         validate_calculations(eps, company, known, "full", findings)
         self.assertTrue({"valuation-starting-cash-flow-basis", "valuation-starting-cash-flow-eps"}.issubset({item.code for item in findings}))
 
-        input_table = """| 现金流口径 | 基准期间 | 初期现金流总额 | 稀释后股数 | 初期每股现金流 | 显性期 |
+        input_table = """| 现金流口径 | 基准期间 | 估值基准日现金总额 | 稀释后股数 | 基准日每股现金 | 显性预测期 |
 |---|---|---|---|---|---|
 | FCFF | FY2025 | 0.29亿美元 | 1亿股 | 0.29美元/股 | 10年 |
 
@@ -165,6 +188,74 @@ class SemanticGateTests(unittest.TestCase):
         findings = []
         validate_report(company, eps_report, "full", findings, calculations)
         self.assertIn("report-valuation-eps-input", {item.code for item in findings})
+
+    def test_report_separates_internal_notes_and_defines_professional_terms(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        leaked = report.replace(
+            "现价要求中个位数可分配现金增长和稳定再投资率",
+            "Schema 字段为了兼容而填入同一数值；现价要求中个位数可分配现金增长和稳定再投资率",
+            1,
+        )
+        findings: list[Finding] = []
+        validate_report(company, leaked, "full", findings, calculations)
+        self.assertIn("report-internal-implementation-leak", {item.code for item in findings})
+
+        unexplained = re.sub(r"现金流折现（DCF：[^）]+）", "DCF", report, count=1)
+        findings = []
+        validate_report(company, unexplained, "full", findings, calculations)
+        self.assertIn("report-term-first-use-annotation", {item.code for item in findings})
+
+    def test_dcf_report_requires_exact_stage_years_and_complete_bridges(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        def codes(candidate: str) -> set[str]:
+            findings: list[Finding] = []
+            validate_report(company, candidate, "full", findings, calculations)
+            return {item.code for item in findings}
+
+        vague = report.replace("收入增长与FCFF增长（第1—10年）", "初期现金流增长", 1)
+        self.assertTrue(
+            {"report-valuation-vague-stage", "report-valuation-stage-years"}.issubset(codes(vague))
+        )
+        no_yearly_path = report.replace("预测年度（年）", "时间序号", 1)
+        self.assertIn("report-valuation-yearly-path", codes(no_yearly_path))
+        no_terminal_bridge = report.replace("最后一年现金流（亿美元）", "末端现金（亿美元）", 1)
+        self.assertIn("report-valuation-terminal-bridge", codes(no_terminal_bridge))
+        no_value_bridge = report.replace("显性期现金流现值（亿美元）", "部分现值（亿美元）", 1)
+        self.assertIn("report-valuation-value-bridge", codes(no_value_bridge))
+
+    def test_calculation_ledger_requires_each_dcf_path_and_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+        known = {item["id"] for item in company["sources"]}
+
+        regressions = {
+            "annual_discounted_cash_flow": "valuation-annual-cash-flow-chain",
+            "terminal_present_value": "valuation-terminal-value-chain",
+            "equity_value_bridge": "valuation-equity-value-chain",
+        }
+        for role, expected_code in regressions.items():
+            with self.subTest(role=role):
+                broken = copy.deepcopy(calculations)
+                removed = False
+                retained = []
+                for item in broken["calculations"]:
+                    if not removed and item.get("valuation_role") == role:
+                        removed = True
+                        continue
+                    retained.append(item)
+                broken["calculations"] = retained
+                findings: list[Finding] = []
+                validate_calculations(broken, company, known, "full", findings)
+                self.assertIn(expected_code, {item.code for item in findings})
 
     def test_trusted_lock_rejects_zero_protocol_commit(self) -> None:
         original = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
