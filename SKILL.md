@@ -1,6 +1,6 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-archive evidence-driven long-term research for listed companies under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for company research, ten-year financials, FCF/Owner Earnings/financial-company FCFE, ROIC or industry-adapted returns, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, formal research reports, schema-valid company.json, earnings updates, Too Hard decisions, frozen handoff packages, and authorized archival to bits-bean/doujiao-value-system. Do not use for social-media production, short-term price prediction, trading signals, unsupported recommendations, unapproved GitHub writes, website import, or public publishing.
+description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term research for listed companies under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for company research, ten-year financials, FCF/Owner Earnings/financial-company FCFE, ROIC or industry-adapted returns, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, formal research reports, schema-valid company.json, earnings updates, Too Hard decisions, frozen handoff packages, and authorized delivery to bits-bean/doujiao-value-system. Do not use for social-media production, short-term price prediction, trading signals, unsupported recommendations, unapproved GitHub writes, website import, or public publishing.
 ---
 
 # 豆角长期价值研究
@@ -46,11 +46,15 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 5. 现金流估值
 
-完整读取 [valuation-qa.md](references/valuation-qa.md)，以计算台账中唯一的 `valuation_role: starting_cash_flow` 作为 DCF 与 Reverse DCF 共用起点。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业使用“正常化普通股净利润 − 必要留存资本”的可分配普通股现金。总额先折现、再除以稀释后股数；EPS 与倍数只作交叉验证。报告的输入表、三情景、敏感性和 Reverse DCF 必须与该起点复算一致。
+完整读取 [valuation-qa.md](references/valuation-qa.md)，以计算台账中唯一的 `valuation_role: starting_cash_flow` 作为 DCF 与 Reverse DCF 共用起点。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业使用“正常化普通股净利润 − 必要留存资本”的可分配普通股现金。总额先折现、再除以稀释后股数；EPS 与倍数只作交叉验证。
+
+估值正文必须让读者沿一条连续算式复核：估值基准日可分配现金 → 每个预测年度的经营驱动与可分配现金 → 折现因子与现金流现值 → 终值及其现值 → 股权价值 → 稀释后每股价值。悲观、基准、乐观三个情景都必须逐年列示，不得只给增长率与最终答案。任何分段假设都写成“第1—5年”“第6—10年”等明确范围；“初期、前期、中期、后期、第一阶段、长期增长”等词若没有紧邻的起止年度，不得作为估值假设名称。计算台账保存同一组逐年记录和价值桥接，报告展示值必须与其复算一致。
 
 ## 6. 正式研究包
 
-按 [research-contract.md](references/research-contract.md) 建立新版本目录。`research-report.md` 采用方法论第 14 节的固定 16 节，脱离 JSON 和台账仍可独立阅读、理解及核实。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+按 [research-contract.md](references/research-contract.md) 建立新版本目录。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+
+正文只保留投资判断所需的事实、假设、计算过程、限制与反证。Schema 字段映射、JSON 文件名、验证器兼容、归档或生成流程等内部实现说明写入 `schema-gap-report.md`、`research-completeness.md`、台账或 manifest，不塞进研究叙事；但字段背后的真实经济假设仍须在正文直接说清。例如正文应写“第1—5年收入与普通股利润都按8%增长”，而不是解释某个 Schema 字段为何暂存同一数值。
 
 `company.json` 严格通过锁定 Schema，不新增字段。Schema 暂时无法表达的估值口径保留在报告、计算台账和 `schema-gap-report.md`，不得把旧字段静默改义。新研究的 `company.json` 与 `calculation-ledger.json` 统一存实际原始数值：人民币100万元写 `1000000`，100万股写 `1000000`，比例仍写 `0.25`；不得使用千、百万或十亿缩放值，计算台账也不得逐条添加 `unit`。所有面向中国读者的文字、表格、图表和最终回复再按 [research-contract.md](references/research-contract.md#中文展示单位契约) 换算：公司级金额优先用亿元，超大规模可用万亿元，股数用万股 / 亿股，每股值用原币种 / 股，比例用百分比。
 
@@ -80,14 +84,15 @@ python3 scripts/freeze_research.py <package> \
 
 下游内容只接收同一冻结版本的报告、company.json、manifest 和完整度说明；下游不得重新研究、重算估值或覆盖结论。
 
-## 9. 授权 GitHub 归档
+## 9. 授权 GitHub 提交
 
-用户明确要求提交 / 合并时完整读取 [github-archive.md](references/github-archive.md)。只归档人工已接受、v2、零错误的冻结包到 `bits-bean/doujiao-value-system`。
+用户明确要求提交 / 合并时完整读取 [github-archive.md](references/github-archive.md)。只把人工已接受、v2、零错误的冻结包提交到 `bits-bean/doujiao-value-system`。
 
-- 默认新版本路径；同名不同内容禁止覆盖。
-- `archive-only` 不改 canonical；只有明确授权提升时使用 `archive-and-promote`。
+- GitHub 当前研究目录固定为 `research/<company-slug>/`，不得再增加日期或 `-vN` 子目录；本地冻结目录继续按版本保存，Git 历史承担远端版本追踪。
+- 每次获授权提交必须在同一原子变更中同步研究目录与 `companies/<company-slug>/company.json`，两处 `company.json` 必须逐字节一致。
+- 研究请求、冻结请求仍不自动授权 GitHub；但“提交到 GitHub”同时授权上述两处目标，不再拆分 `archive-only` 与 canonical 提升权限。
 - 用户要求合并到 `main` 时走独立分支和 PR，检查通过后合并；只有明确说“直接提交到 main”才允许原子、非强制、仅快进直写。
-- 写入前核对最新 HEAD、Schema blob、slug / identity、远端快照和 canonical 单调性；写入后按 commit 重读全部文件并核对 SHA-256。
+- 写入前核对最新 HEAD、Schema blob、slug / identity、远端当前研究目录和 canonical 单调性；写入后按 commit 重读全部文件并核对 SHA-256。
 
 ## 10. 完成状态
 

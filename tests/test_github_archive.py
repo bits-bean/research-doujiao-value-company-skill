@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Regression tests for the optional GitHub archive planning gate."""
+"""Regression tests for the fail-closed GitHub delivery planning gate."""
 
 from __future__ import annotations
 
 import copy
+import json
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,12 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from prepare_github_archive import ArchivePlanError, build_archive_plan, snapshot_action  # noqa: E402
+from prepare_github_archive import (  # noqa: E402
+    ArchivePlanError,
+    build_archive_plan,
+    canonical_action,
+    research_action,
+)
 from validate_research_package import (  # noqa: E402
     EXPECTED_SCHEMA_PATH,
     EXPECTED_SPEC_REPOSITORY,
@@ -26,7 +32,7 @@ from validate_research_package import (  # noqa: E402
 )
 
 
-class GithubArchiveTests(unittest.TestCase):
+class GithubDeliveryTests(unittest.TestCase):
     def make_package(self, root: Path) -> tuple[Path, Path, dict]:
         schema_path = root / "company.schema.json"
         write_json(schema_path, {"$schema": "test", "version": "test-1"})
@@ -108,7 +114,12 @@ class GithubArchiveTests(unittest.TestCase):
                 )
             },
             "update_mode": "full",
-            "validation": {"validator": "doujiao-research-validator", "mode": "full", "errors": 0, "warnings": 0},
+            "validation": {
+                "validator": "doujiao-research-validator",
+                "mode": "full",
+                "errors": 0,
+                "warnings": 0,
+            },
             "files": [
                 {
                     "path": name,
@@ -120,30 +131,6 @@ class GithubArchiveTests(unittest.TestCase):
         }
         write_json(package / "research-manifest.json", manifest)
         return package, schema_path, trusted_lock
-
-    def plan(self, package: Path, schema: Path, lock: dict, **kwargs: object) -> dict:
-        if (
-            kwargs.get("existing_company_path") is not None or kwargs.get("canonical_absent") is True
-        ) and "existing_company_head" not in kwargs:
-            kwargs["existing_company_head"] = "b" * 40
-        options: dict[str, object] = {
-            "promotion": "archive-and-promote",
-            "promotion_authorized": True,
-            **kwargs,
-        }
-        with (
-            patch("freeze_research.validate_research_package", return_value=[]),
-            patch("prepare_github_archive.validate_research_package", return_value=[]),
-        ):
-            return build_archive_plan(
-                package,
-                schema,
-                company_slug="test-company",
-                version="2026-01-15",
-                strategy="pull-request",
-                trusted_lock=lock,
-                **options,
-            )
 
     @staticmethod
     def identity() -> dict[str, str]:
@@ -175,6 +162,17 @@ class GithubArchiveTests(unittest.TestCase):
         }
 
     @staticmethod
+    def research_state(*, base_head: str = "c" * 40, exists: bool = False, files: list | None = None) -> dict:
+        return {
+            "repository": EXPECTED_SPEC_REPOSITORY,
+            "branch": "main",
+            "base_head": base_head,
+            "root": "research/test-company",
+            "exists": exists,
+            "files": files or [],
+        }
+
+    @staticmethod
     def canonical_absent_state(base_head: str = "c" * 40) -> dict:
         return {
             "repository": EXPECTED_SPEC_REPOSITORY,
@@ -185,75 +183,102 @@ class GithubArchiveTests(unittest.TestCase):
             "content": None,
         }
 
-    def test_plan_contains_exact_snapshot_and_canonical_targets(self) -> None:
+    @staticmethod
+    def canonical_present_state(path: Path, base_head: str = "c" * 40) -> dict:
+        company = json.loads(path.read_text(encoding="utf-8"))
+        meta = company["meta"]
+        return {
+            "repository": EXPECTED_SPEC_REPOSITORY,
+            "branch": "main",
+            "base_head": base_head,
+            "path": "companies/test-company/company.json",
+            "exists": True,
+            "content": {
+                "source_path": str(path),
+                "sha256": file_sha256(path),
+                "size_bytes": path.stat().st_size,
+                "identity": {
+                    key: meta[key]
+                    for key in (
+                        "company_name_cn",
+                        "company_name_en",
+                        "ticker",
+                        "exchange",
+                        "schema_version",
+                    )
+                },
+            },
+        }
+
+    def plan(self, package: Path, schema: Path, lock: dict, **kwargs: object) -> dict:
+        with (
+            patch("freeze_research.validate_research_package", return_value=[]),
+            patch("prepare_github_archive.validate_research_package", return_value=[]),
+        ):
+            return build_archive_plan(
+                package,
+                schema,
+                company_slug="test-company",
+                strategy="pull-request",
+                trusted_lock=lock,
+                **kwargs,
+            )
+
+    def test_plan_uses_flat_research_path_and_always_syncs_canonical(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
-            plan = self.plan(package, schema, lock, canonical_absent=True)
-            self.assertEqual(plan["repository"], EXPECTED_SPEC_REPOSITORY)
-            self.assertEqual(plan["snapshot"]["root"], "research/test-company/2026-01-15")
-            targets = {item["target_path"] for item in plan["snapshot"]["files"]}
-            self.assertIn("research/test-company/2026-01-15/research-manifest.json", targets)
-            self.assertEqual(len(targets), len(FROZEN_HASH_FILES) + 1)
-            self.assertEqual(plan["canonical_company"]["target_path"], "companies/test-company/company.json")
-            self.assertEqual(plan["canonical_company"]["action"], "create")
-            remote_state = {
-                "repository": EXPECTED_SPEC_REPOSITORY,
-                "branch": "main",
-                "base_head": "c" * 40,
-                "root": "research/test-company/2026-01-15",
-                "exists": False,
-                "files": [],
-            }
-            with (
-                patch("freeze_research.validate_research_package", return_value=[]),
-                patch("prepare_github_archive.validate_research_package", return_value=[]),
-            ):
-                ready = build_archive_plan(
-                    package,
-                    schema,
-                    company_slug="test-company",
-                    version="2026-01-15",
-                    strategy="pull-request",
-                    promotion="archive-and-promote",
-                    write_authorized=True,
-                    promotion_authorized=True,
-                    remote_snapshot_state=remote_state,
-                    remote_slug_registry_state=self.registry_state(),
-                    remote_canonical_state=self.canonical_absent_state(),
-                    trusted_lock=lock,
-                )
-            self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["base_head"], "c" * 40)
-            self.assertEqual(ready["slug_binding"]["remote_action"], "verified-available")
+            preflight = self.plan(package, schema, lock)
+            self.assertEqual(preflight["research"]["root"], "research/test-company")
+            targets = {item["target_path"] for item in preflight["research"]["files"]}
+            self.assertIn("research/test-company/research-manifest.json", targets)
+            self.assertFalse(any("2026-01-15" in target for target in targets))
+            self.assertEqual(
+                preflight["canonical_company"]["target_path"],
+                "companies/test-company/company.json",
+            )
+            self.assertEqual(preflight["canonical_company"]["action"], "remote-preflight-required")
 
-    def test_v1_manifest_cannot_be_archived(self) -> None:
+            ready = self.plan(
+                package,
+                schema,
+                lock,
+                write_authorized=True,
+                remote_research_state=self.research_state(),
+                remote_slug_registry_state=self.registry_state(),
+                remote_canonical_state=self.canonical_absent_state(),
+            )
+            self.assertTrue(ready["ready_for_write"])
+            self.assertEqual(ready["delivery_mode"], "research-and-canonical")
+            self.assertEqual(ready["research"]["remote_action"], "create")
+            self.assertEqual(ready["canonical_company"]["action"], "create")
+
+    def test_v1_unaccepted_or_mutated_package_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
             manifest_path = package / "research-manifest.json"
-            manifest = __import__("json").loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["manifest_version"] = "1.0"
             manifest.pop("research_protocol")
             write_json(manifest_path, manifest)
-            with self.assertRaisesRegex(ArchivePlanError, "audit-only"):
-                self.plan(package, schema, lock, canonical_absent=True)
+            with self.assertRaises(ArchivePlanError):
+                self.plan(package, schema, lock)
 
-    def test_unaccepted_or_mutated_package_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
             manifest_path = package / "research-manifest.json"
-            manifest = __import__("json").loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["human_review_status"] = "pending"
             write_json(manifest_path, manifest)
             with self.assertRaises(ArchivePlanError):
-                self.plan(package, schema, lock, canonical_absent=True)
+                self.plan(package, schema, lock)
 
-            manifest["human_review_status"] = "accepted"
-            write_json(manifest_path, manifest)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, schema, lock = self.make_package(Path(temp_dir))
             (package / "research-report.md").write_text("mutated\n", encoding="utf-8")
             with self.assertRaises(ArchivePlanError):
-                self.plan(package, schema, lock, canonical_absent=True)
+                self.plan(package, schema, lock)
 
-    def test_slug_and_version_cannot_escape_repository_paths(self) -> None:
+    def test_slug_cannot_escape_repository_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
             with self.assertRaises(ArchivePlanError):
@@ -261,117 +286,175 @@ class GithubArchiveTests(unittest.TestCase):
                     package,
                     schema,
                     company_slug="../escape",
-                    version="2026-01-15",
                     strategy="pull-request",
-                    promotion="archive-and-promote",
-                    canonical_absent=True,
                     trusted_lock=lock,
                 )
-            with self.assertRaises(ArchivePlanError):
-                build_archive_plan(
-                    package,
-                    schema,
-                    company_slug="test-company",
-                    version="2026-01-15-v1",
-                    strategy="pull-request",
-                    promotion="archive-only",
-                    trusted_lock=lock,
-                )
-            with self.assertRaises(ArchivePlanError):
-                build_archive_plan(
-                    package,
-                    schema,
-                    company_slug="test-company",
-                    version="latest",
-                    strategy="pull-request",
-                    promotion="archive-and-promote",
-                    canonical_absent=True,
-                    trusted_lock=lock,
-                )
+
+    def test_research_action_create_noop_update_and_extra_deletion(self) -> None:
+        root = "research/test-company"
+        local = [
+            {"target_path": f"{root}/company.json", "sha256": "a" * 64, "size_bytes": 10},
+            {"target_path": f"{root}/research-manifest.json", "sha256": "b" * 64, "size_bytes": 20},
+        ]
+        absent = self.research_state()
+        self.assertEqual(research_action(root, local, absent), ("create", "c" * 40, []))
+        present_files = [
+            {"path": "company.json", "sha256": "a" * 64, "size_bytes": 10},
+            {"path": "research-manifest.json", "sha256": "b" * 64, "size_bytes": 20},
+        ]
+        present = self.research_state(exists=True, files=present_files)
+        self.assertEqual(research_action(root, local, present), ("noop", "c" * 40, []))
+
+        changed = self.research_state(
+            exists=True,
+            files=[
+                {**present_files[0], "sha256": "d" * 64},
+                present_files[1],
+                {"path": "obsolete.txt", "sha256": "e" * 64, "size_bytes": 1},
+            ],
+        )
+        self.assertEqual(
+            research_action(root, local, changed),
+            ("update", "c" * 40, ["research/test-company/obsolete.txt"]),
+        )
+
+    def test_research_state_requires_exact_flat_company_root(self) -> None:
+        local = [{"target_path": "research/test-company/company.json", "sha256": "a" * 64, "size_bytes": 1}]
+        nested = {**self.research_state(), "root": "research/test-company/2026-01-15"}
+        with self.assertRaisesRegex(ArchivePlanError, "different company path"):
+            research_action("research/test-company", local, nested)
+        extra_key = {**self.research_state(), "legacy": []}
+        with self.assertRaisesRegex(ArchivePlanError, "unexpected or missing"):
+            research_action("research/test-company", local, extra_key)
 
     def test_canonical_update_is_monotonic_and_identity_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            package, schema, lock = self.make_package(root)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
             existing = root / "existing.json"
-            existing.write_bytes((package / "company.json").read_bytes())
-            plan = self.plan(package, schema, lock, existing_company_path=existing)
-            self.assertEqual(plan["canonical_company"]["action"], "noop")
+            existing.write_bytes(new_path.read_bytes())
+            self.assertEqual(
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                ),
+                "noop",
+            )
 
-            company = __import__("json").loads(existing.read_text(encoding="utf-8"))
+            company = json.loads(existing.read_text(encoding="utf-8"))
             company["meta"]["data_as_of"] = "2025-09-30"
+            company["meta"]["valuation_date"] = "2025-10-15"
             write_json(existing, company)
-            plan = self.plan(package, schema, lock, existing_company_path=existing)
-            self.assertEqual(plan["canonical_company"]["action"], "update")
+            self.assertEqual(
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                ),
+                "update",
+            )
 
             company["meta"]["data_as_of"] = "2026-03-31"
             write_json(existing, company)
-            with self.assertRaises(ArchivePlanError):
-                self.plan(package, schema, lock, existing_company_path=existing)
+            with self.assertRaisesRegex(ArchivePlanError, "data_as_of"):
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                )
 
             company["meta"]["data_as_of"] = "2025-12-31"
             company["meta"]["ticker"] = "OTHER"
             write_json(existing, company)
-            with self.assertRaises(ArchivePlanError):
-                self.plan(package, schema, lock, existing_company_path=existing)
+            with self.assertRaisesRegex(ArchivePlanError, "ticker"):
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=True,
+                )
 
-    def test_same_date_different_content_is_rejected(self) -> None:
+    def test_same_date_revision_requires_explicit_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             package, schema, lock = self.make_package(root)
             existing = root / "existing.json"
-            company = copy.deepcopy(__import__("json").loads((package / "company.json").read_text(encoding="utf-8")))
+            company = copy.deepcopy(json.loads((package / "company.json").read_text(encoding="utf-8")))
             company["sources"] = [{"id": "DIFFERENT"}]
             write_json(existing, company)
-            with self.assertRaises(ArchivePlanError):
-                self.plan(package, schema, lock, existing_company_path=existing)
-
-            with (
-                patch("freeze_research.validate_research_package", return_value=[]),
-                patch("prepare_github_archive.validate_research_package", return_value=[]),
-            ):
-                plan = build_archive_plan(
+            state = self.canonical_present_state(existing)
+            with self.assertRaisesRegex(ArchivePlanError, "same data_as_of"):
+                self.plan(
                     package,
                     schema,
-                    company_slug="test-company",
-                    version="2026-01-15-v2",
-                    strategy="pull-request",
-                    promotion="archive-and-promote",
-                    promotion_authorized=True,
-                    existing_company_path=existing,
-                    existing_company_head="b" * 40,
-                    confirm_same_date_revision=True,
-                    trusted_lock=lock,
+                    lock,
+                    remote_research_state=self.research_state(),
+                    remote_slug_registry_state=self.registry_state(),
+                    remote_canonical_state=state,
                 )
+            plan = self.plan(
+                package,
+                schema,
+                lock,
+                write_authorized=True,
+                remote_research_state=self.research_state(),
+                remote_slug_registry_state=self.registry_state(),
+                remote_canonical_state=state,
+                confirm_same_date_revision=True,
+            )
+            self.assertTrue(plan["ready_for_write"])
             self.assertEqual(plan["canonical_company"]["action"], "update-confirmed-revision")
 
-    def test_archive_only_never_plans_a_canonical_write(self) -> None:
+    def test_all_three_remote_observations_are_required_at_same_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
-            with (
-                patch("freeze_research.validate_research_package", return_value=[]),
-                patch("prepare_github_archive.validate_research_package", return_value=[]),
-            ):
-                plan = build_archive_plan(
+            missing = self.plan(
+                package,
+                schema,
+                lock,
+                write_authorized=True,
+                remote_research_state=self.research_state(),
+                remote_slug_registry_state=self.registry_state(),
+            )
+            self.assertFalse(missing["ready_for_write"])
+            self.assertEqual(missing["canonical_company"]["action"], "remote-preflight-required")
+
+            with self.assertRaisesRegex(ArchivePlanError, "different base heads"):
+                self.plan(
                     package,
                     schema,
-                    company_slug="test-company",
-                    version="2026-01-15",
-                    strategy="pull-request",
-                    promotion="archive-only",
-                    trusted_lock=lock,
+                    lock,
+                    write_authorized=True,
+                    remote_research_state=self.research_state(),
+                    remote_slug_registry_state=self.registry_state("d" * 40),
+                    remote_canonical_state=self.canonical_absent_state(),
                 )
-            self.assertEqual(plan["canonical_company"]["action"], "not-requested")
-            with self.assertRaises(ArchivePlanError):
-                build_archive_plan(
+
+    def test_slug_registry_binding_is_identity_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, schema, lock = self.make_package(Path(temp_dir))
+            with self.assertRaisesRegex(ArchivePlanError, "different company slug"):
+                self.plan(
                     package,
                     schema,
-                    company_slug="test-company",
-                    version="2026-01-15",
-                    strategy="pull-request",
-                    promotion="archive-only",
-                    canonical_absent=True,
-                    trusted_lock=lock,
+                    lock,
+                    remote_research_state=self.research_state(),
+                    remote_slug_registry_state=self.registry_state(company_slug="wrong-company"),
+                    remote_canonical_state=self.canonical_absent_state(),
+                )
+            with self.assertRaisesRegex(ArchivePlanError, "frozen research package"):
+                self.plan(
+                    package,
+                    schema,
+                    lock,
+                    remote_research_state=self.research_state(),
+                    remote_slug_registry_state=self.registry_state(identity={**self.identity(), "ticker": "OTHER"}),
+                    remote_canonical_state=self.canonical_absent_state(),
                 )
 
     def test_sensitive_material_is_rejected(self) -> None:
@@ -380,16 +463,16 @@ class GithubArchiveTests(unittest.TestCase):
             report = package / "research-report.md"
             report.write_text("token=abcdefghijklmnop1234567890\n", encoding="utf-8")
             manifest_path = package / "research-manifest.json"
-            manifest = __import__("json").loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             for entry in manifest["files"]:
                 if entry["path"] == "research-report.md":
                     entry["sha256"] = file_sha256(report)
                     entry["size_bytes"] = report.stat().st_size
             write_json(manifest_path, manifest)
-            with self.assertRaises(ArchivePlanError):
-                self.plan(package, schema, lock, canonical_absent=True)
+            with self.assertRaisesRegex(ArchivePlanError, "sensitive material"):
+                self.plan(package, schema, lock)
 
-    def test_forged_zero_error_report_does_not_replace_fresh_full_validation(self) -> None:
+    def test_fresh_validation_cannot_be_replaced_by_recorded_zero(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
             with self.assertRaisesRegex(ArchivePlanError, "fresh full validation failed"):
@@ -397,9 +480,7 @@ class GithubArchiveTests(unittest.TestCase):
                     package,
                     schema,
                     company_slug="test-company",
-                    version="2026-01-15",
                     strategy="pull-request",
-                    promotion="archive-only",
                     trusted_lock=lock,
                 )
 
@@ -416,182 +497,44 @@ class GithubArchiveTests(unittest.TestCase):
                         package,
                         schema,
                         company_slug="test-company",
-                        version="2026-01-15",
                         strategy="pull-request",
-                        promotion="archive-only",
                         trusted_lock=lock,
                     )
 
-    def test_remote_snapshot_create_noop_and_conflict(self) -> None:
-        root = "research/test-company/2026-01-15"
-        local = [
-            {"target_path": f"{root}/company.json", "sha256": "a" * 64, "size_bytes": 10},
-            {"target_path": f"{root}/research-manifest.json", "sha256": "b" * 64, "size_bytes": 20},
-        ]
-        absent = {
-            "repository": EXPECTED_SPEC_REPOSITORY,
-            "branch": "main",
-            "base_head": "c" * 40,
-            "root": root,
-            "exists": False,
-            "files": [],
-        }
-        self.assertEqual(snapshot_action(root, local, absent), ("create", "c" * 40))
-        present = {
-            **absent,
-            "exists": True,
-            "files": [
-                {"path": "company.json", "sha256": "a" * 64, "size_bytes": 10},
-                {"path": "research-manifest.json", "sha256": "b" * 64, "size_bytes": 20},
-            ],
-        }
-        self.assertEqual(snapshot_action(root, local, present), ("noop", "c" * 40))
-        for files in (
-            present["files"][:-1],
-            present["files"] + [{"path": "extra.txt", "sha256": "d" * 64, "size_bytes": 1}],
-            [{**present["files"][0], "sha256": "e" * 64}, present["files"][1]],
-        ):
-            with self.subTest(files=files), self.assertRaisesRegex(ArchivePlanError, "immutable snapshot conflict"):
-                snapshot_action(root, local, {**present, "files": files})
-
-    def test_write_requires_same_head_remote_slug_registry_binding(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            package, schema, lock = self.make_package(Path(temp_dir))
-            remote_snapshot = {
-                "repository": EXPECTED_SPEC_REPOSITORY,
-                "branch": "main",
-                "base_head": "c" * 40,
-                "root": "research/test-company/2026-01-15",
-                "exists": False,
-                "files": [],
-            }
-            missing = self.plan(
-                package,
-                schema,
-                lock,
-                promotion="archive-only",
-                promotion_authorized=False,
-                write_authorized=True,
-                remote_snapshot_state=remote_snapshot,
-            )
-            self.assertFalse(missing["ready_for_write"])
-            self.assertEqual(missing["slug_binding"]["remote_action"], "remote-preflight-required")
-
-            ready = self.plan(
-                package,
-                schema,
-                lock,
-                promotion="archive-only",
-                promotion_authorized=False,
-                write_authorized=True,
-                remote_snapshot_state=remote_snapshot,
-                remote_slug_registry_state=self.registry_state(),
-            )
-            self.assertTrue(ready["ready_for_write"])
-
-            with self.assertRaisesRegex(ArchivePlanError, "different company slug"):
-                self.plan(
-                    package,
-                    schema,
-                    lock,
-                    promotion="archive-only",
-                    promotion_authorized=False,
-                    write_authorized=True,
-                    remote_snapshot_state=remote_snapshot,
-                    remote_slug_registry_state=self.registry_state(company_slug="wrong-company"),
-                )
-            with self.assertRaisesRegex(ArchivePlanError, "frozen research package"):
-                self.plan(
-                    package,
-                    schema,
-                    lock,
-                    promotion="archive-only",
-                    promotion_authorized=False,
-                    write_authorized=True,
-                    remote_snapshot_state=remote_snapshot,
-                    remote_slug_registry_state=self.registry_state(
-                        identity={**self.identity(), "ticker": "OTHER"}
-                    ),
-                )
-            with self.assertRaisesRegex(ArchivePlanError, "different base heads"):
-                self.plan(
-                    package,
-                    schema,
-                    lock,
-                    promotion="archive-only",
-                    promotion_authorized=False,
-                    write_authorized=True,
-                    remote_snapshot_state=remote_snapshot,
-                    remote_slug_registry_state=self.registry_state("d" * 40),
-                )
-
-    def test_archive_and_promote_requires_exact_head_canonical_absence(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            package, schema, lock = self.make_package(Path(temp_dir))
-            remote_snapshot = {
-                "repository": EXPECTED_SPEC_REPOSITORY,
-                "branch": "main",
-                "base_head": "c" * 40,
-                "root": "research/test-company/2026-01-15",
-                "exists": False,
-                "files": [],
-            }
-            missing = self.plan(
-                package,
-                schema,
-                lock,
-                write_authorized=True,
-                remote_snapshot_state=remote_snapshot,
-                remote_slug_registry_state=self.registry_state(),
-            )
-            self.assertFalse(missing["ready_for_write"])
-            self.assertEqual(missing["canonical_company"]["action"], "remote-preflight-required")
-
-            missing_registry = self.plan(
-                package,
-                schema,
-                lock,
-                write_authorized=True,
-                remote_snapshot_state=remote_snapshot,
-                remote_canonical_state=self.canonical_absent_state(),
-            )
-            self.assertFalse(missing_registry["ready_for_write"])
-            self.assertEqual(missing_registry["slug_binding"]["remote_action"], "remote-preflight-required")
-
-            with self.assertRaisesRegex(ArchivePlanError, "different base heads"):
-                self.plan(
-                    package,
-                    schema,
-                    lock,
-                    write_authorized=True,
-                    remote_snapshot_state=remote_snapshot,
-                    remote_slug_registry_state=self.registry_state(),
-                    remote_canonical_state=self.canonical_absent_state("d" * 40),
-                )
-
-            legacy_unbound = self.plan(
-                package,
-                schema,
-                lock,
-                write_authorized=True,
-                remote_snapshot_state=remote_snapshot,
-                remote_slug_registry_state=self.registry_state(),
-                canonical_absent=True,
-                existing_company_head=None,
-            )
-            self.assertFalse(legacy_unbound["ready_for_write"])
-
-    def test_newer_data_cannot_hide_valuation_date_rollback(self) -> None:
+    def test_canonical_observation_hash_and_identity_are_verified(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             package, schema, lock = self.make_package(root)
             existing = root / "existing.json"
-            company = __import__("json").loads((package / "company.json").read_text(encoding="utf-8"))
+            existing.write_bytes((package / "company.json").read_bytes())
+            state = self.canonical_present_state(existing)
+            state["content"]["sha256"] = "f" * 64
+            with self.assertRaisesRegex(ArchivePlanError, "hash or size"):
+                self.plan(
+                    package,
+                    schema,
+                    lock,
+                    remote_research_state=self.research_state(),
+                    remote_slug_registry_state=self.registry_state(),
+                    remote_canonical_state=state,
+                )
+
+    def test_newer_data_cannot_hide_valuation_date_rollback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            existing = root / "existing.json"
+            company = json.loads((package / "company.json").read_text(encoding="utf-8"))
             company["meta"]["data_as_of"] = "2025-09-30"
             company["meta"]["valuation_date"] = "2027-01-01"
             write_json(existing, company)
             with self.assertRaisesRegex(ArchivePlanError, "valuation_date"):
-                self.plan(package, schema, lock, existing_company_path=existing)
+                canonical_action(
+                    package / "company.json",
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                )
 
     def test_direct_main_requires_separate_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -601,9 +544,7 @@ class GithubArchiveTests(unittest.TestCase):
                     package,
                     schema,
                     company_slug="test-company",
-                    version="2026-01-15",
                     strategy="direct-main",
-                    promotion="archive-only",
                     trusted_lock=lock,
                 )
 
