@@ -23,7 +23,17 @@ SHA1_PATTERN = re.compile(r"[0-9a-f]{40}")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 IDENTITY_FIELDS = ("company_name_cn", "company_name_en", "ticker", "exchange")
 CANONICAL_IDENTITY_FIELDS = IDENTITY_FIELDS + ("schema_version",)
-RESEARCH_STATE_KEYS = {"repository", "branch", "base_head", "root", "exists", "files"}
+COMPANY_PACKAGE_STATE_KEYS = {"repository", "branch", "base_head", "root", "exists", "files"}
+MANAGED_PACKAGE_FILENAMES = {
+    "research-report.md",
+    "company.json",
+    "research-completeness.md",
+    "evidence-ledger.json",
+    "calculation-ledger.json",
+    "validation-report.json",
+    "schema-gap-report.md",
+    "research-manifest.json",
+}
 SLUG_REGISTRY_STATE_KEYS = {
     "repository",
     "branch",
@@ -158,42 +168,46 @@ def scan_sensitive_material(paths: list[Path]) -> None:
         raise ArchivePlanError(f"sensitive material scan failed: {', '.join(sorted(findings))}")
 
 
-def research_action(
-    research_root: str,
+def package_action(
+    company_root: str,
     local_files: list[dict[str, Any]],
     remote_state: dict[str, Any] | None,
 ) -> tuple[str, str | None, list[str]]:
-    """Resolve create/update/noop for the company's single current research directory."""
+    """Resolve create/update/noop for the company's single current package directory."""
     if remote_state is None:
         return "remote-preflight-required", None, []
-    if set(remote_state) != RESEARCH_STATE_KEYS:
-        raise ArchivePlanError("remote research state has unexpected or missing fields")
+    if set(remote_state) != COMPANY_PACKAGE_STATE_KEYS:
+        raise ArchivePlanError("remote company package state has unexpected or missing fields")
     if remote_state.get("repository") != TARGET_REPOSITORY or remote_state.get("branch") != TARGET_BRANCH:
-        raise ArchivePlanError("remote research state has the wrong repository or branch")
-    if remote_state.get("root") != research_root:
-        raise ArchivePlanError("remote research state is for a different company path")
+        raise ArchivePlanError("remote company package state has the wrong repository or branch")
+    if remote_state.get("root") != company_root:
+        raise ArchivePlanError("remote company package state is for a different company path")
     base_head = str(remote_state.get("base_head", ""))
     if SHA1_PATTERN.fullmatch(base_head) is None:
-        raise ArchivePlanError("remote research state lacks an exact base_head")
+        raise ArchivePlanError("remote company package state lacks an exact base_head")
     exists = remote_state.get("exists")
     if not isinstance(exists, bool):
-        raise ArchivePlanError("remote research state exists must be boolean")
+        raise ArchivePlanError("remote company package state exists must be boolean")
     remote_files = remote_state.get("files")
     if not isinstance(remote_files, list):
-        raise ArchivePlanError("remote research state files must be an array")
+        raise ArchivePlanError("remote company package state files must be an array")
     if not exists:
         if remote_files:
-            raise ArchivePlanError("absent remote research directory cannot contain direct files")
+            raise ArchivePlanError("absent remote company package directory cannot contain direct files")
         return "create", base_head, []
 
     expected = {
         Path(item["target_path"]).name: (item["sha256"], item["size_bytes"])
         for item in local_files
     }
+    if not {"company.json", "research-manifest.json"}.issubset(expected):
+        raise ArchivePlanError("local company package lacks required managed files")
+    if not set(expected).issubset(MANAGED_PACKAGE_FILENAMES):
+        raise ArchivePlanError("local company package contains an unmanaged target filename")
     actual: dict[str, tuple[str, int]] = {}
     for entry in remote_files:
         if not isinstance(entry, dict):
-            raise ArchivePlanError("remote research state contains an invalid file entry")
+            raise ArchivePlanError("remote company package state contains an invalid file entry")
         name = entry.get("path")
         sha256 = entry.get("sha256")
         size = entry.get("size_bytes")
@@ -206,11 +220,12 @@ def research_action(
             or size < 0
             or name in actual
         ):
-            raise ArchivePlanError("remote research state contains an unsafe or malformed direct file")
+            raise ArchivePlanError("remote company package state contains an unsafe or malformed direct file")
         actual[name] = (str(sha256), size)
-    if actual == expected:
+    managed_actual = {name: value for name, value in actual.items() if name in MANAGED_PACKAGE_FILENAMES}
+    if managed_actual == expected:
         return "noop", base_head, []
-    delete_paths = [f"{research_root}/{name}" for name in sorted(set(actual) - set(expected))]
+    delete_paths = [f"{company_root}/{name}" for name in sorted(set(managed_actual) - set(expected))]
     return "update", base_head, delete_paths
 
 
@@ -231,7 +246,7 @@ def _state_base_head(state: dict[str, Any], label: str, expected_base_head: str 
     if SHA1_PATTERN.fullmatch(base_head) is None:
         raise ArchivePlanError(f"{label} lacks an exact base_head")
     if expected_base_head is not None and base_head != expected_base_head:
-        raise ArchivePlanError(f"{label} and remote research state came from different base heads")
+        raise ArchivePlanError(f"{label} and remote company package state came from different base heads")
     return base_head
 
 
@@ -339,7 +354,7 @@ def build_archive_plan(
     strategy: str,
     write_authorized: bool = False,
     direct_main_authorized: bool = False,
-    remote_research_state: dict[str, Any] | None = None,
+    remote_company_state: dict[str, Any] | None = None,
     remote_slug_registry_state: dict[str, Any] | None = None,
     remote_canonical_state: dict[str, Any] | None = None,
     confirm_same_date_revision: bool = False,
@@ -383,34 +398,34 @@ def build_archive_plan(
     entries = manifest.get("files")
     if not isinstance(entries, list):
         raise ArchivePlanError("verified manifest has no files array")
-    research_root = f"research/{company_slug}"
-    research_files: list[dict[str, Any]] = []
+    company_root = f"companies/{company_slug}"
+    package_files: list[dict[str, Any]] = []
     for entry in entries:
         if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
             raise ArchivePlanError("verified manifest contains an invalid file entry")
         name = entry["path"]
         source = _safe_regular_file(root / name, f"frozen file {name}")
-        research_files.append(
+        package_files.append(
             {
                 "source_path": str(source),
-                "target_path": f"{research_root}/{name}",
+                "target_path": f"{company_root}/{name}",
                 "sha256": file_sha256(source),
                 "size_bytes": source.stat().st_size,
             }
         )
-    research_files.append(
+    package_files.append(
         {
             "source_path": str(manifest_path),
-            "target_path": f"{research_root}/research-manifest.json",
+            "target_path": f"{company_root}/research-manifest.json",
             "sha256": file_sha256(manifest_path),
             "size_bytes": manifest_path.stat().st_size,
         }
     )
-    scan_sensitive_material([Path(item["source_path"]) for item in research_files])
-    remote_action, base_head, delete_paths = research_action(
-        research_root,
-        research_files,
-        remote_research_state,
+    scan_sensitive_material([Path(item["source_path"]) for item in package_files])
+    remote_action, base_head, delete_paths = package_action(
+        company_root,
+        package_files,
+        remote_company_state,
     )
 
     company_path = _safe_regular_file(root / "company.json", "company.json")
@@ -436,11 +451,11 @@ def build_archive_plan(
         and canonical in {"create", "update", "update-confirmed-revision", "noop"}
     )
     return {
-        "plan_version": "3.0",
+        "plan_version": "4.0",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
-        "delivery_mode": "research-and-canonical",
+        "delivery_mode": "single-company-directory",
         "write_authorized": write_authorized,
         "direct_main_authorized": direct_main_authorized,
         "requires_atomic_commit": True,
@@ -462,14 +477,15 @@ def build_archive_plan(
             "remote_action": slug_action,
             "base_head": slug_head,
         },
-        "research": {
-            "root": research_root,
+        "company_package": {
+            "root": company_root,
             "remote_action": remote_action,
-            "replacement_policy": "single-current-package",
-            "files": research_files,
+            "replacement_policy": "managed-research-files",
+            "preserve_unmanaged_company_assets": True,
+            "files": package_files,
             "delete_paths": delete_paths,
         },
-        "canonical_company": {
+        "canonical_guard": {
             "source_path": str(company_path),
             "target_path": f"companies/{company_slug}/company.json",
             "sha256": file_sha256(company_path),
@@ -490,9 +506,9 @@ def main() -> int:
     parser.add_argument("--confirm-write-authorization", action="store_true")
     parser.add_argument("--confirm-direct-main-authorization", action="store_true")
     parser.add_argument(
-        "--remote-research-state",
+        "--remote-company-state",
         type=Path,
-        help="Connector-produced JSON describing direct files in research/<company-slug> at one exact main head",
+        help="Connector-produced JSON describing direct files in companies/<company-slug> at one exact main head",
     )
     parser.add_argument(
         "--remote-slug-registry-state",
@@ -513,12 +529,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        remote_research_state = (
+        remote_company_state = (
             _read_object(
-                _safe_regular_file(args.remote_research_state, "remote research state"),
-                "remote research state",
+                _safe_regular_file(args.remote_company_state, "remote company package state"),
+                "remote company package state",
             )
-            if args.remote_research_state is not None
+            if args.remote_company_state is not None
             else None
         )
         remote_slug_registry_state = (
@@ -544,7 +560,7 @@ def main() -> int:
             strategy=args.strategy,
             write_authorized=args.confirm_write_authorization,
             direct_main_authorized=args.confirm_direct_main_authorization,
-            remote_research_state=remote_research_state,
+            remote_company_state=remote_company_state,
             remote_slug_registry_state=remote_slug_registry_state,
             remote_canonical_state=remote_canonical_state,
             confirm_same_date_revision=args.confirm_same_date_revision,
@@ -571,10 +587,10 @@ def main() -> int:
             forbidden = {
                 args.schema.resolve(),
                 TRUSTED_LOCK_PATH.resolve(),
-                *(Path(item["source_path"]).resolve() for item in plan["research"]["files"]),
+                *(Path(item["source_path"]).resolve() for item in plan["company_package"]["files"]),
             }
             for observation in (
-                args.remote_research_state,
+                args.remote_company_state,
                 args.remote_slug_registry_state,
                 args.remote_canonical_state,
             ):
