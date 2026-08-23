@@ -220,10 +220,10 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 ## GitHub 提交
 
-GitHub 提交是 v2 冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`，v1 研究包不得提交。授权提交后，当前研究文件与正式 `company.json` 必须作为一个原子变更同步写入：
+GitHub 提交是 v2 冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`，v1 研究包不得提交。授权提交后，整个当前研究包作为一个原子变更写入唯一公司目录：
 
 ```text
-research/<company-slug>/
+companies/<company-slug>/
 ├── research-report.md
 ├── company.json
 ├── research-completeness.md
@@ -232,10 +232,8 @@ research/<company-slug>/
 ├── validation-report.json
 ├── schema-gap-report.md        # 仅 manifest 列出时
 └── research-manifest.json
-
-companies/<company-slug>/company.json
 ```
 
-GitHub 路径不得再增加日期或 `-vN` 子目录。本地冻结目录继续按版本保存且不可变；远端当前研究目录使用整包替换，Git 历史负责记录版本。不得加入发布回执、制作记录或其他未冻结文件。正式 `company.json` 必须与当前研究目录中的 `company.json` 逐字节一致。
+GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再向 `research/` 写入副本。本地冻结目录可继续保存不可变审计快照；远端公司目录中的受管研究文件使用整包替换，Git 历史负责记录版本。公司 Logo、品牌图像等非研究资产必须原样保留。不得加入发布回执、制作记录或其他未冻结文件。`companies/<company-slug>/company.json` 是唯一正式副本。
 
-最终写入必须在同一最新 `main` SHA 下验证当前研究目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份、证券或 Schema 版本不一致拒绝。
+最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份、证券或 Schema 版本不一致拒绝。

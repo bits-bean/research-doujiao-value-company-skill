@@ -106,11 +106,11 @@
 - 用户已明确授权本次 GitHub 写入，不能从研究或冻结请求推断授权。
 - manifest 为人工已接受的 v2 冻结版本；v1 不得归档。发布计划重新核验全部冻结文件、哈希、研究协议和 Schema。
 - 目标严格限定为 `bits-bean/doujiao-value-system`；Schema 锚点是当前 `main` 的祖先，且当前 Schema blob 未变。system 仓库其他文档不再参与研究协议兼容判断。
-- 当前研究路径严格为 `research/<company-slug>/`，没有日期或 `-vN` 子目录；同一提交必须同步 `companies/<company-slug>/company.json`。
-- 已在同一最新 `main` SHA 下检查当前研究目录、slug registry 正反向一一绑定及统一 canonical state；不存在 observation 也带读取时 SHA，且没有 wrong slug、别名、身份、hash、回退或未经确认的同日修订。
+- 当前研究包路径严格为 `companies/<company-slug>/`，所有冻结文件均直接位于该目录，没有日期或 `-vN` 子目录，也没有向 `research/` 写入副本。
+- 已在同一最新 `main` SHA 下检查当前公司目录、slug registry 正反向一一绑定及其中 `company.json` 的 canonical state；不存在 observation 也带读取时 SHA，且没有 wrong slug、别名、身份、hash、回退或未经确认的同日修订。
 - 前序增量研究包已在当前受信研究协议与 Schema 下重新执行 `full` 验证，fresh errors/warnings 与冻结记录一致；未把自报零错误当作证据。
 - 默认经独立分支和 PR；直接 `main` 需要用户明确指定，并且只使用单一原子提交、非强制、仅快进更新。
-- 最终 diff 只修改 `research/<company-slug>/` 的直接研究文件与 `companies/<company-slug>/company.json`；允许删除被新冻结包替代的旧直接研究文件，不自动删除历史子目录，不包含其他路径或 Schema 文件变化。
+- 最终 diff 只修改 `companies/<company-slug>/` 的受管研究包文件；只允许删除被新冻结包替代的旧受管研究文件，保留 Logo、品牌图像及其他非研究资产，不自动删除旧 `research/` 目录或历史子目录，不包含其他公司、路径或 Schema 文件变化。
 - 提交后按 commit 重新读取远端文件并核对全部目标路径与 SHA-256。
 
 任何权限不足、分支保护、远端并发更新、部分写入、哈希不一致或无法复核，都必须准确报告失败或部分完成，不得声称归档成功。

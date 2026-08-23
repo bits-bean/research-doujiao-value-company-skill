@@ -88,11 +88,11 @@ python3 scripts/freeze_research.py <package> \
 
 用户明确要求提交 / 合并时完整读取 [github-archive.md](references/github-archive.md)。只把人工已接受、v2、零错误的冻结包提交到 `bits-bean/doujiao-value-system`。
 
-- GitHub 当前研究目录固定为 `research/<company-slug>/`，不得再增加日期或 `-vN` 子目录；本地冻结目录继续按版本保存，Git 历史承担远端版本追踪。
-- 每次获授权提交必须在同一原子变更中同步研究目录与 `companies/<company-slug>/company.json`，两处 `company.json` 必须逐字节一致。
-- 研究请求、冻结请求仍不自动授权 GitHub；但“提交到 GitHub”同时授权上述两处目标，不再拆分 `archive-only` 与 canonical 提升权限。
+- GitHub 当前研究包固定为 `companies/<company-slug>/`，报告、`company.json`、台账、验证结果与 manifest 全部直接放在该目录；不得增加日期、`-vN` 或其他版本子目录，远端版本只由 Git 历史追踪。
+- 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。公司 Logo 等非研究资产必须保留。
+- 研究请求、冻结请求仍不自动授权 GitHub；“提交到 GitHub”授权的唯一目标是上述公司目录。
 - 用户要求合并到 `main` 时走独立分支和 PR，检查通过后合并；只有明确说“直接提交到 main”才允许原子、非强制、仅快进直写。
-- 写入前核对最新 HEAD、Schema blob、slug / identity、远端当前研究目录和 canonical 单调性；写入后按 commit 重读全部文件并核对 SHA-256。
+- 写入前核对最新 HEAD、Schema blob、slug / identity、远端当前公司目录和 `company.json` 单调性；写入后按 commit 重读全部文件并核对 SHA-256。
 
 ## 10. 完成状态
 

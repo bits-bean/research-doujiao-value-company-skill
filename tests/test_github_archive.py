@@ -19,7 +19,7 @@ from prepare_github_archive import (  # noqa: E402
     ArchivePlanError,
     build_archive_plan,
     canonical_action,
-    research_action,
+    package_action,
 )
 from validate_research_package import (  # noqa: E402
     EXPECTED_SCHEMA_PATH,
@@ -162,12 +162,12 @@ class GithubDeliveryTests(unittest.TestCase):
         }
 
     @staticmethod
-    def research_state(*, base_head: str = "c" * 40, exists: bool = False, files: list | None = None) -> dict:
+    def company_state(*, base_head: str = "c" * 40, exists: bool = False, files: list | None = None) -> dict:
         return {
             "repository": EXPECTED_SPEC_REPOSITORY,
             "branch": "main",
             "base_head": base_head,
-            "root": "research/test-company",
+            "root": "companies/test-company",
             "exists": exists,
             "files": files or [],
         }
@@ -224,33 +224,34 @@ class GithubDeliveryTests(unittest.TestCase):
                 **kwargs,
             )
 
-    def test_plan_uses_flat_research_path_and_always_syncs_canonical(self) -> None:
+    def test_plan_uses_single_flat_company_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
             preflight = self.plan(package, schema, lock)
-            self.assertEqual(preflight["research"]["root"], "research/test-company")
-            targets = {item["target_path"] for item in preflight["research"]["files"]}
-            self.assertIn("research/test-company/research-manifest.json", targets)
+            self.assertEqual(preflight["company_package"]["root"], "companies/test-company")
+            targets = {item["target_path"] for item in preflight["company_package"]["files"]}
+            self.assertIn("companies/test-company/research-manifest.json", targets)
+            self.assertIn("companies/test-company/company.json", targets)
             self.assertFalse(any("2026-01-15" in target for target in targets))
             self.assertEqual(
-                preflight["canonical_company"]["target_path"],
+                preflight["canonical_guard"]["target_path"],
                 "companies/test-company/company.json",
             )
-            self.assertEqual(preflight["canonical_company"]["action"], "remote-preflight-required")
+            self.assertEqual(preflight["canonical_guard"]["action"], "remote-preflight-required")
 
             ready = self.plan(
                 package,
                 schema,
                 lock,
                 write_authorized=True,
-                remote_research_state=self.research_state(),
+                remote_company_state=self.company_state(),
                 remote_slug_registry_state=self.registry_state(),
                 remote_canonical_state=self.canonical_absent_state(),
             )
             self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["delivery_mode"], "research-and-canonical")
-            self.assertEqual(ready["research"]["remote_action"], "create")
-            self.assertEqual(ready["canonical_company"]["action"], "create")
+            self.assertEqual(ready["delivery_mode"], "single-company-directory")
+            self.assertEqual(ready["company_package"]["remote_action"], "create")
+            self.assertEqual(ready["canonical_guard"]["action"], "create")
 
     def test_v1_unaccepted_or_mutated_package_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -290,42 +291,43 @@ class GithubDeliveryTests(unittest.TestCase):
                     trusted_lock=lock,
                 )
 
-    def test_research_action_create_noop_update_and_extra_deletion(self) -> None:
-        root = "research/test-company"
+    def test_package_action_create_noop_update_and_extra_deletion(self) -> None:
+        root = "companies/test-company"
         local = [
             {"target_path": f"{root}/company.json", "sha256": "a" * 64, "size_bytes": 10},
             {"target_path": f"{root}/research-manifest.json", "sha256": "b" * 64, "size_bytes": 20},
         ]
-        absent = self.research_state()
-        self.assertEqual(research_action(root, local, absent), ("create", "c" * 40, []))
+        absent = self.company_state()
+        self.assertEqual(package_action(root, local, absent), ("create", "c" * 40, []))
         present_files = [
             {"path": "company.json", "sha256": "a" * 64, "size_bytes": 10},
             {"path": "research-manifest.json", "sha256": "b" * 64, "size_bytes": 20},
         ]
-        present = self.research_state(exists=True, files=present_files)
-        self.assertEqual(research_action(root, local, present), ("noop", "c" * 40, []))
+        present = self.company_state(exists=True, files=present_files)
+        self.assertEqual(package_action(root, local, present), ("noop", "c" * 40, []))
 
-        changed = self.research_state(
+        changed = self.company_state(
             exists=True,
             files=[
                 {**present_files[0], "sha256": "d" * 64},
                 present_files[1],
-                {"path": "obsolete.txt", "sha256": "e" * 64, "size_bytes": 1},
+                {"path": "schema-gap-report.md", "sha256": "e" * 64, "size_bytes": 1},
+                {"path": "logo.svg", "sha256": "f" * 64, "size_bytes": 1},
             ],
         )
         self.assertEqual(
-            research_action(root, local, changed),
-            ("update", "c" * 40, ["research/test-company/obsolete.txt"]),
+            package_action(root, local, changed),
+            ("update", "c" * 40, ["companies/test-company/schema-gap-report.md"]),
         )
 
-    def test_research_state_requires_exact_flat_company_root(self) -> None:
-        local = [{"target_path": "research/test-company/company.json", "sha256": "a" * 64, "size_bytes": 1}]
-        nested = {**self.research_state(), "root": "research/test-company/2026-01-15"}
+    def test_company_state_requires_exact_flat_company_root(self) -> None:
+        local = [{"target_path": "companies/test-company/company.json", "sha256": "a" * 64, "size_bytes": 1}]
+        nested = {**self.company_state(), "root": "companies/test-company/2026-01-15"}
         with self.assertRaisesRegex(ArchivePlanError, "different company path"):
-            research_action("research/test-company", local, nested)
-        extra_key = {**self.research_state(), "legacy": []}
+            package_action("companies/test-company", local, nested)
+        extra_key = {**self.company_state(), "legacy": []}
         with self.assertRaisesRegex(ArchivePlanError, "unexpected or missing"):
-            research_action("research/test-company", local, extra_key)
+            package_action("companies/test-company", local, extra_key)
 
     def test_canonical_update_is_monotonic_and_identity_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -393,7 +395,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     package,
                     schema,
                     lock,
-                    remote_research_state=self.research_state(),
+                    remote_company_state=self.company_state(),
                     remote_slug_registry_state=self.registry_state(),
                     remote_canonical_state=state,
                 )
@@ -402,13 +404,13 @@ class GithubDeliveryTests(unittest.TestCase):
                 schema,
                 lock,
                 write_authorized=True,
-                remote_research_state=self.research_state(),
+                remote_company_state=self.company_state(),
                 remote_slug_registry_state=self.registry_state(),
                 remote_canonical_state=state,
                 confirm_same_date_revision=True,
             )
             self.assertTrue(plan["ready_for_write"])
-            self.assertEqual(plan["canonical_company"]["action"], "update-confirmed-revision")
+            self.assertEqual(plan["canonical_guard"]["action"], "update-confirmed-revision")
 
     def test_all_three_remote_observations_are_required_at_same_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -418,11 +420,11 @@ class GithubDeliveryTests(unittest.TestCase):
                 schema,
                 lock,
                 write_authorized=True,
-                remote_research_state=self.research_state(),
+                remote_company_state=self.company_state(),
                 remote_slug_registry_state=self.registry_state(),
             )
             self.assertFalse(missing["ready_for_write"])
-            self.assertEqual(missing["canonical_company"]["action"], "remote-preflight-required")
+            self.assertEqual(missing["canonical_guard"]["action"], "remote-preflight-required")
 
             with self.assertRaisesRegex(ArchivePlanError, "different base heads"):
                 self.plan(
@@ -430,7 +432,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     schema,
                     lock,
                     write_authorized=True,
-                    remote_research_state=self.research_state(),
+                    remote_company_state=self.company_state(),
                     remote_slug_registry_state=self.registry_state("d" * 40),
                     remote_canonical_state=self.canonical_absent_state(),
                 )
@@ -443,7 +445,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     package,
                     schema,
                     lock,
-                    remote_research_state=self.research_state(),
+                    remote_company_state=self.company_state(),
                     remote_slug_registry_state=self.registry_state(company_slug="wrong-company"),
                     remote_canonical_state=self.canonical_absent_state(),
                 )
@@ -452,7 +454,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     package,
                     schema,
                     lock,
-                    remote_research_state=self.research_state(),
+                    remote_company_state=self.company_state(),
                     remote_slug_registry_state=self.registry_state(identity={**self.identity(), "ticker": "OTHER"}),
                     remote_canonical_state=self.canonical_absent_state(),
                 )
@@ -514,7 +516,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     package,
                     schema,
                     lock,
-                    remote_research_state=self.research_state(),
+                    remote_company_state=self.company_state(),
                     remote_slug_registry_state=self.registry_state(),
                     remote_canonical_state=state,
                 )
