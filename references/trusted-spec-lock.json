@@ -4,36 +4,36 @@
     "authority": "research-doujiao-value-company",
     "repository": "bits-bean/doujiao-value-research-skill",
     "ref": "main",
-    "commit": "915e9aa0fc474a1df9fe31d079a04cae94e52ad4",
-    "protocol_version": "1.3.0",
-    "digest_sha256": "8745e7aaa41f1ed845f694ca680bee4ab1c88b336d699c3ecf7efbb10f52548a",
+    "commit": "cfb84b4932154483721f1a60d979e2a662675922",
+    "protocol_version": "2.0.0",
+    "digest_sha256": "2033ffd981cb13adfbf14c08d750371a3866162b0f66ab48c9dce4682cbeb1cd",
     "documents": [
       {
         "path": "references/specs/automation-workflow.md",
-        "sha256": "cf6c8ae129658f2ca152f601762343f70e08f322408b17816df2ce79905f0445",
-        "size_bytes": 5810
+        "sha256": "58aaf1c4c1ef37e3df1af5a74e3f843257c9c341a5cb43569f0417f2588b30f2",
+        "size_bytes": 6640
       },
       {
         "path": "references/specs/project-instructions.md",
-        "sha256": "f2efad021b2ebb69cba97300d40806b53c86f80476c7eb351621e4e8e5ac9446",
-        "size_bytes": 11252
+        "sha256": "9cf8759cdbb1ef9a617e79a9a2f34607edf6851f3c97ddaff7f184786016435e",
+        "size_bytes": 12544
       },
       {
         "path": "references/specs/research-methodology.md",
-        "sha256": "ac2c14bfb378bbcd72d2bf122cb7b6798b782d2408b7f598e02c7f017657c49b",
-        "size_bytes": 16763
+        "sha256": "01cb3abad1b02f90bcbba8ad0534c83fd49ef825351eb10cf5e66ac4bc4ffcea",
+        "size_bytes": 20106
       }
     ]
   },
   "company_schema": {
     "repository": "bits-bean/doujiao-value-system",
     "ref": "main",
-    "commit": "f25b38cf60c898c1aae58d1d55035164afbbcb50",
+    "commit": "ff2cbe2e7a7d5c93990499e83380104197fbc193",
     "path": "schemas/company.schema.json",
-    "blob_sha1": "d25536a7679391f0dcd80648a398fd202cd43e15",
-    "sha256": "71fe4b102727bd8c3d6b51ebeb183eac21a4bcef16411db7f84a36d04d464b5e",
-    "size_bytes": 26948,
-    "schema_version": "1.2.0",
+    "blob_sha1": "19073980953e19b815f6944dc88887ccb84c5c2f",
+    "sha256": "d128294bf29ac5a97c87f17d172e1a1325b79e98741b12123843031a323adc32",
+    "size_bytes": 33740,
+    "schema_version": "2.0.0",
     "bundled_path": "references/specs/company.schema.json"
   }
 }
