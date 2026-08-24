@@ -59,6 +59,7 @@ companies/<company-slug>/assets/visual-assets.json
   "cover_product": {
     "asset_path": "companies/example-company/assets/iconic-product.jpg",
     "asset_sha256": "<64位小写SHA-256>",
+    "alt_cn": "可准确识别公司与产品的中文说明",
     "source_url": "https://example.com/original-file",
     "source_page_url": "https://example.com/source-page",
     "source_publisher": "来源发布者",
@@ -69,18 +70,20 @@ companies/<company-slug>/assets/visual-assets.json
 }
 ```
 
-`display_language`、`cover_product.alt_cn` 以及 `localized_copy` 内的中文业务名、产品名和分部名称可以按 system 现有契约保留。不得把研究结论、社媒标题、渠道比例、背景提示词或布局坐标写入该文件。
+`cover_product.alt_cn` 为必填的非空中文身份说明。`display_language` 以及 `localized_copy` 内的中文业务名、产品名和分部名称可以按 system 现有契约保留。不得把研究结论、社媒标题、渠道比例、背景提示词或布局坐标写入该文件。
 
 逐项门禁：
 
 - `company_slug` 与研究包和目标路径一致；
 - `asset_path` 位于同一 `companies/<slug>/assets/` 下，不能越界或使用外链；
+- 产品文件只接受可直接验证尺寸和解码的高分辨率 PNG 或 JPEG；不接受 SVG、WebP、AVIF 或其他格式；
 - `asset_sha256` 与准备提交的本地文件逐字节一致；
+- `alt_cn` 是非空中文说明，准确说明画面对象及其与公司的关系；
 - `source_url` 和 `source_page_url` 使用公开的 `http/https` URL，不使用带临时 token 或签名的下载链接；
 - `source_publisher`、`rights_basis` 非空，`is_official` 与实际来源一致；
 - 素材不含文字水印冲突、账号截图、组合拼贴或无法证明身份的对象。
 
-无法满足任何一项时不提交该产品素材；允许 `visual-assets.json` 缺失，由下游使用无产品图的确定性模板，不得由研究 Skill 补生成图。
+无法满足任何一项时不提交该产品素材；允许 `visual-assets.json` 缺失，但下游正式封面必须 fail closed，只能标记为草案或待补素材，不得用无产品图模板冒充正式封面，也不得由研究 Skill 或下游生成身份替代图。
 
 ## 临时交付目录
 

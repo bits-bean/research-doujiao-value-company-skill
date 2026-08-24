@@ -256,9 +256,9 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 - `company.json.brand_identity.company_logo` 保存精确 asset path、来源 URL、替代文本和官方性；
 - 新 canonical Logo 使用 `companies/<slug>/assets/logo.svg`；已存在的 `logo-primary.*` 只作为 legacy 沿用；
-- 可选产品素材由 `companies/<slug>/assets/visual-assets.json` 声明文件 SHA-256、原始文件 URL、来源页、发布者、权利依据和官方性；
+- 可选产品素材由 `companies/<slug>/assets/visual-assets.json` 声明 PNG/JPEG 文件 SHA-256、非空中文 `alt_cn`、原始文件 URL、来源页、发布者、权利依据和官方性；
 - 素材在冻结研究目录之外准备，不写入 `research-manifest.json`，但 GitHub 交付时由规划器验证并与研究文件原子提交；
-- 缺失或权利依据不清时保留缺口，不使用 AI 生成图、图库替身或产品拼图补齐。
+- 缺失或权利依据不清时保留缺口；下游正式封面必须 fail closed、只能保留草案，不使用 AI 生成图、无产品图正式模板、图库替身或产品拼图补齐。
 
 内容层可以决定经验证素材在不同渠道如何摆放，但不得重新定义素材身份、来源、SHA-256 或官方性。
 

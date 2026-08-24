@@ -730,6 +730,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     "cover_product": {
                         "asset_path": "companies/test-company/assets/product.jpg",
                         "asset_sha256": "0" * 64,
+                        "alt_cn": "测试公司的代表性产品",
                         "source_url": "https://example.com/product.jpg",
                         "source_page_url": "https://example.com/product",
                         "source_publisher": "Example",
@@ -740,6 +741,41 @@ class GithubDeliveryTests(unittest.TestCase):
                 },
             )
             with self.assertRaisesRegex(ArchivePlanError, "asset_sha256"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_cover_product_requires_chinese_alt_text_and_supported_raster(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            assets = root / "identity-assets"
+            assets.mkdir()
+            product = assets / "product.webp"
+            product.write_bytes(b"product")
+            manifest = {
+                "manifest_version": "1.0",
+                "company_slug": "test-company",
+                "cover_product": {
+                    "asset_path": "companies/test-company/assets/product.webp",
+                    "asset_sha256": file_sha256(product),
+                    "alt_cn": "测试公司的代表性产品",
+                    "source_url": "https://example.com/product.webp",
+                    "source_page_url": "https://example.com/product",
+                    "source_publisher": "Example",
+                    "rights_basis": "Official media kit",
+                    "is_official": True,
+                },
+                "localized_copy": {},
+            }
+            write_json(assets / "visual-assets.json", manifest)
+            with self.assertRaisesRegex(ArchivePlanError, "supported direct product asset"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+            product.rename(assets / "product.jpg")
+            manifest["cover_product"]["asset_path"] = "companies/test-company/assets/product.jpg"
+            manifest["cover_product"]["asset_sha256"] = file_sha256(assets / "product.jpg")
+            manifest["cover_product"]["alt_cn"] = ""
+            write_json(assets / "visual-assets.json", manifest)
+            with self.assertRaisesRegex(ArchivePlanError, "alt_cn"):
                 self.plan(package, schema, lock, identity_assets_root=assets)
 
     def test_direct_main_requires_separate_authorization(self) -> None:

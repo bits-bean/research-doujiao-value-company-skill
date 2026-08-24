@@ -65,7 +65,7 @@ companies/<company-slug>/research-manifest.json
 - 任一受管文件缺失或变化：以冻结包完整受管文件集更新；旧的多余受管文件列入 `delete_paths`。
 - 非研究资产无论是否存在都不参与 `noop` 比较，不得列入 `delete_paths`；这包括公司 Logo、`images/` 目录、图片 manifest 与 SVG 母版。
 - 例外仅限本次显式 staging 的身份素材：新 Logo 只能写入 `companies/<slug>/assets/logo.svg` 且必须与 `company.json.brand_identity.company_logo.asset_path` 完全一致；已有 `logo-primary.*` 只沿用，不创建新的 legacy 文件。
-- 产品素材必须与 `companies/<slug>/assets/visual-assets.json` 成对提交，清单中的 `asset_path`、`asset_sha256`、来源 URL、来源页、发布者、权利依据和官方性全部通过门禁。规划器只 upsert 已声明文件，从不删除或改名其他资产。
+- 产品素材必须是 PNG/JPEG，并与 `companies/<slug>/assets/visual-assets.json` 成对提交；清单中的 `asset_path`、`asset_sha256`、非空中文 `alt_cn`、来源 URL、来源页、发布者、权利依据和官方性全部通过门禁。规划器只 upsert 已声明文件，从不删除或改名其他资产。
 - 发现版本子目录时停止；清理遗留 `research/` 或历史目录必须由用户明确指定精确路径，不得随本次整包提交自动扩张删除范围。
 
 正式 `company.json` 只允许单调前进：

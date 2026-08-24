@@ -47,7 +47,7 @@ SLUG_REGISTRY_STATE_KEYS = {
 CANONICAL_STATE_KEYS = {"repository", "branch", "base_head", "path", "exists", "content"}
 IDENTITY_ASSET_STATE_KEYS = {"repository", "branch", "base_head", "company_slug", "assets"}
 IDENTITY_ASSET_ENTRY_KEYS = {"path", "exists", "sha256", "size_bytes"}
-PRODUCT_ASSET_SUFFIXES = {".avif", ".jpeg", ".jpg", ".png", ".svg", ".webp"}
+PRODUCT_ASSET_SUFFIXES = {".jpeg", ".jpg", ".png"}
 SIGNED_QUERY_KEYS = {
     "access_token",
     "key",
@@ -267,6 +267,7 @@ def _validate_visual_asset_manifest(path: Path, company_slug: str, staging_root:
     required = {
         "asset_path",
         "asset_sha256",
+        "alt_cn",
         "source_url",
         "source_page_url",
         "source_publisher",
@@ -275,6 +276,8 @@ def _validate_visual_asset_manifest(path: Path, company_slug: str, staging_root:
     }
     if not required.issubset(cover):
         raise ArchivePlanError("visual-assets.json cover_product lacks required provenance fields")
+    if not _nonblank(cover.get("alt_cn")):
+        raise ArchivePlanError("cover_product.alt_cn must be nonblank")
     asset_path = cover.get("asset_path")
     expected_prefix = f"companies/{company_slug}/assets/"
     if not _nonblank(asset_path) or not asset_path.startswith(expected_prefix):
