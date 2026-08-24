@@ -2,15 +2,16 @@
 
 ## 权威模型
 
-研究协议与数据协议分开管理：
+兼容研究协议、当前执行协议与数据协议分层管理：
 
-- **研究协议**：当前“豆角长期价值研究” Skill 内的三份文档是唯一可编辑权威源：
+- **兼容研究协议**：manifest v2 的 `research_protocol` 继续由三份锁定文档定义：
   1. [project-instructions.md](specs/project-instructions.md)；
   2. [research-methodology.md](specs/research-methodology.md)；
   3. [automation-workflow.md](specs/automation-workflow.md)。
+- **当前执行协议**：[research-execution-and-audit.md](research-execution-and-audit.md) 定义能力预检、独立 pass、研究可得性、驱动与管理层台账、论点漂移、估值治理和来源审计；其他规范与执行脚本由 `execution_integrity` 一并锁定。
 - **company.json Schema**：`bits-bean/doujiao-value-system` 的 `schemas/company.schema.json` 是唯一可编辑权威源；[company.schema.json](specs/company.schema.json) 是当前 Skill 发行版锁定的只读副本。
 
-不得从 `doujiao-value-system/docs`、模型记忆、旧聊天或缓存替代研究协议正文。不得直接编辑 Skill 内 Schema 副本来改变数据协议；上游 Schema 变化后，先同步副本、更新信任锁、测试并发布新版 Skill。
+三份兼容文档的字节与 `research_protocol` 元组保持不变，以维持现有 v2 下游交接；新执行要求通过 `execution_integrity` 叠加，不伪造新的兼容 commit。不得从 `doujiao-value-system/docs`、模型记忆、旧聊天或缓存替代任何协议正文。不得直接编辑 Skill 内 Schema 副本来改变数据协议；上游 Schema 变化后，先同步副本、更新信任锁、测试并发布新版 Skill。
 
 ## 任务读取顺序
 
@@ -20,14 +21,19 @@
 
 1. [project-instructions.md](specs/project-instructions.md)：最高级行为规则；
 2. [research-methodology.md](specs/research-methodology.md)：研究方法、行业适配和报告结构；
-3. [company.schema.json](specs/company.schema.json)：`company.json` 唯一结构协议的锁定副本。
+3. [company.schema.json](specs/company.schema.json)：`company.json` 唯一结构协议的锁定副本；
+4. [research-execution-and-audit.md](research-execution-and-audit.md)：当前正式执行、挑战、论点状态和来源审计协议。
+
+在访问公司资料前，先按执行协议实测 `protocol_access / schema_access / official_source_retrieval / challenge_source_retrieval / calculation_runtime / package_write`。探针必须记录实际方法和结果；来源探针须绑定两条不同且已解析的来源与取回内容 SHA-256，不能把权限存在当作能力通过。
 
 ### 财报或重大事件增量更新
 
-在上述三项基础上追加：
+在上述四项基础上追加：
 
-4. 上一冻结版本的报告、`company.json` 与 `research-manifest.json`；
-5. [automation-workflow.md](specs/automation-workflow.md)。
+5. 上一冻结版本的报告、`company.json`、`evidence-ledger.json`、`calculation-ledger.json` 与 `research-manifest.json`；
+6. [automation-workflow.md](specs/automation-workflow.md)。
+
+逐项比较上一版本的论点假设、未解冲突和 DCF 参数。只允许由新官方财报或重大事件触发；任何状态或参数变化都要在当前 `thesis` 修订记录中绑定新证据，不能由股价变化反推商业假设。
 
 ### 审查旧研究包
 
@@ -35,23 +41,28 @@
 
 若 manifest 为 v2 但 `company.json.meta.schema_version` 属于 1.x，同样只能按旧锁审计；它不能作为当前 Schema 2.0 incremental 的前序包。迁移时回到原始证据，重建分类、行业指标与新增结构字段，在新目录运行当前 `full` 门禁后冻结，不能把旧自由文本机械改形或只改版本号。
 
+历史 v2 manifest 若只有兼容 `research_protocol`、没有 `integrity_profile: execution-bound-v1` 与 `execution_integrity`，可用 `audit` 模式诊断，但不能作为当前正式冻结或增量前序包。不要原地补写完整性声明。
+
 ### 下游交接
 
-本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，只交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；只有用户另行要求内容生产时才把它作为输入交给 `$produce-doujiao-value-content`，下游自行验证 `research_protocol` 与 Schema 锁并加载其内容规则。
+本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，只交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；只有用户另行要求内容生产时才把它作为输入交给 `$produce-doujiao-value-content`。下游继续验证不变的 `research_protocol` 与 Schema 锁，并可忽略不认识但不改变数据语义的 v2 顶层扩展；当前研究侧还必须验证 `integrity_profile` 与 `execution_integrity`，不能因旧下游只读兼容块而省略。
 
 公司身份素材只在缺失或明确授权替换时读取 [identity-assets.md](identity-assets.md)。真实 Logo、产品素材、来源与权利依据可以随研究包原子 GitHub 交付，但不属于冻结研究事实，也不授权本 Skill 选择布局、比例、背景或合成成品图片。
 
-## 信任锁 v2
+## 兼容锁与完整执行锁
 
-[trusted-spec-lock.json](trusted-spec-lock.json) 分为两块：
+[trusted-spec-lock.json](trusted-spec-lock.json) 至少包含三块：
 
-- `research_protocol`：记录 Skill 权威名、源码仓库、ref、发行 commit、`protocol_version`、三份权威文档的 SHA-256/大小与聚合摘要；
+- `research_protocol`：保留现有 v2 兼容元组，记录 Skill 权威名、源码仓库、ref、历史发行 commit、`protocol_version`、三份兼容文档的 SHA-256/大小与聚合摘要；
+- `execution_integrity`：以 `execution-bound-v1` profile 记录当前规范与工具链的逐文件 SHA-256/大小、规范摘要、工具链摘要和聚合摘要，并明确源码绑定是否已从外部仓库验证；
 - `company_schema`：记录 `doujiao-value-system` 仓库、ref、Schema commit、路径、Git blob SHA-1、SHA-256、大小和 `schema_version`。
 
 `research_protocol.digest_sha256` 的算法固定为：按 `path` 排序 `documents` 数组，对该数组执行
 `json.dumps(documents, ensure_ascii=False, sort_keys=True, separators=(',', ':'))`，再对 UTF-8 字节计算 SHA-256。
 
-运行时必须核对本地三份研究协议文档与 `research_protocol.documents` 的哈希、大小和摘要。Schema 副本必须匹配 `company_schema`；仅允许 GitHub 连接器落盘时额外添加一个末尾 LF 的可逆传输差异。
+运行时必须核对本地三份兼容文档与 `research_protocol.documents` 的哈希、大小和摘要，还要核对 `execution_integrity` 的精确文件清单、逐文件摘要、规范摘要、工具链摘要与聚合摘要。未列入的新增规范 / 运行脚本和被篡改的验证器都必须失败关闭。Schema 副本必须匹配 `company_schema`；仅允许 GitHub 连接器落盘时额外添加一个末尾 LF 的可逆传输差异。
+
+`research_protocol.commit` 只是兼容元组的一部分，不能单独证明当前执行代码来自该 commit。当前运行身份由 `execution_integrity` 与验证器 SHA-256 绑定；外部源码 commit 未实证时必须明确标为未验证，不得把 40 位字符串当作祖先关系证明。
 
 ## Schema 锚点检查
 
@@ -74,14 +85,16 @@ python3 scripts/verify_spec_anchor.py <doujiao-value-system-checkout> --head-ref
 记录：
 
 - `research_protocol` 的 authority、repository、ref、commit、版本、摘要和文档清单；
+- `integrity_profile`、完整执行摘要、工具链摘要、验证器 SHA-256 和合成的 `protocol_fingerprint`；
 - Schema repository、ref、commit、路径、blob SHA、SHA-256、版本及当前 HEAD 兼容检查；
-- 研究模式、公司身份、行业框架、数据截至日、估值日和访问日期。
+- 研究模式、执行档位、能力预检、独立 pass、公司身份、行业框架、数据截至日、估值日和访问日期。
 
 同一研究版本不得混用多个研究协议版本或 Schema 版本。
 
 ## 失败策略
 
-- 研究协议本地哈希或摘要不匹配：停止正式研究，只做完整性诊断；
+- 兼容研究协议或完整执行清单的本地哈希、大小或摘要不匹配：停止正式研究，只做完整性诊断；
+- 任一能力预检失败、挑战 / 来源审计未隔离、关键论断未裁决或关键来源未重新打开：不得进入 `ready_to_freeze`；
 - Schema 锚点、blob 或本地副本不匹配：不得创建、更新、验证或冻结 `company.json`；
 - 关键官方资料不可访问：降低状态并列明缺口，不得用聚合数据静默替代；
 - 只有展示层次要信息缺失时才可继续，并明确标注。

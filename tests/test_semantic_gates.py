@@ -726,6 +726,9 @@ class SemanticGateTests(unittest.TestCase):
         mutations = {
             "top-level": lambda lock: lock.__setitem__("extra", True),
             "research-protocol": lambda lock: lock["research_protocol"].__setitem__("name", "legacy"),
+            "execution-integrity": lambda lock: lock["execution_integrity"].__setitem__("extra", True),
+            "execution-artifact": lambda lock: lock["execution_integrity"]["artifacts"][0].__setitem__("extra", True),
+            "execution-source-binding": lambda lock: lock["execution_integrity"]["source_binding"].__setitem__("extra", True),
             "company-schema": lambda lock: lock["company_schema"].__setitem__("extra", True),
             "document": lambda lock: lock["research_protocol"]["documents"][0].__setitem__("extra", True),
         }
@@ -740,6 +743,23 @@ class SemanticGateTests(unittest.TestCase):
                     loaded = load_trusted_spec_lock(findings)
                 self.assertIsNone(loaded)
                 self.assertTrue(any(item.code.startswith("trusted-") for item in findings), findings)
+
+    def test_trusted_lock_rejects_toolchain_hash_tampering(self) -> None:
+        lock = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
+        validator = next(
+            item
+            for item in lock["execution_integrity"]["artifacts"]
+            if item["path"] == "scripts/validate_research_package.py"
+        )
+        validator["sha256"] = "0" * 64
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock_path = Path(temp_dir) / "trusted-spec-lock.json"
+            write_json(lock_path, lock)
+            findings: list[Finding] = []
+            with patch("validate_research_package.TRUSTED_SPEC_LOCK_PATH", lock_path):
+                loaded = load_trusted_spec_lock(findings)
+        self.assertIsNone(loaded)
+        self.assertIn("trusted-execution-artifact-mismatch", {item.code for item in findings})
 
     def test_schema_sha256_allows_only_one_final_lf_transport_variant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

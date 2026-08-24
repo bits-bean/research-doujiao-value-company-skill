@@ -12,11 +12,47 @@
 
 不得把管理层说法或推断写成事实。引语保留时间、人物、上下文和来源；不得用脱离上下文的短句替代长期行为。
 
+研究框架、知名投资者原则或代理角色不是证据。不得把模拟人物语录、角色投票、平均评分或未经验证的通用阈值写进主张账本；只能把它们转化为待核实的问题。
+
 ## 可追溯性
 
 关键数字记录：指标、期间、币种、单位、会计口径、原始值、规范化值、来源 ID、页码或章节。关键判断记录支持证据、反证、趋势、置信度和推翻条件。
 
 `company.json` 的 `sources[].id` 必须唯一；所有 `source_ids` 都必须解析。报告、证据台账和计算台账使用同一来源 ID。
+
+## 研究可得性与商业论点确定性
+
+两者必须分开记录，不能用一个“信心分”合并。机器结构集中在 `evidence-ledger.json` 根级的 `researchability` 与 `thesis`，字段契约执行 [research-execution-and-audit.md](research-execution-and-audit.md)：
+
+- `researchability` 评价公开资料是否足够研究，固定检查官方来源覆盖、经营 KPI 披露、第三方可验证性、时效性和结构透明度；每个维度写高 / 中 / 低、依据、来源和资料盲区；
+- `thesis` 中的商业论点确定性评价长期现金能力、竞争优势和资本需求本身是否可预测，另行保存依据、关键未知项和会改变判断的证据；
+- 每项主张原有 `confidence` 只表示该主张的证据置信度，不得改义为研究可得性或商业论点确定性。
+
+高研究可得性不证明企业优秀；低研究可得性也不是负面经营事实。关键官方资料缺失、披露滞后或无法第三方核验时，降低研究状态或标记 Too Hard，不得用便宜估值抵消资料盲区。
+
+## 关键论断的独立反证与裁决
+
+会改变企业质量、估值状态或研究状态的主张标记为关键论断，并由独立复核者或隔离的第二研究轮重新检索证据和最强反例。复核不能只重读原来源、复述原推理或先看到预期结论；无法实现独立取证时如实记为 `unresolved`。
+
+独立反证与裁决集中写入 `evidence-ledger.json` 的 `thesis` 和相关 `claims`，具体关联方式执行 [research-execution-and-audit.md](research-execution-and-audit.md)。每项至少能表达论断标识、决策重要性、复核方法、独立来源、最强反证、裁决状态、理由和日期。其中：
+
+- `decision_relevance` 只使用 `critical / supporting / context`；
+- `adjudication` 只使用 `upheld / narrowed / conflicted / rejected / unresolved`；
+- 独立复核来源必须解析到同一 `company.json.sources`，并与原主张来源形成真实的独立证据路径；
+- `rejected` 主张保留原文和裁决记录，但不得计入有效证据覆盖、评分、估值或结论；`narrowed` 只能使用裁决后的较窄表述；
+- `conflicted` 或 `unresolved` 若足以改变最终结论，必须进入报告的未解冲突、降低置信度，并触发 Too Hard 判断。
+
+裁决记录不能替代原 `claims[]`。原主张仍保存分类、来源、位置、反证和推翻条件；报告必须能从关键结论回溯到主张，再回溯到独立裁决。
+
+## 经营—现金—价值驱动图
+
+机器结构使用 `evidence-ledger.json.business_driver_map`，具体字段执行 [research-execution-and-audit.md](research-execution-and-audit.md)。只保留 2—5 个真正决定长期可分配现金的驱动；每项驱动必须记录：
+
+- `id`、`name`、`metric`、`definition`、`historical_baseline`、`current_state` 和 `causal_role`；
+- `direction_and_mechanism`、`cash_flow_link`、`moat_link`、`valuation_link`、`monitoring_indicator`；
+- `source_ids`、`confidence`、`counterevidence` 和 `would_falsify`。
+
+驱动总链可以是可复算公式，也可以是有顺序的因果表达；资料不足时不得伪造精确弹性。每个估值核心假设至少连接一个驱动，每个驱动至少连接一个现金流项目、一个护城河判断和一个可复查指标。未闭合的连接必须显式保留，不得用叙事遮蔽。
 
 ## 十年财务规范化
 
@@ -47,7 +83,11 @@
 
 ## 文化、管理层和资本配置
 
-建立“承诺—结果”时间线，比较股东信、业绩会、采访、薪酬与实际资本配置。检查承认错误、坏消息披露、激励、继任、并购克制、杠杆、高价回购和每股价值结果。
+建立“承诺—结果”时间线，先把语言标为 `commitment / forecast / aspiration`，再比较股东信、业绩会、采访、薪酬与实际资本配置。愿景不得计入承诺兑现率；预测必须有明确期间、可观察结果和偏差方向。检查承认错误、坏消息披露、激励、继任、并购克制、杠杆、高价回购和每股价值结果。
+
+在 `evidence-ledger.json.management_decision_ledger` 保存重大再投资、并购、回购、融资、去杠杆、退出和危机决策，具体字段执行 [research-execution-and-audit.md](research-execution-and-audit.md)。每项至少能表达决策日期与类型、决策内容、事前可得信息、公开理由、备选方案和约束、过程评价、可观察结果、结果评价、干扰因素、利益相关方证据、继任或系统依赖、来源和置信度。事前过程和事后结果必须分别评价，不能用结果倒推过程。
+
+利益相关方证据优先使用监管、客户、员工、供应商、竞争对手或交易对手的可定位资料；不可得时明确记录缺口，不得用公司自述代替。继任判断要区分个人依赖和制度能力；危机决策另检查披露速度、客户与核心能力保护，以及是否突破长期行为边界。
 
 “不做清单”来自长期行为边界，不得因为管理层没有公开列出清单而判负面。
 
@@ -72,6 +112,8 @@
 ## 结构化结果与验证
 
 - `durability` 的需求持久性、适应能力和外部冲击必须分别绑定事实证据、可验证破坏条件和来源；总体结论不能由护城河分数或 DCF 终值推断。
+- `researchability`、`business_driver_map`、`management_decision_ledger` 与 `thesis` 都属于证据台账 sidecar，不得写入或扩展锁定的 `company.json` Schema；具体结构以 [research-execution-and-audit.md](research-execution-and-audit.md) 为准，其来源必须全部解析，枚举和值域不得自创。
+- 关键论断必须有且仅有一个当前裁决；被否决论断不计入有效证据覆盖，足以改变结论的未解冲突必须在报告和完整度说明中显式出现。
 - 承诺事件必须同时记录标准化兑现状态、实际结果和 `next_validation` 的方法、判定条件、时间范围及来源；仅尚未兑现的 `pending` 事件可把结果写为 `null`，不得只写“持续关注”。
 - 资本配置必须标记投入公司 / 降低风险 / 返还股东三车道，记录结果状态、可观察结果和每股价值或韧性评价；金额不等于效果。
 - Pre-Mortem 每条保存触发因素、经营影响、资本/现金影响和价值影响，随后再记录概率、影响、期限、最早预警、可逆性和管理层缓解能力。概率、影响等级或缓解措施无法由证据支持时写 `null` 并在报告标为无法判断或未披露，禁止为了填满图表猜值。

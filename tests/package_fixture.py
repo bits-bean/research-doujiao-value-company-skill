@@ -5,7 +5,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from validate_research_package import write_json
+from validate_research_package import load_trusted_spec_lock, protocol_fingerprint, write_json
+from validate_research_process import canonical_company_sha256, deterministic_ordinary_claim_sample
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -590,23 +591,291 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         ("CLM-009", "双边网络和历史风控数据共同构成难以在短期复制的竞争优势。", "inference", None, "若新进入者两年内以更低成本达到同等覆盖和损失率则推翻该判断。"),
         ("CLM-010", "当前市场价格隐含中个位数增长与稳定利润率，安全边际并不宽。", "estimate", None, "若可验证长期增长低于百分之三或利润率跌破百分之十八则推翻估值判断。"),
     ]
-    write_json(
-        package / "evidence-ledger.json",
+    claim_modules = {
+        "CLM-001": "financials",
+        "CLM-002": "business",
+        "CLM-003": "competition",
+        "CLM-004": "financials",
+        "CLM-005": "management",
+        "CLM-006": "management",
+        "CLM-007": "governance",
+        "CLM-008": "business",
+        "CLM-009": "competition",
+        "CLM-010": "valuation",
+    }
+    critical_claim_ids = {"CLM-009", "CLM-010"}
+    extended_claims = []
+    for claim_id, claim, classification, location, falsifier in claims:
+        source_ids = ["SRC-FY"] if claim_id not in {"CLM-002", "CLM-007", "CLM-008"} else ["SRC-Q1"]
+        extended_claims.append(
+            {
+                "id": claim_id,
+                "claim": claim,
+                "classification": classification,
+                "confidence": "high" if classification != "estimate" else "medium",
+                "source_ids": source_ids,
+                "research_module": claim_modules[claim_id],
+                "decision_relevance": "critical" if claim_id in critical_claim_ids else "supporting",
+                "adjudication": "upheld",
+                "counterevidence": ["独立复核同时检索了相反经营趋势，但当前原件未显示足以推翻该论断的持续证据。"],
+                "counterevidence_search": (
+                    "隔离挑战者重新检索竞争者替代路径、监管文件和历史压力期数据，比较最强反例。"
+                    if claim_id in critical_claim_ids
+                    else None
+                ),
+                "would_falsify": falsifier or "若后续官方原件连续两个报告期显示相反趋势且无法由口径变化解释，则推翻该论断。",
+                **({"location": location} if location is not None else {}),
+            }
+        )
+
+    trust_findings = []
+    trusted_lock = load_trusted_spec_lock(trust_findings)
+    if trusted_lock is None:
+        raise AssertionError(f"test fixture requires a valid bundled trust lock: {trust_findings!r}")
+    all_claim_ids = [item["id"] for item in extended_claims]
+    preflight = []
+    for capability in (
+        "protocol_access",
+        "schema_access",
+        "official_source_retrieval",
+        "challenge_source_retrieval",
+        "calculation_runtime",
+        "package_write",
+    ):
+        source_id = {
+            "official_source_retrieval": "SRC-FY",
+            "challenge_source_retrieval": "SRC-Q1",
+        }.get(capability)
+        preflight.append(
+            {
+                "capability": capability,
+                "status": "passed",
+                "checked_at": "2026-04-15T10:00:00Z",
+                "method": f"实际执行 {capability} 探针并保存可复核结果。",
+                "source_id": source_id,
+                "evidence_sha256": ("a" * 64 if source_id == "SRC-FY" else "b" * 64 if source_id == "SRC-Q1" else None),
+                "failure_reason": None,
+            }
+        )
+
+    management_decisions = [
         {
-            "claims": [
-                {
-                    "id": claim_id,
-                    "claim": claim,
-                    "classification": classification,
-                    "confidence": "high" if classification != "estimate" else "medium",
-                    "source_ids": ["SRC-FY"] if claim_id not in {"CLM-002", "CLM-007", "CLM-008"} else ["SRC-Q1"],
-                    **({"location": location} if location is not None else {}),
-                    **({"would_falsify": falsifier} if falsifier is not None else {}),
-                }
-                for claim_id, claim, classification, location, falsifier in claims
-            ]
+            "id": "MGT-001",
+            "kind": "commitment",
+            "date": "2025-02-15",
+            "decision": "管理层承诺在维持核心网络投入的同时改善经营利润率。",
+            "information_available": "当时收入仍增长，但竞争补贴与开发支出正在压缩利润率。",
+            "public_rationale": "管理层认为优先投资高留存客户可以兼顾增长与经营效率。",
+            "alternatives": ["削减所有增长投入以短期提高利润率", "维持投入但停止低回报项目"],
+            "constraints": ["高价值客户迁移风险", "主要竞争者持续补贴压力", "年度资本预算边界约束"],
+            "ex_ante_process": "先比较客户留存与单位经济性，再把预算集中到可验证回报的核心网络项目。",
+            "process_quality": "high",
+            "outcome": "2025年核心投入保持且经营利润率同比改善。",
+            "outcome_quality": "positive",
+            "confounders": ["行业需求同期改善也贡献了部分利润率增长"],
+            "stakeholder_claim_ids": ["CLM-006"],
+            "succession_dependency": "medium",
+            "source_ids": ["SRC-FY"],
+            "confidence": "high",
         },
-    )
+        {
+            "id": "MGT-002",
+            "kind": "capital_allocation",
+            "date": "2025-12-31",
+            "decision": "公司只在回购价格低于审慎价值区间时返还多余现金。",
+            "information_available": "公司拥有净现金、稳定自由现金流和可推迟的非核心投资。",
+            "public_rationale": "回购必须提高持续股东每股价值并保留衰退期现金缓冲。",
+            "alternatives": ["向全体股东发放特别股息", "提前偿还长期固定利率债务", "扩大外部并购与业务投资"],
+            "constraints": ["公开市场估值快速波动", "经济衰退时信用损失上升风险", "董事会设定的最低现金缓冲"],
+            "ex_ante_process": "管理层把回购均价与内部价值区间及压力情景流动性逐项比较。",
+            "process_quality": "high",
+            "outcome": "实际回购均价低于基准价值区间且资产负债表仍为净现金。",
+            "outcome_quality": "positive",
+            "confounders": ["报告期股价回落改善了可执行的回购价格"],
+            "stakeholder_claim_ids": ["CLM-005"],
+            "succession_dependency": "low",
+            "source_ids": ["SRC-FY"],
+            "confidence": "high",
+        },
+        {
+            "id": "MGT-003",
+            "kind": "governance",
+            "date": "2026-03-31",
+            "decision": "董事会维持独立风险监督并要求重大资本行动通过压力情景审查。",
+            "information_available": "监管与信用损失不确定性上升，净现金仍提供可观缓冲。",
+            "public_rationale": "独立监督用于保护客户承诺、资本韧性和长期股东价值。",
+            "alternatives": ["把资本权限集中给首席执行官", "仅依赖年度预算审查"],
+            "constraints": ["经营风险信息存在报告时滞", "跨业务风险传导具有复杂性", "关键岗位继任安排仍在推进"],
+            "ex_ante_process": "风险委员会按季度审查信用、流动性和高价回购红线，并向全体董事汇报。",
+            "process_quality": "mixed",
+            "outcome": "截至数据日未发生突破资本红线的重大行动。",
+            "outcome_quality": "positive",
+            "confounders": ["尚未经历完整衰退周期，因此治理韧性仍需持续验证"],
+            "stakeholder_claim_ids": ["CLM-007"],
+            "succession_dependency": "medium",
+            "source_ids": ["SRC-Q1"],
+            "confidence": "medium",
+        },
+    ]
+
+    risk_placements = []
+    for index, risk in enumerate(company["risks"]["pre_mortem"]):
+        placement = ("cash_flow", "scenario", "tail_case", "discount_rate", "cash_flow")[index]
+        risk_placements.append(
+            {
+                "risk": risk["failure_path"],
+                "placement": placement,
+                "scenario": "悲观情景" if placement == "scenario" else "压力尾部情景" if placement == "tail_case" else None,
+                "rationale": "该风险只通过这一经济传导位置进入估值，已检查其他现金流、情景和折现率参数以避免重复扣罚。",
+                "claim_ids": ["CLM-009" if index < 3 else "CLM-010"],
+            }
+        )
+
+    sensitivity_cells = [
+        {
+            "discount_rate": item["discount_rate"],
+            "terminal_growth": item["terminal_growth"],
+            "valuation_status": "接近合理",
+        }
+        for item in company["valuation"]["dcf_sensitivity"]
+    ]
+    seed = canonical_company_sha256(company)
+    ordinary_ids = [item["id"] for item in extended_claims if item["decision_relevance"] != "critical"]
+    sampled_ids = deterministic_ordinary_claim_sample(ordinary_ids, seed)
+    claim_by_id = {item["id"]: item for item in extended_claims}
+
+    def audit_check(
+        check_id: str,
+        target_type: str,
+        target_id: str,
+        criticality: str,
+        source_ids: list[str],
+        observed_value: object,
+    ) -> dict:
+        return {
+            "id": check_id,
+            "target_type": target_type,
+            "target_id": target_id,
+            "criticality": criticality,
+            "source_ids": source_ids,
+            "status": "pass",
+            "checked_at": "2026-04-15T12:00:00Z",
+            "location": "重新打开的官方原件对应页码与结构化披露位置",
+            "observed": "隔离审计者重新读取原件并复核目标值、口径与期间一致。",
+            "observed_value": observed_value,
+            "notes": "该检查独立于主研究记录完成并保存了来源定位。",
+        }
+
+    source_checks = [
+        audit_check("AUD-IDENTITY", "company_field", "company.meta.identity", "critical", ["SRC-FY"], {"company_name_en": "Test Company", "ticker": "TEST", "exchange": "NYSE"}),
+        audit_check("AUD-PRICE", "company_field", "company.valuation.market_price", "critical", ["SRC-Q1"], 10),
+        audit_check("AUD-SHARES", "company_field", "company.valuation.diluted_shares", "critical", ["SRC-Q1"], 100 * M),
+        audit_check("AUD-MCAP", "company_field", "company.valuation.market_cap", "critical", ["SRC-Q1"], 1000 * M),
+        audit_check("AUD-EV", "company_field", "company.valuation.enterprise_value", "critical", ["SRC-Q1"], 970 * M),
+        audit_check("AUD-START", "calculation", "calculation.starting_cash_flow", "critical", ["SRC-FY"], starting_fcff),
+        audit_check(
+            "AUD-DCF",
+            "valuation_assumption",
+            "valuation.dcf_assumptions",
+            "critical",
+            ["SRC-FY"],
+            {
+                "scenarios": sorted(
+                    [
+                        {
+                            "name": item["name"],
+                            "revenue_growth": item["revenue_growth"],
+                            "margin": item["margin"],
+                            "discount_rate": item["discount_rate"],
+                            "terminal_growth": item["terminal_growth"],
+                        }
+                        for item in dcf_scenarios
+                    ],
+                    key=lambda item: item["name"],
+                ),
+                "equity_bridge_calculation_ids": sorted(
+                    item["id"]
+                    for item in dcf_calculations
+                    if item.get("valuation_role") == "equity_value_bridge"
+                ),
+            },
+        ),
+    ]
+    for claim_id in sorted(critical_claim_ids):
+        claim = claim_by_id[claim_id]
+        source_checks.append(audit_check(f"AUD-{claim_id}", "claim", claim_id, "critical", claim["source_ids"], None))
+    for claim_id in sampled_ids:
+        claim = claim_by_id[claim_id]
+        source_checks.append(audit_check(f"AUD-{claim_id}", "claim", claim_id, "ordinary", claim["source_ids"], None))
+
+    evidence = {
+        "ledger_version": "2.0",
+        "run": {
+            "run_id": "RUN-TEST-2026Q1",
+            "research_mode": "full",
+            "workflow_tier": "standard",
+            "data_cutoff_at": "2026-04-15T12:00:00Z",
+            "status": "ready_to_freeze",
+            "protocol_fingerprint": protocol_fingerprint(trusted_lock),
+            "preflight": preflight,
+            "passes": [
+                {"id": "PASS-PRIMARY", "role": "primary_research", "actor_id": "researcher-primary", "execution": "primary_context", "status": "completed", "scope": "完成公司身份、财务、经营与估值主研究。", "claim_ids": all_claim_ids, "source_ids_accessed": ["SRC-FY", "SRC-Q1"]},
+                {"id": "PASS-CHALLENGE", "role": "adversarial_review", "actor_id": "researcher-challenge", "execution": "isolated_agent", "status": "completed", "scope": "独立检索最强反例并挑战关键竞争与估值论断。", "claim_ids": sorted(critical_claim_ids), "source_ids_accessed": ["SRC-FY", "SRC-Q1"]},
+                {"id": "PASS-AUDIT", "role": "source_audit", "actor_id": "researcher-audit", "execution": "isolated_agent", "status": "completed", "scope": "重新打开来源并核验关键值及确定性普通样本。", "claim_ids": sorted(critical_claim_ids | set(sampled_ids)), "source_ids_accessed": ["SRC-FY", "SRC-Q1"]},
+                {"id": "PASS-SYNTHESIS", "role": "synthesis", "actor_id": "researcher-synthesis", "execution": "synthesis_context", "status": "completed", "scope": "综合共识、冲突、遗漏与无法裁决项并形成最终结论。", "claim_ids": all_claim_ids, "source_ids_accessed": []},
+            ],
+        },
+        "researchability": {
+            "official_source_coverage": "high",
+            "operating_kpi_coverage": "medium",
+            "third_party_verifiability": "medium",
+            "timeliness": "high",
+            "opacity": "low",
+            "evidence_confidence": "high",
+            "thesis_certainty": "medium",
+            "assessment": "官方财务和核心经营指标覆盖充分，但长期竞争反事实仍需要跨周期资料验证，资料可得性与论点确定性分别评价。",
+            "limitations": ["第三方客户级留存资料有限，当前主要依赖可定位的官方经营指标。"],
+        },
+        "business_driver_map": {
+            "equation": "活跃客户数量乘以单位服务收入，再扣除服务成本与必要资本投入，形成可分配现金。",
+            "value_capture_chain": ["可靠服务提高客户留存与使用频率", "更高使用量和单位收入转化为经营现金", "扣除维护投入后形成股东可分配现金"],
+            "drivers": [
+                {
+                    "id": "DRV-RETENTION", "name": "核心客户续费", "metric": "核心客户续费率", "definition": "报告期继续使用核心服务的高价值客户比例", "historical_baseline": "过去五年保持在稳定高位区间", "current_state": "最新季度仍处历史稳定区间", "causal_role": "retention", "direction_and_mechanism": "续费提高会延长客户寿命并降低替换获客成本", "cash_flow_link": "通过经常性收入和较低获客支出提高自由现金流", "moat_link": "持续高续费验证账户历史和流程嵌入形成的转换成本", "valuation_link": "决定基准情景收入增长与利润率持续性", "monitoring_indicator": "每季将续费率与过去五年同季区间比较", "source_ids": ["SRC-Q1"], "confidence": "high", "counterevidence": ["标准化接口可能降低部分客户迁移成本"], "would_falsify": "若续费率连续四季明显低于长期均值且竞争者同步获客，则推翻该驱动。"
+                },
+                {
+                    "id": "DRV-UNIT-REVENUE", "name": "单位服务收入", "metric": "每活跃客户服务收入", "definition": "核心服务收入除以同口径活跃客户数量", "historical_baseline": "过去五年随产品组合温和提升", "current_state": "最新季度仍保持同比增长", "causal_role": "price", "direction_and_mechanism": "在留存稳定时单位收入增长反映定价和产品组合改善", "cash_flow_link": "单位收入增长在固定平台成本下提高经营现金率", "moat_link": "提价后留存稳定可验证可靠性和权益组合的付费价值", "valuation_link": "连接悲观、基准和乐观情景的收入增长假设", "monitoring_indicator": "每季拆分价格、客户数和产品组合对单位收入的贡献", "source_ids": ["SRC-FY", "SRC-Q1"], "confidence": "medium", "counterevidence": ["短期产品组合变化可能制造表面单位收入增长"], "would_falsify": "若单位收入上涨同时续费和使用频率持续下降，则推翻定价能力判断。"
+                },
+            ],
+        },
+        "management_decision_ledger": management_decisions,
+        "thesis": {
+            "overall_change": "baseline",
+            "assumptions": [
+                {"id": "ASM-RETENTION", "assumption": company["verdict"]["key_assumptions"][0], "importance": "core", "prior_status": None, "current_status": "supported", "change_type": "baseline", "evidence_claim_ids": ["CLM-002", "CLM-008"], "reason": "续费与单位服务收入的历史及最新官方数据共同支持该假设。", "falsifier": "若续费连续四季跌破历史区间且提价不能抵消流失，该假设失效。", "red_lines": ["核心客户续费连续四季明显低于长期均值"], "next_validation": "下一季官方报告发布后重新核对续费与单位收入。"},
+                {"id": "ASM-COVERAGE", "assumption": company["verdict"]["key_assumptions"][1], "importance": "core", "prior_status": None, "current_status": "supported", "change_type": "baseline", "evidence_claim_ids": ["CLM-003", "CLM-009"], "reason": "商户覆盖增长和网络反馈证据支持扩张可以抵消竞争压力。", "falsifier": "若新增覆盖依赖持续补贴且活跃商户下降，该假设失效。", "red_lines": ["活跃商户连续下降且新增覆盖停滞"], "next_validation": "下一份年报核对活跃商户、补贴和交易频次。"},
+            ],
+            "valuation_assumption_changes": [],
+            "rejected_claim_ids": [],
+            "unresolved_conflicts": [],
+            "revision_log": [
+                {"id": "REV-BASELINE", "changed_at": "2026-04-15T12:00:00Z", "change_type": "baseline", "summary": "建立首次完整研究的假设状态、估值参数和来源审计基线。", "affected_assumption_ids": ["ASM-RETENTION", "ASM-COVERAGE"], "evidence_claim_ids": ["CLM-002", "CLM-003", "CLM-008", "CLM-009"]}
+            ],
+        },
+        "valuation_review": {
+            "model_applicability": [
+                {"model": "FCFF DCF", "role": "primary", "status": "appropriate", "reason": "经营现金流和必要资本投入可由十年记录复算，适合作为主模型。", "key_assumptions": ["核心客户续费稳定", "利润率随规模温和改善"], "result_direction": "fair"},
+                {"model": "Reverse DCF", "role": "reverse", "status": "appropriate", "reason": "可从现价反推现金增长与再投资组合并与历史事实比较。", "key_assumptions": ["现价与稀释后股数同期", "起始现金流口径与主模型一致"], "result_direction": "fair"},
+                {"model": "FCF yield cross-check", "role": "cross_check", "status": "limited", "reason": "倍数可识别主模型异常但无法独立表达长期再投资路径。", "key_assumptions": ["自由现金流口径可比", "净现金调整同期一致"], "result_direction": "fair"},
+            ],
+            "risk_placements": risk_placements,
+            "model_conflicts": [],
+            "conclusion_stability": {"cells": sensitivity_cells, "verdict_flip": False, "action": "maintain", "explanation": "九格在审慎参数范围内均保持接近合理，当前结论不依赖单一相邻参数组合。"},
+        },
+        "source_audit": {"audit_pass_id": "PASS-AUDIT", "selection_seed": seed, "checks": source_checks},
+        "claims": extended_claims,
+    }
+    write_json(package / "evidence-ledger.json", evidence)
     write_json(
         package / "calculation-ledger.json",
         {

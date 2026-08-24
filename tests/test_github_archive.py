@@ -26,8 +26,10 @@ from validate_research_package import (  # noqa: E402
     EXPECTED_SPEC_REPOSITORY,
     FROZEN_HASH_FILES,
     Finding,
+    INTEGRITY_PROFILE,
     file_sha256,
     git_blob_sha1_candidates,
+    protocol_fingerprint,
     write_json,
 )
 
@@ -46,9 +48,23 @@ class GithubDeliveryTests(unittest.TestCase):
             "digest_sha256": "d" * 64,
             "documents": [],
         }
+        execution_integrity = {
+            "profile": INTEGRITY_PROFILE,
+            "normative_digest_sha256": "e" * 64,
+            "toolchain_digest_sha256": "f" * 64,
+            "bundle_digest_sha256": "1" * 64,
+            "artifacts": [],
+            "source_binding": {
+                "repository": "bits-bean/doujiao-value-research-skill",
+                "ref": "main",
+                "payload_commit": None,
+                "verification_status": "unverified",
+            },
+        }
         trusted_lock = {
-            "lock_version": "2.0",
+            "lock_version": "3.0",
             "research_protocol": research_protocol,
+            "execution_integrity": execution_integrity,
             "company_schema": {
                 "repository": EXPECTED_SPEC_REPOSITORY,
                 "ref": "main",
@@ -57,6 +73,13 @@ class GithubDeliveryTests(unittest.TestCase):
                 "blob_sha1": schema_blob,
                 "schema_version": "test-1",
             },
+        }
+        fingerprint = protocol_fingerprint(trusted_lock)
+        validation_integrity = {
+            "integrity_profile": INTEGRITY_PROFILE,
+            "validator_sha256": fingerprint["validator_sha256"],
+            "toolchain_digest_sha256": execution_integrity["toolchain_digest_sha256"],
+            "protocol_fingerprint": fingerprint,
         }
         package = root / "package"
         package.mkdir()
@@ -92,7 +115,13 @@ class GithubDeliveryTests(unittest.TestCase):
             if name == "validation-report.json":
                 write_json(
                     package / name,
-                    {"validator": "doujiao-research-validator", "mode": "full", "errors": 0, "warnings": 0},
+                    {
+                        "validator": "doujiao-research-validator",
+                        "mode": "full",
+                        "errors": 0,
+                        "warnings": 0,
+                        **validation_integrity,
+                    },
                 )
             elif name.endswith(".json"):
                 write_json(package / name, {"ok": True})
@@ -114,6 +143,8 @@ class GithubDeliveryTests(unittest.TestCase):
                 "schema_version": "test-1",
             },
             "research_protocol": research_protocol,
+            "integrity_profile": INTEGRITY_PROFILE,
+            "execution_integrity": execution_integrity,
             "research": {
                 key: meta[key]
                 for key in (
@@ -133,6 +164,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 "mode": "full",
                 "errors": 0,
                 "warnings": 0,
+                **validation_integrity,
             },
             "files": [
                 {

@@ -1,5 +1,5 @@
 {
-  "lock_version": "2.0",
+  "lock_version": "3.0",
   "research_protocol": {
     "authority": "research-doujiao-value-company",
     "repository": "bits-bean/doujiao-value-research-skill",
@@ -24,6 +24,146 @@
         "size_bytes": 20106
       }
     ]
+  },
+  "execution_integrity": {
+    "profile": "execution-bound-v1",
+    "normative_digest_sha256": "5046410b0dceb26b1db96f91e363757ba145ee27842af449808f3efdaa70dc1e",
+    "toolchain_digest_sha256": "368b1d5d0953011bb2b3ee297b004a8bfc38fa5690421f73195588299077238e",
+    "bundle_digest_sha256": "42cc30f4ea0a5582adffc20bb169ac3fe788cbf9ba7a2287635e521ef216294b",
+    "artifacts": [
+      {
+        "path": "SKILL.md",
+        "role": "normative",
+        "sha256": "6efc709da7f0b948b69a494a862823249435843485d1f5cbe15a25ff379d5e65",
+        "size_bytes": 15479
+      },
+      {
+        "path": "agents/openai.yaml",
+        "role": "normative",
+        "sha256": "74c10ffb91191b44a445aba97b803c00d3111aff65020dcb5226a5f9a9d8f8ce",
+        "size_bytes": 969
+      },
+      {
+        "path": "references/classification-and-chart-routing.md",
+        "role": "normative",
+        "sha256": "1fb53c787a938e6a14992e3d819ecc84a3cbd0bf08f743d6469f1ef3a310b600",
+        "size_bytes": 7487
+      },
+      {
+        "path": "references/evidence-and-calculation.md",
+        "role": "normative",
+        "sha256": "e2e74a8db850ef9745e7ced6f507d587a1666dc96dcd456da74107b78fc2f1da",
+        "size_bytes": 11961
+      },
+      {
+        "path": "references/github-archive.md",
+        "role": "normative",
+        "sha256": "b352217a17d51e189d5d05b51293b8d571733cba343bbae6a703a1169307241c",
+        "size_bytes": 10119
+      },
+      {
+        "path": "references/identity-assets.md",
+        "role": "normative",
+        "sha256": "837eea6b020990582b14d6a3e120765617bc4946534c742dd883a0e6bc045d15",
+        "size_bytes": 6653
+      },
+      {
+        "path": "references/income-statement-sankey.md",
+        "role": "normative",
+        "sha256": "1682be1bd959c2b2f8c4aba3d5bb32793c6b365a45eac3d7e8e6f1f22e456b99",
+        "size_bytes": 4609
+      },
+      {
+        "path": "references/qa-gates.md",
+        "role": "normative",
+        "sha256": "f4bbd2047fe77f6a1a9c5c3ee69005c8b601dad5230bbf30110805e543d8f395",
+        "size_bytes": 18576
+      },
+      {
+        "path": "references/research-contract.md",
+        "role": "normative",
+        "sha256": "49f1e0c83fd4e4d4e187debc90f05abbcdeb7681f52492b5f9beb803e61de5b4",
+        "size_bytes": 26148
+      },
+      {
+        "path": "references/research-execution-and-audit.md",
+        "role": "normative",
+        "sha256": "f3c29a642c3e0f45ef97a18d4727af9edfbf864866ad1263ffb1ad0f249d1bf8",
+        "size_bytes": 13358
+      },
+      {
+        "path": "references/source-routing.md",
+        "role": "normative",
+        "sha256": "428452dba9bcd0f94fe2bbdce56848effe42a4dab48d233b769357eb35d1703f",
+        "size_bytes": 9019
+      },
+      {
+        "path": "references/specs/automation-workflow.md",
+        "role": "normative",
+        "sha256": "488c77d63fc83281788731ed4abd78fb4120bac36107c6b4783cbe0c694a752f",
+        "size_bytes": 7027
+      },
+      {
+        "path": "references/specs/project-instructions.md",
+        "role": "normative",
+        "sha256": "9a1a0051730f61e4f99eee13b443da62d86eabb75475de1f61e63f32e465ef43",
+        "size_bytes": 13201
+      },
+      {
+        "path": "references/specs/research-methodology.md",
+        "role": "normative",
+        "sha256": "01cb3abad1b02f90bcbba8ad0534c83fd49ef825351eb10cf5e66ac4bc4ffcea",
+        "size_bytes": 20106
+      },
+      {
+        "path": "references/valuation-qa.md",
+        "role": "normative",
+        "sha256": "3211ddde2da7259a3079ba9823dd869414430738191f3492313eb773d7d50bbb",
+        "size_bytes": 12121
+      },
+      {
+        "path": "scripts/freeze_research.py",
+        "role": "toolchain",
+        "sha256": "2d3da8a82140370d51b455dcbb2e29c5fa0374654f675ac2c1a711a881049d16",
+        "size_bytes": 38473
+      },
+      {
+        "path": "scripts/prepare_github_archive.py",
+        "role": "toolchain",
+        "sha256": "3cb909d15f58a311961a5c81eb669c0b8a87377ed60443ae725b3f500ff363ca",
+        "size_bytes": 46074
+      },
+      {
+        "path": "scripts/validate_research_package.py",
+        "role": "toolchain",
+        "sha256": "2e8a894b45f39d7b81f36bf8eb8ff48df5b08f67368b815c54c96e1c7d7b2525",
+        "size_bytes": 263025
+      },
+      {
+        "path": "scripts/validate_research_process.py",
+        "role": "toolchain",
+        "sha256": "1cbb5cd239021f87da0a86d0712a46f44edee42717806baf0497c9ec1ef5bfc4",
+        "size_bytes": 75968
+      },
+      {
+        "path": "scripts/validate_skill.py",
+        "role": "toolchain",
+        "sha256": "9c04047f1ce054fac5521363bf553640e7e1286e1d3f07f081aa0c3b55ee1c1f",
+        "size_bytes": 17392
+      },
+      {
+        "path": "scripts/verify_spec_anchor.py",
+        "role": "toolchain",
+        "sha256": "02b06ca79fa2167320d49a525acf684e5cf704438912d28efd2f104d408b30f3",
+        "size_bytes": 5183
+      }
+    ],
+    "source_binding": {
+      "repository": "bits-bean/doujiao-value-research-skill",
+      "ref": "main",
+      "payload_commit": null,
+      "verification_status": "unverified"
+    }
   },
   "company_schema": {
     "repository": "bits-bean/doujiao-value-system",

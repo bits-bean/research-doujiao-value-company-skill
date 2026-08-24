@@ -771,7 +771,7 @@ def build_archive_plan(
         and logo_guard in {"not-declared", "staged", "preserve-existing"}
     )
     return {
-        "plan_version": "6.0",
+        "plan_version": "7.0",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -789,6 +789,9 @@ def build_archive_plan(
             "data_as_of": research.get("data_as_of"),
             "valuation_date": research.get("valuation_date"),
             "research_protocol": manifest.get("research_protocol"),
+            "integrity_profile": manifest.get("integrity_profile"),
+            "execution_integrity": manifest.get("execution_integrity"),
+            "validator_sha256": recorded_validation.get("validator_sha256"),
             "specification": manifest.get("specification"),
         },
         "slug_binding": {

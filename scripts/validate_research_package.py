@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from validate_research_process import validate_research_process
+
 
 REQUIRED_FILES = (
     "research-report.md",
@@ -34,6 +36,8 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.0"
+INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
 PROTOCOL_DOCUMENT_PATHS = (
@@ -42,7 +46,7 @@ PROTOCOL_DOCUMENT_PATHS = (
     "references/specs/research-methodology.md",
 )
 BUNDLED_SCHEMA_PATH = "references/specs/company.schema.json"
-TRUSTED_LOCK_KEYS = {"lock_version", "research_protocol", "company_schema"}
+TRUSTED_LOCK_KEYS = {"lock_version", "research_protocol", "execution_integrity", "company_schema"}
 RESEARCH_PROTOCOL_KEYS = {
     "authority",
     "repository",
@@ -63,6 +67,16 @@ COMPANY_SCHEMA_KEYS = {
     "schema_version",
     "bundled_path",
 }
+EXECUTION_INTEGRITY_KEYS = {
+    "profile",
+    "normative_digest_sha256",
+    "toolchain_digest_sha256",
+    "bundle_digest_sha256",
+    "artifacts",
+    "source_binding",
+}
+EXECUTION_ARTIFACT_KEYS = {"path", "role", "sha256", "size_bytes"}
+SOURCE_BINDING_KEYS = {"repository", "ref", "payload_commit", "verification_status"}
 CLASSIFICATIONS = {"fact", "management_claim", "third_party", "inference", "estimate"}
 VALUATION_CASH_FLOW_BASES = {"fcff", "fcfe", "owner_earnings", "distributable_common_cash"}
 CONFIDENCE = {"high", "medium", "low"}
@@ -360,6 +374,45 @@ def protocol_digest(documents: list[dict[str, Any]]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def canonical_inventory_digest(artifacts: list[dict[str, Any]]) -> str:
+    """Hash a path-sorted execution artifact inventory without ambient metadata."""
+    ordered = sorted(artifacts, key=lambda item: item["path"])
+    encoded = json.dumps(
+        ordered,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def expected_execution_artifacts() -> dict[str, str]:
+    """Return the complete release inventory covered by execution integrity."""
+    paths: dict[str, str] = {
+        "SKILL.md": "normative",
+        "agents/openai.yaml": "normative",
+    }
+    for path in sorted((SKILL_ROOT / "references").rglob("*.md")):
+        paths[path.relative_to(SKILL_ROOT).as_posix()] = "normative"
+    for path in sorted((SKILL_ROOT / "scripts").glob("*.py")):
+        paths[path.relative_to(SKILL_ROOT).as_posix()] = "toolchain"
+    return paths
+
+
+def protocol_fingerprint(trusted: dict[str, Any]) -> dict[str, Any]:
+    """Bind package execution to protocol, Schema, and exact validator code."""
+    protocol = trusted.get("research_protocol", {})
+    execution = trusted.get("execution_integrity", {})
+    schema = trusted.get("company_schema", {})
+    return {
+        "research_protocol_digest_sha256": protocol.get("digest_sha256"),
+        "execution_bundle_digest_sha256": execution.get("bundle_digest_sha256"),
+        "schema_version": schema.get("schema_version"),
+        "schema_sha256": schema.get("sha256"),
+        "validator_sha256": file_sha256(Path(__file__).resolve()),
+    }
 
 
 def git_blob_sha1(path: Path) -> str:
@@ -4259,9 +4312,15 @@ def load_trusted_spec_lock(findings: list[Finding]) -> dict[str, Any] | None:
     if (
         not isinstance(lock, dict)
         or set(lock) != TRUSTED_LOCK_KEYS
-        or lock.get("lock_version") != "2.0"
+        or lock.get("lock_version") != "3.0"
     ):
-        add(findings, "error", "trusted-spec-lock-shape", str(path), "bundled lock must use lock_version 2.0 and contain only lock_version, research_protocol, and company_schema")
+        add(
+            findings,
+            "error",
+            "trusted-spec-lock-shape",
+            str(path),
+            "bundled lock must use lock_version 3.0 and contain only lock_version, research_protocol, execution_integrity, and company_schema",
+        )
         return None
 
     protocol = lock.get("research_protocol")
@@ -4318,6 +4377,78 @@ def load_trusted_spec_lock(findings: list[Finding]) -> dict[str, Any] | None:
             actual_digest = None
         if protocol.get("digest_sha256") != actual_digest:
             add(findings, "error", "trusted-protocol-digest", str(path), "research_protocol digest does not match its path-sorted documents inventory")
+
+    execution = lock.get("execution_integrity")
+    artifacts = execution.get("artifacts") if isinstance(execution, dict) else None
+    source_binding = execution.get("source_binding") if isinstance(execution, dict) else None
+    execution_valid = (
+        isinstance(execution, dict)
+        and set(execution) == EXECUTION_INTEGRITY_KEYS
+        and execution.get("profile") == INTEGRITY_PROFILE
+        and re.fullmatch(r"[0-9a-f]{64}", str(execution.get("normative_digest_sha256", ""))) is not None
+        and re.fullmatch(r"[0-9a-f]{64}", str(execution.get("toolchain_digest_sha256", ""))) is not None
+        and re.fullmatch(r"[0-9a-f]{64}", str(execution.get("bundle_digest_sha256", ""))) is not None
+        and isinstance(artifacts, list)
+        and isinstance(source_binding, dict)
+        and set(source_binding) == SOURCE_BINDING_KEYS
+        and source_binding.get("repository") == EXPECTED_PROTOCOL_REPOSITORY
+        and source_binding.get("ref") == "main"
+        and source_binding.get("payload_commit") is None
+        and source_binding.get("verification_status") == "unverified"
+    )
+    if not execution_valid:
+        add(
+            findings,
+            "error",
+            "trusted-execution-integrity-shape",
+            str(path),
+            "execution_integrity must bind the complete local release with profile execution-bound-v1 and an explicit unverified source binding",
+        )
+    else:
+        expected_artifacts = expected_execution_artifacts()
+        seen_artifacts: list[str] = []
+        valid_entries: list[dict[str, Any]] = []
+        for index, entry in enumerate(artifacts):
+            item_path = f"{path}.execution_integrity.artifacts[{index}]"
+            if not isinstance(entry, dict) or set(entry) != EXECUTION_ARTIFACT_KEYS:
+                add(findings, "error", "trusted-execution-artifact-shape", item_path, "artifact entries require only path, role, sha256, and size_bytes")
+                continue
+            relative = entry.get("path")
+            role = entry.get("role")
+            digest = entry.get("sha256")
+            size = entry.get("size_bytes")
+            if (
+                not isinstance(relative, str)
+                or relative not in expected_artifacts
+                or role != expected_artifacts.get(relative)
+                or re.fullmatch(r"[0-9a-f]{64}", str(digest or "")) is None
+                or not isinstance(size, int)
+                or isinstance(size, bool)
+                or size < 0
+            ):
+                add(findings, "error", "trusted-execution-artifact-shape", item_path, "artifact inventory contains an unsafe path, role, hash, or size")
+                continue
+            seen_artifacts.append(relative)
+            valid_entries.append(entry)
+            local = SKILL_ROOT / relative
+            if local.is_symlink() or not local.is_file():
+                add(findings, "error", "trusted-execution-artifact-file", relative, "integrity artifact must be a non-symlink regular file")
+            elif file_sha256(local) != digest or local.stat().st_size != size:
+                add(findings, "error", "trusted-execution-artifact-mismatch", relative, "integrity artifact differs from the bundled execution lock")
+        expected_paths_sorted = sorted(expected_artifacts)
+        if seen_artifacts != expected_paths_sorted:
+            add(findings, "error", "trusted-execution-artifact-set", str(path), f"execution artifacts must be unique and sorted as {expected_paths_sorted!r}")
+        if len(valid_entries) == len(artifacts):
+            normative = [item for item in valid_entries if item["role"] == "normative"]
+            toolchain = [item for item in valid_entries if item["role"] == "toolchain"]
+            expected_digests = {
+                "normative_digest_sha256": canonical_inventory_digest(normative),
+                "toolchain_digest_sha256": canonical_inventory_digest(toolchain),
+                "bundle_digest_sha256": canonical_inventory_digest(valid_entries),
+            }
+            for key, expected_digest in expected_digests.items():
+                if execution.get(key) != expected_digest:
+                    add(findings, "error", f"trusted-execution-{key.replace('_sha256', '').replace('_', '-')}", str(path), f"{key} does not match the path-sorted artifact inventory")
 
     company_schema = lock.get("company_schema")
     schema_valid = (
@@ -4426,7 +4557,22 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mo
             add(findings, "error", "manifest-company-schema-version", "company.json.meta.schema_version", "company schema_version must exactly match trusted company_schema")
         research_protocol = manifest.get("research_protocol")
         if research_protocol != trusted["research_protocol"]:
-            add(findings, "error", "manifest-research-protocol", "research-manifest.json.research_protocol", "research_protocol must exactly match the bundled v2 trust lock")
+            add(findings, "error", "manifest-research-protocol", "research-manifest.json.research_protocol", "research_protocol must exactly match the bundled compatibility protocol lock")
+        integrity_profile = manifest.get("integrity_profile")
+        execution_integrity = manifest.get("execution_integrity")
+        if integrity_profile is None and execution_integrity is None and mode == "audit":
+            add(
+                findings,
+                "warning",
+                "legacy-v2-execution-audit-only",
+                "research-manifest.json",
+                "legacy v2 manifest lacks execution integrity and may only be audited; rebuild a new frozen baseline before incremental or archive work",
+            )
+        else:
+            if integrity_profile != INTEGRITY_PROFILE:
+                add(findings, "error", "manifest-integrity-profile", "research-manifest.json.integrity_profile", f"must be {INTEGRITY_PROFILE!r}")
+            if execution_integrity != trusted["execution_integrity"]:
+                add(findings, "error", "manifest-execution-integrity", "research-manifest.json.execution_integrity", "must exactly match the bundled complete execution lock")
     meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
     research = manifest.get("research")
     if not isinstance(research, dict):
@@ -4438,6 +4584,17 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mo
     validation = manifest.get("validation")
     if not isinstance(validation, dict) or validation.get("mode") != "full" or validation.get("errors") != 0:
         add(findings, "error", "manifest-validation", "research-manifest.json.validation", "frozen package must record full validation with zero errors")
+    elif manifest.get("integrity_profile") == INTEGRITY_PROFILE and trusted is not None:
+        expected_validation_integrity = {
+            "validator": VALIDATOR_VERSION,
+            "integrity_profile": INTEGRITY_PROFILE,
+            "validator_sha256": file_sha256(Path(__file__).resolve()),
+            "toolchain_digest_sha256": trusted["execution_integrity"]["toolchain_digest_sha256"],
+            "protocol_fingerprint": protocol_fingerprint(trusted),
+        }
+        for key, expected_value in expected_validation_integrity.items():
+            if validation.get(key) != expected_value:
+                add(findings, "error", "manifest-validation-integrity", f"research-manifest.json.validation.{key}", "does not match the current locked validator execution")
     try:
         validation_report = load_json(root / "validation-report.json")
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -4446,7 +4603,10 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mo
         if not isinstance(validation_report, dict) or validation_report.get("mode") != "full" or validation_report.get("errors") != 0:
             add(findings, "error", "validation-report-status", "validation-report.json", "must record full validation with zero errors")
         elif isinstance(validation, dict):
-            for key in ("validator", "mode", "errors", "warnings"):
+            comparison_keys = ["validator", "mode", "errors", "warnings"]
+            if manifest.get("integrity_profile") == INTEGRITY_PROFILE:
+                comparison_keys.extend(("integrity_profile", "validator_sha256", "toolchain_digest_sha256", "protocol_fingerprint"))
+            for key in comparison_keys:
                 if validation.get(key) != validation_report.get(key):
                     add(findings, "error", "manifest-validation-mismatch", f"research-manifest.json.validation.{key}", "does not match validation-report.json")
     expected_paths = set(FROZEN_HASH_FILES)
@@ -4505,7 +4665,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
     if schema.get("$schema") != EXPECTED_SCHEMA_DRAFT or schema.get("$id") != EXPECTED_SCHEMA_ID:
         add(findings, "error", "schema-identity", str(schema_path), "must be the Doujiao Draft 2020-12 company Schema")
     findings.extend(validate_schema_keywords(schema))
-    load_trusted_spec_lock(findings)
+    trusted = load_trusted_spec_lock(findings)
     if any(item.severity == "error" for item in findings):
         return findings
     documents: dict[str, Any] = {}
@@ -4558,6 +4718,17 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
     validate_ledger_sources(calculations, "calculations", known, findings)
     validate_evidence(evidence, known, mode, findings)
     validate_calculations(calculations, company, known, mode, findings)
+    if trusted is not None:
+        process_issues = validate_research_process(
+            evidence=evidence,
+            company=company,
+            calculations=calculations,
+            source_records=source_records,
+            mode=mode,
+            expected_fingerprint=protocol_fingerprint(trusted),
+        )
+        for issue in process_issues:
+            add(findings, issue.severity, issue.code, issue.path, issue.message)
     try:
         report = (root / "research-report.md").read_text(encoding="utf-8")
         completeness = (root / "research-completeness.md").read_text(encoding="utf-8")
@@ -4613,12 +4784,27 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
 
 
 def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Finding]) -> dict[str, Any]:
+    integrity_findings: list[Finding] = []
+    trusted = load_trusted_spec_lock(integrity_findings)
+    execution = trusted.get("execution_integrity", {}) if isinstance(trusted, dict) else {}
+    try:
+        schema = load_json(schema_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        schema = {}
     return {
-        "validator": "research-doujiao-value-company/3.0",
+        "validator": VALIDATOR_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "root": str(root),
-        "schema": str(schema_path),
+        "root": ".",
+        "schema": {
+            "id": schema.get("$id") if isinstance(schema, dict) else None,
+            "version": extract_schema_version(schema) if isinstance(schema, dict) else None,
+            "sha256": file_sha256(schema_path) if schema_path.is_file() else None,
+        },
         "mode": mode,
+        "integrity_profile": execution.get("profile"),
+        "validator_sha256": file_sha256(Path(__file__).resolve()),
+        "toolchain_digest_sha256": execution.get("toolchain_digest_sha256"),
+        "protocol_fingerprint": protocol_fingerprint(trusted) if isinstance(trusted, dict) else None,
         "errors": sum(item.severity == "error" for item in findings),
         "warnings": sum(item.severity == "warning" for item in findings),
         "findings": [asdict(item) for item in findings],

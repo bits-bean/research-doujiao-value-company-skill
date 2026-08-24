@@ -1,9 +1,9 @@
 interface:
   display_name: 豆角长期价值研究
   short_description: 冻结并交付可追溯的长期价值研究数据与报告
-  default_prompt: 使用 $research-doujiao-value-company 对目标公司完成证据驱动的长期价值研究，建立有来源的分类、图表路由输入、行业指标与二十年长期生存判断，再以可分配现金而非
-    EPS 建立 DCF，生成并冻结通过 Schema 校验的报告、company.json 与台账；缺少公司身份素材时只获取并验证真实素材及来源。如我明确授权，再把当前研究包与已验证身份素材提交到
-    GitHub 的 companies/<company-slug>/；不要渲染网站或社媒图片、调用网站 API、选择渠道比例或发布内容。
+  default_prompt: 使用 $research-doujiao-value-company 对目标公司完成证据驱动的长期价值研究。先实测协议、Schema、官方来源、挑战来源、计算和草稿写入能力，再以隔离的主研究、对抗审查、来源审计和综合步骤建立可追溯主张、经营驱动、管理层决策、论点状态与估值审查；以可分配现金而非
+    EPS 建立 DCF，生成并冻结通过完整门禁的报告、company.json 与台账。缺少公司身份素材时只获取并验证真实素材及来源；只有我明确授权时才提交
+    GitHub。不要渲染网站或社媒图片、调用网站 API、选择渠道比例或发布内容。
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:

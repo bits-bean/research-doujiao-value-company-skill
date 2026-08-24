@@ -61,7 +61,7 @@ def verify_spec_anchor(repo: Path, lock: dict[str, Any], head_ref: str = "main")
 
     schema = lock.get("company_schema")
     if not isinstance(schema, dict):
-        raise SpecAnchorError("trusted v2 lock lacks company_schema")
+        raise SpecAnchorError("trusted v3 lock lacks company_schema")
     expected_repo = schema.get("repository")
     if not isinstance(expected_repo, str) or not expected_repo:
         raise SpecAnchorError("company_schema lacks repository identity")
@@ -116,7 +116,7 @@ def main() -> int:
         findings: list[Any] = []
         lock = load_trusted_spec_lock(findings)
         if lock is None:
-            raise SpecAnchorError("bundled v2 trust lock or local Skill protocol files failed integrity validation")
+            raise SpecAnchorError("bundled v3 trust lock or local Skill execution files failed integrity validation")
         result = verify_spec_anchor(args.repo, lock, args.head_ref)
         if args.output:
             if args.output.is_symlink():
