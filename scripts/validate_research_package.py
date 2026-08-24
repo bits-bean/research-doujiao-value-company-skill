@@ -71,6 +71,7 @@ BUSINESS_QUALITY = {"优秀", "良好", "一般", "较差", "无法判断"}
 VALUATION_STATUS = {"明显低估", "可能低估", "接近合理", "偏高", "无法判断"}
 RESEARCH_STATUS = {"深入研究", "观察名单", "等待价格", "放弃", "Too Hard"}
 PRIMARY_SOURCE_TYPES = {"annual_report", "quarterly_report", "earnings_release", "regulatory_filing"}
+CLASSIFICATION_OFFICIAL_SOURCE_TYPES = PRIMARY_SOURCE_TYPES | {"investor_presentation", "official_website"}
 TOO_HARD_WARNING_CODES = {
     "insufficient-calculations",
     "insufficient-fy-history",
@@ -86,6 +87,8 @@ TOO_HARD_WARNING_CODES = {
     "management-commitments",
     "management-stop-doing",
     "capital-allocation-substance",
+    "industry-metric-coverage",
+    "returns-chart-coverage",
 }
 SUPPORTED_SCHEMA_KEYWORDS = {
     "$schema", "$id", "$defs", "$ref", "$comment",
@@ -189,6 +192,57 @@ SOURCE_TYPE_ALIASES = {
     "news": ("news", "新闻"),
     "research": ("research", "研究"),
     "other": ("other", "其他"),
+}
+
+ACCOUNTING_RETURN_COMPATIBILITY = {
+    "standard_corporate": {"standard_roic", "payments_credit", "payments_network", "software_platform"},
+    "regulated_bank": {"regulated_bank", "payments_credit"},
+    "insurer": {"insurer"},
+    "reit": {"reit"},
+    "resource_cycle": {"resource_cycle"},
+}
+EXPECTED_SECTOR_BY_ACCOUNTING = {
+    "regulated_bank": "financials",
+    "insurer": "financials",
+    "reit": "real_estate",
+}
+COMMON_INDUSTRY_METRIC_TYPES = {
+    "rotce": "ratio",
+    "cet1_ratio": "ratio",
+    "cet1_target_low": "ratio",
+    "cet1_target_high": "ratio",
+    "cet1_regulatory_minimum": "ratio",
+    "capital_adequacy_ratio": "ratio",
+    "capital_adequacy_target_low": "ratio",
+    "capital_adequacy_target_high": "ratio",
+    "capital_adequacy_regulatory_minimum": "ratio",
+    "risk_weighted_assets": "amount",
+    "net_interest_margin": "ratio",
+    "deposit_cost": "ratio",
+    "net_charge_off_rate": "ratio",
+    "tangible_book_value_per_share": "per_share",
+    "common_equity_per_share": "per_share",
+    "book_value_per_share": "per_share",
+    "buyback_impact_per_share": "per_share",
+    "combined_ratio": "ratio",
+    "solvency_ratio": "ratio",
+    "float_amount": "amount",
+    "float_cost": "ratio",
+    "ffo": "amount",
+    "affo": "amount",
+    "ffo_per_share": "per_share",
+    "affo_per_share": "per_share",
+    "same_store_noi_growth": "ratio",
+    "occupancy_rate": "ratio",
+    "distribution_coverage": "ratio",
+    "reserve_life": "index",
+    "unit_cash_cost": "amount",
+    "maintenance_capex": "amount",
+    "midcycle_roic": "ratio",
+    "net_revenue_retention": "ratio",
+    "gross_retention": "ratio",
+    "sbc_to_revenue": "ratio",
+    "adjusted_roic_after_r_and_d": "ratio",
 }
 
 NONLOCALIZED_CHINESE_UNIT_PATTERNS = (
@@ -1132,6 +1186,281 @@ def validate_too_hard_acknowledgements(company: dict[str, Any], text: str, findi
             )
 
 
+def validate_classification_and_industry_metrics(
+    company: dict[str, Any],
+    completeness: str,
+    mode: str,
+    findings: list[Finding],
+) -> None:
+    classification = company.get("classification")
+    if not isinstance(classification, dict):
+        return
+    source_types = {
+        source.get("id"): source.get("source_type")
+        for source in list_or_empty(company.get("sources"))
+        if isinstance(source, dict) and nonblank(source.get("id"))
+    }
+    classification_sources = classification.get("source_ids")
+    if (
+        not isinstance(classification_sources, list)
+        or not any(source_types.get(source_id) in CLASSIFICATION_OFFICIAL_SOURCE_TYPES for source_id in classification_sources)
+    ):
+        add(
+            findings,
+            "error",
+            "classification-provenance",
+            "company.json.classification.source_ids",
+            "classification must cite an official company or regulatory source",
+        )
+    primary = classification.get("primary_industry")
+    secondary = classification.get("secondary_industries")
+    if isinstance(primary, str) and isinstance(secondary, list) and primary in secondary:
+        add(
+            findings,
+            "error",
+            "classification-duplicate-industry",
+            "company.json.classification.secondary_industries",
+            "primary_industry must not be repeated in secondary_industries",
+        )
+    accounting = classification.get("accounting_profile")
+    returns = classification.get("returns_profile")
+    if returns not in ACCOUNTING_RETURN_COMPATIBILITY.get(accounting, set()):
+        add(
+            findings,
+            "error",
+            "classification-routing",
+            "company.json.classification",
+            "accounting_profile and returns_profile are incompatible; sector and industry tags cannot override chart routing",
+        )
+    expected_sector = EXPECTED_SECTOR_BY_ACCOUNTING.get(accounting)
+    if expected_sector is not None and classification.get("sector") != expected_sector:
+        add(
+            findings,
+            "error",
+            "classification-sector",
+            "company.json.classification.sector",
+            f"{accounting} must use sector {expected_sector!r}",
+        )
+
+    metrics = company.get("industry_metrics")
+    if not isinstance(metrics, list):
+        return
+    financials = [item for item in list_or_empty(company.get("financials")) if isinstance(item, dict)]
+    financial_periods = {item.get("period") for item in financials if nonblank(item.get("period"))}
+    reporting = company.get("reporting") if isinstance(company.get("reporting"), dict) else {}
+    latest_report = reporting.get("latest_report") if isinstance(reporting.get("latest_report"), dict) else {}
+    reporting_periods = {
+        item
+        for item in (latest_report.get("period"),)
+        if nonblank(item)
+    }
+    allowed_metric_periods = financial_periods | reporting_periods
+    fy_periods = {
+        item.get("period")
+        for item in financials
+        if item.get("period_type") == "FY" and nonblank(item.get("period"))
+    }
+    seen: set[tuple[Any, Any]] = set()
+    metric_values: dict[str, set[str]] = {}
+    all_metric_values: dict[str, set[str]] = {}
+    for index, item in enumerate(metrics):
+        if not isinstance(item, dict):
+            continue
+        path = f"company.json.industry_metrics[{index}]"
+        key = (item.get("period"), item.get("code"))
+        if key in seen:
+            add(findings, "error", "duplicate-industry-metric", path, "period + code must be unique")
+        seen.add(key)
+        if item.get("period") not in allowed_metric_periods:
+            add(findings, "error", "industry-metric-period", path, "period must match a company.financials period or reporting.latest_report.period")
+        expected_type = COMMON_INDUSTRY_METRIC_TYPES.get(item.get("code"))
+        if expected_type is not None and item.get("value_type") != expected_type:
+            add(
+                findings,
+                "error",
+                "industry-metric-value-type",
+                f"{path}.value_type",
+                f"{item.get('code')} must use value_type {expected_type!r}",
+            )
+        if numeric(item.get("value")) and isinstance(item.get("code"), str) and isinstance(item.get("period"), str):
+            all_metric_values.setdefault(item["code"], set()).add(item["period"])
+            if item.get("period") in fy_periods:
+                metric_values.setdefault(item["code"], set()).add(item["period"])
+
+    if mode != "full" or not fy_periods:
+        return
+    severity = "warning" if is_unable(company) and documented_material_gap(completeness) else "error"
+    required_history = min(8, len(fy_periods)) if not is_unable(company) else min(3, len(fy_periods))
+    required_incremental = min(3, len(fy_periods))
+
+    def financial_count(field: str) -> int:
+        return sum(
+            numeric(item.get(field))
+            for item in financials
+            if item.get("period_type") == "FY"
+        )
+
+    def metric_count(*codes: str) -> int:
+        return max((len(metric_values.get(code, set())) for code in codes), default=0)
+
+    def has_current_metric(code: str) -> bool:
+        period = latest_report.get("period")
+        return isinstance(period, str) and period in all_metric_values.get(code, set())
+
+    def has_current_capital_gauge() -> bool:
+        cet1_range = (
+            has_current_metric("cet1_ratio")
+            and (
+                (has_current_metric("cet1_target_low") and has_current_metric("cet1_target_high"))
+                or has_current_metric("cet1_regulatory_minimum")
+            )
+        )
+        capital_adequacy_range = (
+            has_current_metric("capital_adequacy_ratio")
+            and (
+                (
+                    has_current_metric("capital_adequacy_target_low")
+                    and has_current_metric("capital_adequacy_target_high")
+                )
+                or has_current_metric("capital_adequacy_regulatory_minimum")
+            )
+        )
+        return cet1_range or capital_adequacy_range
+
+    buyback_impact_periods = {
+        item.get("period")
+        for item in list_or_empty(company.get("buyback_ledger"))
+        if (
+            isinstance(item, dict)
+            and item.get("period") in fy_periods
+            and numeric(item.get("shares_outstanding_change"))
+        )
+    }
+    buyback_impact_count = max(
+        len(buyback_impact_periods),
+        metric_count("buyback_impact_per_share"),
+    )
+
+    missing: list[str] = []
+    if returns in {"standard_roic", "payments_network", "software_platform"}:
+        if financial_count("roe") < required_history:
+            missing.append(f"ROE<{required_history}FY")
+        if financial_count("roic") < required_history:
+            missing.append(f"ROIC<{required_history}FY")
+        if financial_count("incremental_roic") < required_incremental:
+            missing.append(f"incremental_roic<{required_incremental}FY")
+    elif returns in {"regulated_bank", "payments_credit"}:
+        if max(financial_count("roe"), metric_count("rotce")) < required_history:
+            missing.append(f"ROE/ROTCE<{required_history}FY")
+        if not has_current_capital_gauge():
+            missing.append("CET1/current-capital-gauge-with-target-or-regulatory-range")
+        if (
+            metric_count("tangible_book_value_per_share", "common_equity_per_share", "book_value_per_share")
+            < required_history
+            and buyback_impact_count < 3
+        ):
+            missing.append(f"per-share-equity<{required_history}FY-or-3Y-buyback-impact")
+    elif returns == "insurer":
+        if financial_count("roe") < required_history:
+            missing.append(f"ROE<{required_history}FY")
+        if metric_count("solvency_ratio") < required_history:
+            missing.append(f"solvency_ratio<{required_history}FY")
+        if metric_count("book_value_per_share", "tangible_book_value_per_share") < required_history:
+            missing.append(f"per-share-book-value<{required_history}FY")
+    elif returns == "reit":
+        if metric_count("affo", "affo_per_share", "ffo", "ffo_per_share") < required_history:
+            missing.append(f"FFO/AFFO<{required_history}FY")
+        if metric_count("affo_per_share", "ffo_per_share") < required_history:
+            missing.append(f"FFO/AFFO-per-share<{required_history}FY")
+        if metric_count("occupancy_rate") < required_history:
+            missing.append(f"occupancy_rate<{required_history}FY")
+    elif returns == "resource_cycle":
+        if financial_count("roic") < required_history:
+            missing.append(f"ROIC<{required_history}FY")
+        if metric_count("midcycle_roic") < required_incremental:
+            missing.append(f"midcycle_roic<{required_incremental}FY")
+
+    if missing:
+        add(
+            findings,
+            severity,
+            "returns-chart-coverage",
+            "company.json.classification.returns_profile",
+            f"{returns!r} routing lacks deterministic chart inputs: {', '.join(missing)}",
+        )
+
+
+def validate_durability(company: dict[str, Any], findings: list[Finding]) -> None:
+    durability = company.get("durability")
+    if not isinstance(durability, dict):
+        return
+    root_source_ids = {
+        item for item in list_or_empty(durability.get("source_ids")) if isinstance(item, str)
+    }
+    if (
+        not isinstance(durability.get("horizon_years"), int)
+        or isinstance(durability.get("horizon_years"), bool)
+        or durability.get("horizon_years", 0) < 20
+        or durability.get("overall_status") not in {"durable", "conditional", "fragile", "too_hard"}
+        or not substantive_text(durability.get("conclusion"), 12)
+        or looks_like_placeholder(durability.get("conclusion"))
+        or not nonblank_list(durability.get("source_ids"))
+    ):
+        add(
+            findings,
+            "error",
+            "durability-conclusion",
+            "company.json.durability",
+            "durability requires a sourced 20+ year horizon, standardized overall status and substantive conclusion",
+        )
+    dimension_values: list[str] = []
+    dimension_source_ids: set[str] = set()
+    for key in ("demand_durability", "adaptability", "external_shocks"):
+        item = durability.get(key)
+        path = f"company.json.durability.{key}"
+        evidence = item.get("evidence") if isinstance(item, dict) else None
+        if (
+            not isinstance(item, dict)
+            or item.get("status") not in {"strong", "adequate", "uncertain", "weak"}
+            or not substantive_text(item.get("assessment"), 12)
+            or looks_like_placeholder(item.get("assessment"))
+            or not isinstance(evidence, list)
+            or not evidence
+            or any(not substantive_text(value, 8) or looks_like_placeholder(value) for value in evidence)
+            or not substantive_text(item.get("breaker"), 10)
+            or looks_like_placeholder(item.get("breaker"))
+            or not nonblank_list(item.get("source_ids"))
+        ):
+            add(
+                findings,
+                "error",
+                "durability-dimension",
+                path,
+                "each durability dimension requires status, assessment, evidence, a falsifiable breaker and source_ids",
+            )
+            continue
+        dimension_values.extend([item["assessment"], item["breaker"]])
+        dimension_source_ids.update(
+            source_id for source_id in list_or_empty(item.get("source_ids")) if isinstance(source_id, str)
+        )
+    if not dimension_source_ids.issubset(root_source_ids):
+        add(
+            findings,
+            "error",
+            "durability-sources",
+            "company.json.durability.source_ids",
+            "durability root source_ids must cover every dimension source",
+        )
+    if len(dimension_values) == 6 and not substantive_distinct_entries(dimension_values, 10):
+        add(
+            findings,
+            "error",
+            "durability-distinction",
+            "company.json.durability",
+            "demand, adaptability and external-shock assessments must be distinct company-specific tests",
+        )
+
+
 def validate_financials(company: dict[str, Any], completeness: str, mode: str, findings: list[Finding]) -> None:
     financials = company.get("financials")
     if not isinstance(financials, list):
@@ -1548,14 +1877,59 @@ def validate_research_modules(company: dict[str, Any], findings: list[Finding]) 
     commitments = management.get("commitment_timeline")
     if not isinstance(commitments, list) or not commitments:
         add(findings, "warning" if is_unable(company) else "error", "management-commitments", "company.json.management.commitment_timeline", "requires at least one commitment-versus-result event, or an acknowledged Too Hard gap")
-    elif any(not isinstance(item, dict) or not substantive_text(item.get("date"), 4) or not substantive_text(item.get("commitment"), 8) or not substantive_text(item.get("status"), 2) for item in commitments):
-        add(findings, "error", "management-commitment-substance", "company.json.management.commitment_timeline", "commitment events require date, commitment and status")
+    else:
+        for index, item in enumerate(commitments):
+            path = f"company.json.management.commitment_timeline[{index}]"
+            validation = item.get("next_validation") if isinstance(item, dict) else None
+            status = item.get("status") if isinstance(item, dict) else None
+            outcome = item.get("outcome") if isinstance(item, dict) else None
+            outcome_valid = (
+                outcome is None and status == "pending"
+            ) or (
+                substantive_text(outcome, 8) and not looks_like_placeholder(outcome)
+            )
+            if (
+                not isinstance(item, dict)
+                or not substantive_text(item.get("date"), 4)
+                or not substantive_text(item.get("commitment"), 8)
+                or status not in {"fulfilled", "partially_fulfilled", "unfulfilled", "pending"}
+                or not outcome_valid
+                or not isinstance(validation, dict)
+                or any(
+                    not substantive_text(validation.get(key), minimum) or looks_like_placeholder(validation.get(key))
+                    for key, minimum in (("method", 8), ("condition", 8), ("timeframe", 3))
+                )
+            ):
+                add(
+                    findings,
+                    "error",
+                    "management-commitment-substance",
+                    path,
+                    "commitment events require standardized status, an observed outcome unless still pending, and a substantive next-validation method, condition and timeframe",
+                )
     stop_list = management.get("stop_doing_list")
     if not isinstance(stop_list, list) or len(stop_list) < 2 or any(not substantive_text(item, 6) for item in stop_list):
         add(findings, "warning" if is_unable(company) else "error", "management-stop-doing", "company.json.management.stop_doing_list", "requires at least two substantive stop-doing constraints, or an acknowledged Too Hard gap")
     allocation = company.get("capital_allocation")
     if not isinstance(allocation, list) or not allocation or not any(isinstance(item, dict) and numeric(item.get("amount")) for item in allocation):
         add(findings, "warning" if is_unable(company) else "error", "capital-allocation-substance", "company.json.capital_allocation", "requires at least one sourced numeric capital-allocation item or an acknowledged Too Hard gap")
+    elif any(
+        not isinstance(item, dict)
+        or item.get("lane") not in {"reinvest", "risk_reduction", "shareholder_return"}
+        or item.get("result_status") not in {"positive", "mixed", "negative", "pending"}
+        or not substantive_text(item.get("result"), 8)
+        or not substantive_text(item.get("assessment"), 8)
+        or looks_like_placeholder(item.get("result"))
+        or looks_like_placeholder(item.get("assessment"))
+        for item in allocation
+    ):
+        add(
+            findings,
+            "error",
+            "capital-allocation-result",
+            "company.json.capital_allocation",
+            "each allocation needs a three-lane classification, result status, observable result and per-share or resilience assessment",
+        )
 
 
 def validate_valuation(company: dict[str, Any], findings: list[Finding]) -> None:
@@ -1583,9 +1957,12 @@ def validate_valuation(company: dict[str, Any], findings: list[Finding]) -> None
             kind = scenario_kind(scenario.get("name"))
             if kind:
                 kinds.add(kind)
-            discount, terminal, value = scenario.get("discount_rate"), scenario.get("terminal_growth"), scenario.get("fair_value_per_share")
-            if not unable and not all(numeric(item) for item in (discount, terminal, value)):
-                add(findings, "error", "dcf-scenario-inputs", f"company.json.valuation.dcf_scenarios[{index}]", "each scenario requires discount rate, terminal growth and fair value")
+            discount = scenario.get("discount_rate")
+            terminal = scenario.get("terminal_growth")
+            value = scenario.get("fair_value_per_share")
+            terminal_share = scenario.get("terminal_value_share")
+            if not unable and not all(numeric(item) for item in (discount, terminal, value, terminal_share)):
+                add(findings, "error", "dcf-scenario-inputs", f"company.json.valuation.dcf_scenarios[{index}]", "each scenario requires discount rate, terminal growth, terminal-value share and fair value")
             if numeric(discount) and numeric(terminal) and float(terminal) >= float(discount):
                 add(findings, "error", "dcf-terminal-rate", f"company.json.valuation.dcf_scenarios[{index}]", "terminal growth must be below discount rate")
             if kind and numeric(value):
@@ -1595,8 +1972,58 @@ def validate_valuation(company: dict[str, Any], findings: list[Finding]) -> None
     if all(kind in values for kind in ("bear", "base", "bull")) and not values["bear"] <= values["base"] <= values["bull"]:
         add(findings, "error", "dcf-order", "company.json.valuation.dcf_scenarios", "scenario values must be 悲观 ≤ 基准 ≤ 乐观")
     sensitivity = valuation.get("dcf_sensitivity")
-    if not unable and (not isinstance(sensitivity, list) or len(sensitivity) < 4):
-        add(findings, "error", "dcf-sensitivity", "company.json.valuation.dcf_sensitivity", "requires at least four sensitivity cells")
+    if not unable:
+        valid_cells = [
+            item
+            for item in sensitivity
+            if isinstance(item, dict)
+            and all(numeric(item.get(key)) for key in ("discount_rate", "terminal_growth", "fair_value_per_share"))
+        ] if isinstance(sensitivity, list) else []
+        discounts = sorted({float(item["discount_rate"]) for item in valid_cells})
+        terminals = sorted({float(item["terminal_growth"]) for item in valid_cells})
+        combinations = {
+            (float(item["discount_rate"]), float(item["terminal_growth"]))
+            for item in valid_cells
+        }
+        expected_combinations = {(discount, terminal) for discount in discounts for terminal in terminals}
+        base_scenario = next(
+            (item for item in list_or_empty(scenarios) if isinstance(item, dict) and scenario_kind(item.get("name")) == "base"),
+            None,
+        )
+        if (
+            not isinstance(sensitivity, list)
+            or len(sensitivity) != 9
+            or len(valid_cells) != 9
+            or len(discounts) != 3
+            or len(terminals) != 3
+            or combinations != expected_combinations
+        ):
+            add(
+                findings,
+                "error",
+                "dcf-sensitivity-grid",
+                "company.json.valuation.dcf_sensitivity",
+                "requires exactly nine numeric cells forming three unique discount rates × three unique terminal growth rates",
+            )
+        elif any(terminal >= discount for discount, terminal in combinations):
+            add(findings, "error", "dcf-sensitivity-rate", "company.json.valuation.dcf_sensitivity", "every terminal growth rate must be below its discount rate")
+        elif not isinstance(base_scenario, dict) or not all(numeric(base_scenario.get(key)) for key in ("discount_rate", "terminal_growth", "fair_value_per_share")):
+            add(findings, "error", "dcf-sensitivity-base", "company.json.valuation.dcf_sensitivity", "base scenario must provide numeric assumptions for the center cell")
+        else:
+            base_discount = float(base_scenario["discount_rate"])
+            base_terminal = float(base_scenario["terminal_growth"])
+            center = next(
+                (
+                    item
+                    for item in valid_cells
+                    if float(item["discount_rate"]) == base_discount and float(item["terminal_growth"]) == base_terminal
+                ),
+                None,
+            )
+            if discounts[1] != base_discount or terminals[1] != base_terminal or center is None:
+                add(findings, "error", "dcf-sensitivity-base", "company.json.valuation.dcf_sensitivity", "base discount rate and terminal growth must be the middle row and column")
+            elif not close_enough(float(center["fair_value_per_share"]), float(base_scenario["fair_value_per_share"])):
+                add(findings, "error", "dcf-sensitivity-base-value", "company.json.valuation.dcf_sensitivity", "center cell must match the base scenario fair value")
     reverse = valuation.get("reverse_dcf")
     if not unable:
         leaves = flatten_leaves(reverse) if isinstance(reverse, dict) else []
@@ -1702,19 +2129,64 @@ def validate_verdict_and_risks(company: dict[str, Any], findings: list[Finding])
     if not isinstance(risks, dict):
         add(findings, "error", "risks-shape", "company.json.risks", "risks must be a substantive object")
         return
-    for field, minimum in (("pre_mortem", 5), ("fragile_assumptions", 3)):
-        values = risks.get(field)
-        text_minimum = 10 if field == "pre_mortem" else 8
-        normalized = [normalized_text(item, replace_numbers=True) for item in values] if isinstance(values, list) else []
+    pre_mortem = risks.get("pre_mortem")
+    path_values: list[Any] = []
+    trigger_values: list[Any] = []
+    if not isinstance(pre_mortem, list) or len(pre_mortem) < 5:
+        add(findings, "error", "pre_mortem-substance", "company.json.risks.pre_mortem", "requires at least five structured failure paths")
+    else:
+        for index, item in enumerate(pre_mortem):
+            path = f"company.json.risks.pre_mortem[{index}]"
+            required_text = (
+                ("failure_path", 8),
+                ("trigger", 8),
+                ("operating_impact", 8),
+                ("capital_cash_impact", 8),
+                ("value_impact", 8),
+                ("time_horizon", 3),
+                ("earliest_warning", 6),
+            )
+            if not isinstance(item, dict) or any(
+                not substantive_text(item.get(key), minimum) or looks_like_placeholder(item.get(key))
+                for key, minimum in required_text
+            ) or (
+                item.get("management_mitigation") is not None
+                and (
+                    not substantive_text(item.get("management_mitigation"), 8)
+                    or looks_like_placeholder(item.get("management_mitigation"))
+                )
+            ):
+                add(findings, "error", "pre_mortem-causal-chain", path, "requires trigger → operating → capital/cash → value impacts plus horizon and warning; mitigation may be null only when none is evidenced")
+                continue
+            causal_stages = [
+                normalized_text(item.get(key), replace_numbers=True)
+                for key in ("trigger", "operating_impact", "capital_cash_impact", "value_impact")
+            ]
+            if len(set(causal_stages)) != len(causal_stages):
+                add(findings, "error", "pre_mortem-causal-chain", path, "causal stages cannot repeat the same placeholder text")
+            path_values.append(item.get("failure_path"))
+            trigger_values.append(item.get("trigger"))
+        normalized_paths = [normalized_text(item, replace_numbers=True) for item in path_values]
+        normalized_triggers = [normalized_text(item, replace_numbers=True) for item in trigger_values]
         if (
-            not isinstance(values, list)
-            or len(values) < minimum
-            or any(not substantive_text(item, text_minimum) or looks_like_placeholder(item) for item in values)
-            or len(set(normalized)) != len(normalized)
-            or bool(repeated_template_fingerprints(values, minimum_count=3))
-            or has_near_duplicate_cluster(values, minimum_count=3)
+            len(path_values) != len(pre_mortem)
+            or len(set(normalized_paths)) != len(normalized_paths)
+            or len(set(normalized_triggers)) != len(normalized_triggers)
+            or repeated_template_fingerprints(path_values, minimum_count=3)
+            or has_near_duplicate_cluster(path_values, minimum_count=3)
         ):
-            add(findings, "error", f"{field}-substance", f"company.json.risks.{field}", f"requires at least {minimum} distinct, company-specific entries")
+            add(findings, "error", "pre_mortem-substance", "company.json.risks.pre_mortem", "failure paths and triggers must be distinct and company-specific")
+    fragile = risks.get("fragile_assumptions")
+    normalized_fragile = [normalized_text(item, replace_numbers=True) for item in fragile] if isinstance(fragile, list) else []
+    if (
+        not isinstance(fragile, list)
+        or len(fragile) < 3
+        or any(not substantive_text(item, 8) or looks_like_placeholder(item) for item in fragile)
+        or len(set(normalized_fragile)) != len(normalized_fragile)
+        or repeated_template_fingerprints(fragile, minimum_count=3)
+        or has_near_duplicate_cluster(fragile, minimum_count=3)
+    ):
+        add(findings, "error", "fragile_assumptions-substance", "company.json.risks.fragile_assumptions", "requires at least three distinct, company-specific entries")
     if not substantive_text(risks.get("bear_case"), 16) or looks_like_placeholder(risks.get("bear_case")):
         add(findings, "error", "bear-case", "company.json.risks.bear_case", "strongest bear case must be substantive")
     indicators = risks.get("monitoring_indicators")
@@ -1727,9 +2199,15 @@ def validate_verdict_and_risks(company: dict[str, Any], findings: list[Finding])
             path = f"company.json.risks.monitoring_indicators[{index}]"
             if not isinstance(item, dict) or any(
                 not substantive_text(item.get(key), minimum) or looks_like_placeholder(item.get(key))
-                for key, minimum in (("name", 3), ("current_status", 5), ("trigger", 8))
+                for key, minimum in (
+                    ("name", 3),
+                    ("current_status", 5),
+                    ("trigger", 8),
+                    ("why_it_matters", 8),
+                    ("recheck_method", 8),
+                )
             ):
-                add(findings, "error", "monitoring-substance", path, "requires name, current status and thesis-breaking trigger")
+                add(findings, "error", "monitoring-substance", path, "requires name, current status, trigger, why it matters and a concrete recheck method")
             if not isinstance(item, dict) or not nonblank_list(item.get("source_ids")):
                 add(findings, "error", "monitoring-sources", path, "leading indicators require source_ids")
             if isinstance(item, dict):
@@ -1742,6 +2220,9 @@ def validate_verdict_and_risks(company: dict[str, Any], findings: list[Finding])
         trigger_values = [item.get("trigger") for item in indicators if isinstance(item, dict)]
         if repeated_template_fingerprints(trigger_values) or has_near_duplicate_cluster(trigger_values):
             add(findings, "error", "repeated-monitoring-template", "company.json.risks.monitoring_indicators", "monitoring triggers repeat a numeric placeholder template")
+        recheck_values = [item.get("recheck_method") for item in indicators if isinstance(item, dict)]
+        if repeated_template_fingerprints(recheck_values) or has_near_duplicate_cluster(recheck_values):
+            add(findings, "error", "repeated-monitoring-template", "company.json.risks.monitoring_indicators", "monitoring recheck methods repeat a placeholder template")
 
 
 def clean_markdown_text(value: Any) -> str:
@@ -1950,8 +2431,11 @@ def parse_markdown_tables(text: str) -> list[tuple[list[str], list[list[str]]]]:
 
 def header_column(headers: list[str], alternatives: tuple[str, ...]) -> int | None:
     normalized_alternatives = [normalized_text(item) for item in alternatives]
-    for index, header in enumerate(headers):
-        key = normalized_text(clean_markdown_text(header))
+    normalized_headers = [normalized_text(clean_markdown_text(header)) for header in headers]
+    for index, key in enumerate(normalized_headers):
+        if key in normalized_alternatives:
+            return index
+    for index, key in enumerate(normalized_headers):
         if any(token and token in key for token in normalized_alternatives):
             return index
     return None
@@ -2293,25 +2777,195 @@ def validate_moat_report(company: dict[str, Any], body: str, findings: list[Find
         add(findings, "error", "report-moat-score-consistency", "research-report.md#moat", f"moat scores must reconcile to company.moat by dimension: {score_mismatches!r}")
 
 
+def durability_status_value(value: Any, *, overall: bool = False) -> str | None:
+    text = normalized_text(value)
+    aliases = (
+        {
+            "durable": ("durable", "可长期生存", "持久"),
+            "conditional": ("conditional", "有条件", "条件性"),
+            "fragile": ("fragile", "脆弱"),
+            "too_hard": ("too hard", "toohard", "无法判断", "资料不足"),
+        }
+        if overall
+        else {
+            "strong": ("strong", "强"),
+            "adequate": ("adequate", "足够", "尚可"),
+            "uncertain": ("uncertain", "不确定"),
+            "weak": ("weak", "弱"),
+        }
+    )
+    for canonical, values in aliases.items():
+        if any(text == normalized_text(alias) for alias in values):
+            return canonical
+    return None
+
+
+def durability_dimension_key(value: Any) -> str | None:
+    text = normalized_text(value)
+    aliases = {
+        "demand_durability": ("需求持久性", "需求持久", "demand durability"),
+        "adaptability": ("适应能力", "适应性", "adaptability"),
+        "external_shocks": ("外部冲击", "外部冲击韧性", "external shocks"),
+    }
+    matches = [
+        key
+        for key, values in aliases.items()
+        if any(normalized_text(alias) == text for alias in values)
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def validate_durability_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    durability = company.get("durability") if isinstance(company.get("durability"), dict) else {}
+    horizon = labelled_value(body, ("观察期限", "判断期限", "生存期限", "horizon"))
+    overall = labelled_value(body, ("总体状态", "总体判断", "overall status"))
+    conclusion = labelled_value(body, ("结论", "长期结论", "conclusion"))
+    horizon_match = re.search(r"\d+", clean_markdown_text(horizon or ""))
+    summary_valid = (
+        horizon_match is not None
+        and int(horizon_match.group(0)) == durability.get("horizon_years")
+        and durability_status_value(overall, overall=True) == durability.get("overall_status")
+        and normalized_text(conclusion) == normalized_text(durability.get("conclusion"))
+    )
+    if not summary_valid:
+        add(
+            findings,
+            "error",
+            "report-durability-summary",
+            "research-report.md#durability",
+            "durability section must reconcile the 20+ year horizon, standardized overall status and conclusion",
+        )
+
+    required_headers = {
+        "dimension": ("维度", "dimension"),
+        "status": ("状态", "status"),
+        "assessment": ("判断", "评估", "assessment"),
+        "evidence": ("证据", "evidence"),
+        "breaker": ("破坏条件", "失效条件", "breaker"),
+    }
+    expected_keys = ("demand_durability", "adaptability", "external_shocks")
+    matrix_valid = False
+    for headers, rows in parse_markdown_tables(body):
+        columns = {key: header_column(headers, aliases) for key, aliases in required_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        observed: set[str] = set()
+        for row in rows:
+            key = durability_dimension_key(row[int(columns["dimension"])])
+            expected = durability.get(key) if key else None
+            if not isinstance(expected, dict):
+                continue
+            evidence_text = normalized_text(row[int(columns["evidence"])])
+            evidence_raw = row[int(columns["evidence"])]
+            expected_evidence = [normalized_text(item) for item in list_or_empty(expected.get("evidence"))]
+            expected_source_ids = {
+                item for item in list_or_empty(expected.get("source_ids")) if isinstance(item, str)
+            }
+            if (
+                durability_status_value(row[int(columns["status"])]) == expected.get("status")
+                and normalized_text(row[int(columns["assessment"])]) == normalized_text(expected.get("assessment"))
+                and expected_evidence
+                and all(value and value in evidence_text for value in expected_evidence)
+                and expected_source_ids
+                and text_has_known_citation(company, evidence_raw, expected_source_ids)
+                and normalized_text(row[int(columns["breaker"])]) == normalized_text(expected.get("breaker"))
+            ):
+                observed.add(key)
+        matrix_valid = len(rows) == len(expected_keys) and observed == set(expected_keys)
+        break
+    if not matrix_valid:
+        add(
+            findings,
+            "error",
+            "report-durability-matrix",
+            "research-report.md#durability",
+            "durability section needs exactly three reconciled rows for demand durability, adaptability and external shocks, each with status, evidence and breaker",
+        )
+
+
+def risk_probability_category(value: Any) -> str | None:
+    text = normalized_text(value)
+    aliases = {
+        "medium_low": ("mediumlow", "中低", "中低概率"),
+        "medium_high": ("mediumhigh", "中高", "中高概率"),
+        "medium": ("medium", "中", "中等", "中等概率"),
+        "low": ("low", "低", "低概率"),
+        "high": ("high", "高", "高概率"),
+        "unknown": ("unknown", "insufficient", "无法判断", "资料不足", "未披露"),
+    }
+    for canonical, values in aliases.items():
+        if text in {normalized_text(alias) for alias in values}:
+            return canonical
+    return None
+
+
 def probability_value(value: str) -> bool:
-    return bool(re.search(r"\d+(?:\.\d+)?\s*%|\b(?:high|medium|low)\b|(?:极高|高|中高|中|中低|低|极低)(?:概率)?", value, re.I))
+    return risk_probability_category(value) is not None
+
+
+def risk_impact_category(value: Any) -> str | None:
+    text = normalized_text(value)
+    aliases = {
+        "catastrophic": ("catastrophic", "毁灭性", "灾难性"),
+        "severe": ("severe", "critical", "严重"),
+        "high": ("high", "高", "重大"),
+        "medium": ("medium", "中", "中等"),
+        "low": ("low", "低"),
+        "unknown": ("unknown", "insufficient", "无法判断", "资料不足", "未披露"),
+    }
+    for canonical, values in aliases.items():
+        if text in {normalized_text(alias) for alias in values}:
+            return canonical
+    return None
 
 
 def impact_value(value: str) -> bool:
-    return bool(re.search(r"\b(?:critical|severe|high|medium|low)\b|毁灭|严重|重大|极高|高|中高|中|中低|低", value, re.I))
+    return risk_impact_category(value) is not None
 
 
 def horizon_value(value: str) -> bool:
-    return bool(re.search(r"\d+(?:\s*[–—-]\s*\d+)?\s*(?:年|月|季|years?|months?|quarters?)|随时|持续|短期|中期|长期", value, re.I))
+    return bool(re.search(r"\d+(?:\s*(?:[–—-]|至)\s*\d+)?\s*(?:年|月|季|years?|months?|quarters?)|随时|即时|持续|短期|中期|长期", value, re.I))
+
+
+def risk_reversibility_category(value: Any) -> str | None:
+    text = normalized_text(value)
+    aliases = {
+        "reversible": ("reversible", "可逆"),
+        "partially_reversible": ("partiallyreversible", "部分可逆"),
+        "hard_to_reverse": ("hardtoreverse", "难以逆转", "难逆"),
+        "irreversible": ("irreversible", "不可逆"),
+    }
+    for canonical, values in aliases.items():
+        if text in {normalized_text(alias) for alias in values}:
+            return canonical
+    return None
 
 
 def reversibility_value(value: str) -> bool:
-    return bool(re.search(r"不可逆|可逆|部分可逆|极高|高|中高|中|中低|低|极低|\b(?:yes|no|partial|high|medium|low)\b", value, re.I))
+    return risk_reversibility_category(value) is not None
+
+
+def explicit_null_display(value: Any) -> bool:
+    text = normalized_text(value)
+    return text in {
+        normalized_text(item)
+        for item in ("无", "暂无", "没有", "未披露", "无法判断", "资料不足", "none", "not disclosed", "unknown")
+    }
+
+
+def nullable_report_text_matches(actual: Any, expected: Any) -> bool:
+    if expected is None:
+        return explicit_null_display(actual)
+    return normalized_text(actual) == normalized_text(expected)
 
 
 def validate_pre_mortem_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
     required_headers = {
         "path": ("失败路径", "failure path"),
+        "trigger": ("触发因素", "触发条件", "trigger"),
+        "operating": ("经营影响", "operating impact"),
+        "capital_cash": ("资本 / 现金影响", "资本/现金影响", "资本与现金影响", "capital cash impact"),
+        "value": ("价值影响", "内在价值影响", "value impact"),
         "probability": ("概率", "probability", "likelihood"),
         "impact": ("影响", "impact"),
         "horizon": ("期限", "时间", "horizon", "time frame"),
@@ -2326,39 +2980,73 @@ def validate_pre_mortem_report(company: dict[str, Any], body: str, findings: lis
             selected = (rows, {key: int(index) for key, index in columns.items()})
             break
     if selected is None:
-        add(findings, "error", "report-pre-mortem-matrix", "research-report.md#pre-mortem", "Pre-Mortem needs path, probability, impact, horizon, earliest warning, reversibility and management mitigation columns")
+        add(findings, "error", "report-pre-mortem-matrix", "research-report.md#pre-mortem", "Pre-Mortem needs causal-chain, probability, impact, horizon, warning, reversibility and mitigation columns")
         return
     rows, columns = selected
     paths: list[str] = []
+    causal_rows: list[dict[str, str]] = []
     valid_rows = 0
     for row in rows:
         path = clean_markdown_text(row[columns["path"]])
+        trigger = clean_markdown_text(row[columns["trigger"]])
+        operating = clean_markdown_text(row[columns["operating"]])
+        capital_cash = clean_markdown_text(row[columns["capital_cash"]])
+        value = clean_markdown_text(row[columns["value"]])
         probability = clean_markdown_text(row[columns["probability"]])
         impact = clean_markdown_text(row[columns["impact"]])
         horizon = clean_markdown_text(row[columns["horizon"]])
         warning = clean_markdown_text(row[columns["warning"]])
         reversibility = clean_markdown_text(row[columns["reversibility"]])
         mitigation = clean_markdown_text(row[columns["mitigation"]])
+        probability_category = risk_probability_category(probability)
+        impact_category = risk_impact_category(impact)
+        reversibility_category = risk_reversibility_category(reversibility)
         if (
             not substantive_text(path, 8)
             or looks_like_placeholder(path)
-            or not probability_value(probability)
-            or not impact_value(impact)
+            or any(
+                not substantive_text(item, 8) or looks_like_placeholder(item)
+                for item in (trigger, operating, capital_cash, value)
+            )
+            or probability_category is None
+            or impact_category is None
             or not horizon_value(horizon)
             or not substantive_text(warning, 6)
             or looks_like_placeholder(warning)
-            or not reversibility_value(reversibility)
-            or not substantive_text(mitigation, 8)
-            or looks_like_placeholder(mitigation)
+            or reversibility_category is None
+            or (
+                not explicit_null_display(mitigation)
+                and (not substantive_text(mitigation, 8) or looks_like_placeholder(mitigation))
+            )
         ):
             continue
         paths.append(path)
+        causal_rows.append(
+            {
+                "failure_path": path,
+                "trigger": trigger,
+                "operating_impact": operating,
+                "capital_cash_impact": capital_cash,
+                "value_impact": value,
+                "probability": probability_category,
+                "impact": impact_category,
+                "time_horizon": horizon,
+                "earliest_warning": warning,
+                "reversibility": reversibility_category,
+                "management_mitigation": mitigation,
+            }
+        )
         valid_rows += 1
     if valid_rows < 5 or not substantive_distinct_entries(paths, 8):
         add(findings, "error", "report-pre-mortem-substance", "research-report.md#pre-mortem", "Pre-Mortem needs at least five distinct, fully specified failure paths")
 
     risks = company.get("risks") if isinstance(company.get("risks"), dict) else {}
-    expected_paths = [item for item in list_or_empty(risks.get("pre_mortem")) if substantive_text(item, 8)]
+    expected_records = [
+        item
+        for item in list_or_empty(risks.get("pre_mortem"))
+        if isinstance(item, dict) and substantive_text(item.get("failure_path"), 8)
+    ]
+    expected_paths = [item["failure_path"] for item in expected_records]
     normalized_expected = [normalized_text(item) for item in expected_paths]
     matched_expected: list[int] = []
     path_mapping_valid = len(rows) == len(paths) == len(expected_paths) and bool(expected_paths)
@@ -2374,8 +3062,24 @@ def validate_pre_mortem_report(company: dict[str, Any], body: str, findings: lis
                 break
             matched_expected.append(matches[0])
         path_mapping_valid = path_mapping_valid and len(set(matched_expected)) == len(expected_paths)
+    if path_mapping_valid:
+        for report_row, expected_index in zip(causal_rows, matched_expected):
+            expected = expected_records[expected_index]
+            if any(
+                normalized_text(report_row[field]) != normalized_text(expected.get(field))
+                for field in ("trigger", "operating_impact", "capital_cash_impact", "value_impact")
+            ) or (
+                report_row["probability"] != (expected.get("probability") if expected.get("probability") is not None else "unknown")
+                or report_row["impact"] != (expected.get("impact") if expected.get("impact") is not None else "unknown")
+                or normalized_text(report_row["time_horizon"]) != normalized_text(expected.get("time_horizon"))
+                or normalized_text(report_row["earliest_warning"]) != normalized_text(expected.get("earliest_warning"))
+                or report_row["reversibility"] != expected.get("reversibility")
+                or not nullable_report_text_matches(report_row["management_mitigation"], expected.get("management_mitigation"))
+            ):
+                path_mapping_valid = False
+                break
     if not path_mapping_valid:
-        add(findings, "error", "report-pre-mortem-path-mapping", "research-report.md#pre-mortem", "failure-path rows must uniquely contain and exhaust company.risks.pre_mortem, with no extra rows")
+        add(findings, "error", "report-pre-mortem-path-mapping", "research-report.md#pre-mortem", "failure-path rows must uniquely exhaust company.risks.pre_mortem and match each structured causal chain")
 
     verdict = company.get("verdict") if isinstance(company.get("verdict"), dict) else {}
     bear = labelled_value(body, ("最强反方观点", "最强悲观观点", "strongest bear case", "bear case"))
@@ -3048,10 +3752,11 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
                 "revenue_growth": parse_report_number(row[int(columns["growth"])]),
                 "discount_rate": parse_report_number(row[int(columns["discount"])]),
                 "terminal_growth": parse_report_number(row[int(columns["terminal"])]),
+                "terminal_value_share": parse_report_number(row[int(columns["terminal_share"])]),
                 "fair_value_per_share": parse_report_number(row[int(columns["value"])]),
             }
-            terminal_share = parse_report_number(row[int(columns["terminal_share"])] )
-            if kind is None or kind in kinds or any(value is None for value in values.values()) or terminal_share is None or not 0 <= float(terminal_share) <= 1:
+            terminal_share = values["terminal_value_share"]
+            if kind is None or kind in kinds or any(value is None for value in values.values()) or not 0 <= float(terminal_share) <= 1:
                 invalid += 1
                 continue
             kinds.add(kind)
@@ -3102,7 +3807,15 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         if isinstance(item, dict)
     ]
     unique_pairs = {(round(discount, 6), round(terminal, 6)) for discount, terminal, _ in actual_cells}
-    cells_match = len(actual_cells) >= 4 and len(unique_pairs) >= 4
+    report_discounts = {round(discount, 6) for discount, _, _ in actual_cells}
+    report_terminals = {round(terminal, 6) for _, terminal, _ in actual_cells}
+    cells_match = (
+        len(actual_cells) == 9
+        and len(unique_pairs) == 9
+        and len(report_discounts) == 3
+        and len(report_terminals) == 3
+        and unique_pairs == {(discount, terminal) for discount in report_discounts for terminal in report_terminals}
+    )
     if expected_cells:
         cells_match = cells_match and all(
             any(
@@ -3114,7 +3827,7 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
             for expected in expected_cells
         )
     if not cells_match or not re.search(r"敏感|sensitivity", body, re.I):
-        add(findings, "error", "report-valuation-sensitivity", "research-report.md#valuation", "valuation section needs a distinct, reconciled DCF sensitivity table with at least four cells")
+        add(findings, "error", "report-valuation-sensitivity", "research-report.md#valuation", "valuation section needs a distinct, reconciled 3×3 DCF sensitivity table with exactly nine cells")
 
     reverse_headers = {
         "dimension": ("假设", "维度", "assumption", "dimension"),
@@ -3169,6 +3882,128 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
         break
     if not reverse_valid or not re.search(r"reverse\s*dcf|反向\s*dcf", body, re.I):
         add(findings, "error", "report-valuation-reverse-dcf", "research-report.md#valuation", "valuation section needs a reconciled Reverse DCF table with implied values, reality comparison and thesis-breaking thresholds")
+
+
+def validate_culture_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    tables = parse_markdown_tables(body)
+    management = company.get("management") if isinstance(company.get("management"), dict) else {}
+    commitments = [item for item in list_or_empty(management.get("commitment_timeline")) if isinstance(item, dict)]
+    commitment_headers = {
+        "date": ("日期", "date"),
+        "commitment": ("承诺", "commitment"),
+        "status": ("兑现状态", "状态", "status"),
+        "outcome": ("结果", "实际结果", "outcome"),
+        "next": ("下一次验证", "未来验证", "next validation"),
+    }
+    commitment_valid = False
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in commitment_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        observed: set[str] = set()
+        for row in rows:
+            commitment = clean_markdown_text(row[int(columns["commitment"])])
+            match = next(
+                (item for item in commitments if normalized_text(item.get("commitment")) == normalized_text(commitment)),
+                None,
+            )
+            if not isinstance(match, dict):
+                continue
+            validation = match.get("next_validation") if isinstance(match.get("next_validation"), dict) else {}
+            next_text = clean_markdown_text(row[int(columns["next"])])
+            if (
+                normalized_text(row[int(columns["date"])]) == normalized_text(match.get("date"))
+                and normalized_text(row[int(columns["status"])]) == normalized_text(match.get("status"))
+                and nullable_report_text_matches(row[int(columns["outcome"])], match.get("outcome"))
+                and all(normalized_text(validation.get(key)) in normalized_text(next_text) for key in ("method", "condition", "timeframe"))
+            ):
+                observed.add(normalized_text(commitment))
+        commitment_valid = len(rows) == len(commitments) == len(observed) and bool(commitments)
+        break
+    if not commitment_valid:
+        add(findings, "error", "report-culture-commitments", "research-report.md#culture-management", "culture section must reconcile every promise, status, outcome and next validation")
+
+    allocation = [item for item in list_or_empty(company.get("capital_allocation")) if isinstance(item, dict)]
+    allocation_headers = {
+        "period": ("期间", "period"),
+        "category": ("类别", "项目", "category"),
+        "lane": ("车道", "资本去向", "lane"),
+        "status": ("结果状态", "status"),
+        "result": ("结果", "result"),
+        "assessment": ("评价", "assessment"),
+    }
+    allocation_valid = False
+    for headers, rows in tables:
+        columns = {key: header_column(headers, aliases) for key, aliases in allocation_headers.items()}
+        if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
+            continue
+        observed: set[tuple[str, str]] = set()
+        for row in rows:
+            period = clean_markdown_text(row[int(columns["period"])])
+            category = clean_markdown_text(row[int(columns["category"])])
+            match = next(
+                (
+                    item
+                    for item in allocation
+                    if normalized_text(item.get("period")) == normalized_text(period)
+                    and normalized_text(item.get("category")) == normalized_text(category)
+                ),
+                None,
+            )
+            if not isinstance(match, dict):
+                continue
+            if all(
+                normalized_text(row[int(columns[column])]) == normalized_text(match.get(field))
+                for column, field in (("lane", "lane"), ("status", "result_status"), ("result", "result"), ("assessment", "assessment"))
+            ):
+                observed.add((normalized_text(period), normalized_text(category)))
+        allocation_valid = len(rows) == len(allocation) == len(observed) and bool(allocation)
+        break
+    if not allocation_valid:
+        add(findings, "error", "report-capital-allocation-results", "research-report.md#culture-management", "capital-allocation table must reconcile lane, result status, result and assessment")
+
+    missing_stops = [
+        item
+        for item in list_or_empty(management.get("stop_doing_list"))
+        if substantive_text(item, 6) and normalized_text(item) not in normalized_text(body)
+    ]
+    if missing_stops:
+        add(findings, "error", "report-stop-doing", "research-report.md#culture-management", "culture section must include every structured stop-doing constraint")
+
+
+def validate_monitoring_report(company: dict[str, Any], body: str, findings: list[Finding]) -> None:
+    risks = company.get("risks") if isinstance(company.get("risks"), dict) else {}
+    indicators = [item for item in list_or_empty(risks.get("monitoring_indicators")) if isinstance(item, dict)]
+    required_headers = {
+        "name": ("指标", "名称", "indicator", "name"),
+        "current": ("当前状态", "current status"),
+        "trigger": ("触发阈值", "触发条件", "trigger"),
+        "why": ("为什么重要", "重要性", "why it matters"),
+        "recheck": ("复查方法", "如何复查", "recheck method"),
+    }
+    selected = None
+    for headers, rows in parse_markdown_tables(body):
+        columns = {key: header_column(headers, aliases) for key, aliases in required_headers.items()}
+        if all(index is not None for index in columns.values()) and len(set(columns.values())) == len(columns):
+            selected = (rows, {key: int(index) for key, index in columns.items()})
+            break
+    if selected is None:
+        add(findings, "error", "report-monitoring-matrix", "research-report.md#monitoring", "monitoring section needs indicator, status, trigger, importance and recheck-method columns")
+        return
+    rows, columns = selected
+    observed: set[str] = set()
+    for row in rows:
+        name = clean_markdown_text(row[columns["name"]])
+        match = next((item for item in indicators if normalized_text(item.get("name")) == normalized_text(name)), None)
+        if not isinstance(match, dict):
+            continue
+        if all(
+            normalized_text(row[columns[column]]) == normalized_text(match.get(field))
+            for column, field in (("current", "current_status"), ("trigger", "trigger"), ("why", "why_it_matters"), ("recheck", "recheck_method"))
+        ):
+            observed.add(normalized_text(name))
+    if len(rows) != len(indicators) or len(observed) != len(indicators) or not 5 <= len(indicators) <= 10:
+        add(findings, "error", "report-monitoring-mapping", "research-report.md#monitoring", "monitoring rows must uniquely reconcile all structured indicators")
 
 
 def source_type_matches(value: str, source_type: Any) -> bool:
@@ -3385,8 +4220,14 @@ def validate_report(company: dict[str, Any], report: str, mode: str, findings: l
             validate_one_page_report(bodies["one-page-conclusion"], findings)
         if "moat" in bodies:
             validate_moat_report(company, bodies["moat"], findings)
+        if "durability" in bodies:
+            validate_durability_report(company, bodies["durability"], findings)
+        if "culture-management" in bodies:
+            validate_culture_report(company, bodies["culture-management"], findings)
         if "pre-mortem" in bodies:
             validate_pre_mortem_report(company, bodies["pre-mortem"], findings)
+        if "monitoring" in bodies:
+            validate_monitoring_report(company, bodies["monitoring"], findings)
         if "valuation" in bodies:
             validate_valuation_report(company, bodies["valuation"], findings, calculations)
         if "final-conclusion" in bodies:
@@ -3734,8 +4575,10 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
             else:
                 validate_chinese_display_units(mask_non_rendered_markdown(gap_text), findings, "schema-gap-report.md")
     validate_completeness(completeness, findings)
+    validate_classification_and_industry_metrics(company, completeness, mode, findings)
     validate_financials(company, completeness, mode, findings)
     validate_sankey(company, findings, calculations, known)
+    validate_durability(company, findings)
     validate_research_modules(company, findings)
     validate_valuation(company, findings)
     validate_verdict_and_risks(company, findings)
@@ -3771,7 +4614,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
 
 def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Finding]) -> dict[str, Any]:
     return {
-        "validator": "research-doujiao-value-company/2.2",
+        "validator": "research-doujiao-value-company/3.0",
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "root": str(root),
         "schema": str(schema_path),

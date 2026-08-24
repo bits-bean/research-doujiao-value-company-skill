@@ -49,6 +49,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "net_margin": net_income / revenue,
                 "roic": 0.14 + offset * 0.005,
                 "roe": 0.18 + offset * 0.004,
+                "incremental_roic": 0.16 + offset * 0.004,
                 "diluted_shares": (109 - offset) * M,
                 "is_estimate": False,
                 "source_ids": ["SRC-FY"],
@@ -75,6 +76,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "net_margin": 0.18,
                 "roic": 0.19,
                 "roe": 0.22,
+                "incremental_roic": 0.20,
                 "diluted_shares": 100 * M,
                 "is_estimate": False,
                 "source_ids": ["SRC-Q1"],
@@ -167,6 +169,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "discount_rate": discount_rate,
                 "terminal_growth": terminal_growth,
                 "fair_value_per_share": per_share_value,
+                "terminal_value_share": terminal_pv / (explicit_pv + terminal_pv),
             }
         )
         dcf_display[scenario_code] = {
@@ -200,7 +203,8 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 
     dcf_sensitivity = [
         {"discount_rate": discount_rate, "terminal_growth": terminal_growth, "fair_value_per_share": sensitivity_value(discount_rate, terminal_growth)}
-        for discount_rate, terminal_growth in ((0.08, 0.02), (0.08, 0.03), (0.10, 0.02), (0.10, 0.03))
+        for discount_rate in (0.08, 0.09, 0.10)
+        for terminal_growth in (0.02, 0.025, 0.03)
     ]
 
     company = {
@@ -219,9 +223,17 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "accounting_standard": "US GAAP",
             "display_language": "zh-CN",
             "source_version": "2026Q1",
-            "schema_version": "1.2.0",
+            "schema_version": "2.0.0",
             "theme": "light",
             "sankey_style": "app-economy-inspired-light",
+        },
+        "classification": {
+            "sector": "information_technology",
+            "primary_industry": "transaction_processing",
+            "secondary_industries": ["membership_services"],
+            "accounting_profile": "standard_corporate",
+            "returns_profile": "standard_roic",
+            "source_ids": ["SRC-FY"],
         },
         "brand_identity": {
             "company_logo": {
@@ -271,6 +283,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "monitoring_notes": "下一季度重点核对续费、商户覆盖与单位经济性。",
         },
         "financials": financials,
+        "industry_metrics": [],
         "income_statement_sankey": {
             "fiscal_year": "FY2025",
             "basis": "income_statement",
@@ -319,6 +332,10 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "period": "FY2025",
                 "category": "buyback",
                 "amount": 18 * M,
+                "lane": "shareholder_return",
+                "result_status": "positive",
+                "result": "稀释后股份同比净减少百分之二，并且未削弱净现金头寸。",
+                "assessment": "回购均价低于当时审慎价值区间，提升了持续股东的每股权益。",
                 "commentary": "在低于内部价值区间时回购并保持净现金。",
                 "source_ids": ["SRC-FY"],
             }
@@ -370,6 +387,33 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "source_ids": ["SRC-Q1"],
             },
         ],
+        "durability": {
+            "horizon_years": 20,
+            "overall_status": "conditional",
+            "conclusion": "需求本身可持续，但公司必须持续适配新入口并抵御监管与技术冲击。",
+            "demand_durability": {
+                "status": "strong",
+                "assessment": "可靠交易、短期信用和身份信任在二十年后仍有明确需求。",
+                "evidence": ["正式披露显示核心客户持续为可靠性、信用与权益组合付费。"],
+                "breaker": "若实时支付与开放身份基础设施使现有服务不再具有独立付费价值。",
+                "source_ids": ["SRC-FY"],
+            },
+            "adaptability": {
+                "status": "adequate",
+                "assessment": "既有网络和数据能够支持迁移，但下一代入口的采用速度仍需验证。",
+                "evidence": ["公司持续扩大数字入口接入并把既有风控能力迁移到新产品。"],
+                "breaker": "若新入口交易占比持续上升而公司接入率连续多年落后。",
+                "source_ids": ["SRC-Q1"],
+            },
+            "external_shocks": {
+                "status": "uncertain",
+                "assessment": "监管、数据使用限制与替代网络可能同时削弱现金流和资本弹性。",
+                "evidence": ["季度披露把监管资本、信用损失和数据合规列为持续风险。"],
+                "breaker": "若监管变化永久限制关键数据并要求大幅提高资本缓冲。",
+                "source_ids": ["SRC-Q1"],
+            },
+            "source_ids": ["SRC-FY", "SRC-Q1"],
+        },
         "management": {
             "scores": [
                 {"dimension": "坦诚", "score": 4.0, "assessment": "管理层同时披露增长动力与成本压力，并量化关键偏差。", "source_ids": ["SRC-Q1"]},
@@ -380,8 +424,14 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 {
                     "date": "2025-02-15",
                     "commitment": "管理层承诺保持核心网络投入同时改善经营利润率。",
-                    "status": "已兑现",
+                    "status": "fulfilled",
                     "outcome": "2025年收入增长并且经营利润率同比提升。",
+                    "next_validation": {
+                        "method": "下一份年报逐项核对核心网络投入、收入增速与经营利润率。",
+                        "condition": "若网络投入保持且经营利润率不低于2025年水平，则承诺继续成立。",
+                        "timeframe": "FY2026年报发布后",
+                        "source_ids": ["SRC-FY"],
+                    },
                     "source_ids": ["SRC-FY"],
                 }
             ],
@@ -418,11 +468,76 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         },
         "risks": {
             "pre_mortem": [
-                "核心客户因产品体验停滞而迁移，续费下降导致单位经济性失效。",
-                "商户侧出现更低成本替代网络，覆盖优势逐步转为固定成本负担。",
-                "监管限制数据使用范围，风控准确性下降并推高信用损失。",
-                "管理层在高估值阶段过度回购，削弱应对衰退的资产负债表弹性。",
-                "新技术改变客户入口，既有品牌无法转化为下一代产品采用。",
+                {
+                    "failure_path": "核心客户因产品体验停滞而迁移，续费下降导致单位经济性失效。",
+                    "trigger": "核心产品迭代长期落后并使高价值客户连续多个季度流失。",
+                    "operating_impact": "续费率和单位服务收入同步下降，获客成本回收期明显拉长。",
+                    "capital_cash_impact": "维持客户规模需要加大补贴与营销支出，自由现金流率收缩。",
+                    "value_impact": "可分配现金增长转负并压低合理估值区间与长期复利能力。",
+                    "probability": "medium",
+                    "impact": "high",
+                    "time_horizon": "1–3年",
+                    "earliest_warning": "续费率连续四季低于长期均值",
+                    "reversibility": "partially_reversible",
+                    "management_mitigation": "重做核心权益并降低无效获客支出",
+                    "source_ids": ["SRC-Q1"],
+                },
+                {
+                    "failure_path": "商户侧出现更低成本替代网络，覆盖优势逐步转为固定成本负担。",
+                    "trigger": "替代网络以更低综合成本覆盖核心高频商户并形成规模。",
+                    "operating_impact": "活跃商户和交易频次下降，网络收入与数据反馈同时减弱。",
+                    "capital_cash_impact": "既有受理基础设施利用率下降，但维护成本难以同步削减。",
+                    "value_impact": "网络效应反转并导致利润率和终值增长假设永久下调。",
+                    "probability": "medium_low",
+                    "impact": "high",
+                    "time_horizon": "3–5年",
+                    "earliest_warning": "活跃商户下降且新增覆盖连续停滞",
+                    "reversibility": "hard_to_reverse",
+                    "management_mitigation": "调整受理费率并投资高频使用场景",
+                    "source_ids": ["SRC-FY"],
+                },
+                {
+                    "failure_path": "监管限制数据使用范围，风控准确性下降并推高信用损失。",
+                    "trigger": "新监管规则禁止关键风险变量用于授信和持续账户管理。",
+                    "operating_impact": "风险识别能力下降，批准率、客户体验和信用损失同时承压。",
+                    "capital_cash_impact": "拨备和监管资本需求上升，能够返还股东的现金减少。",
+                    "value_impact": "正常化股东现金流下降且股权成本上升，内在价值显著受损。",
+                    "probability": "low",
+                    "impact": "severe",
+                    "time_horizon": "1–2年",
+                    "earliest_warning": "合规征询文件扩大禁止使用的数据范围",
+                    "reversibility": "hard_to_reverse",
+                    "management_mitigation": "提前建设替代变量与人工复核流程",
+                    "source_ids": ["SRC-Q1"],
+                },
+                {
+                    "failure_path": "管理层在高估值阶段过度回购，削弱应对衰退的资产负债表弹性。",
+                    "trigger": "回购金额在估值偏高且宏观风险上升时仍明显扩张。",
+                    "operating_impact": "核心经营短期不变，但管理层资本纪律和逆周期能力受到质疑。",
+                    "capital_cash_impact": "现金缓冲下降并可能增加举债，使衰退期融资成本上升。",
+                    "value_impact": "每股价值被高价回购摧毁，安全边际和长期回报率下降。",
+                    "probability": "medium",
+                    "impact": "high",
+                    "time_horizon": "1–3年",
+                    "earliest_warning": "回购均价显著超过基准内在价值区间",
+                    "reversibility": "partially_reversible",
+                    "management_mitigation": "暂停回购并将自由现金流优先降债",
+                    "source_ids": ["SRC-FY"],
+                },
+                {
+                    "failure_path": "新技术改变客户入口，既有品牌无法转化为下一代产品采用。",
+                    "trigger": "下一代交易入口快速普及而公司产品接入率持续落后。",
+                    "operating_impact": "客户使用频次迁移到新入口，品牌认知无法转化为实际交易。",
+                    "capital_cash_impact": "补建技术与渠道需要高额投入，同时旧网络现金贡献衰减。",
+                    "value_impact": "竞争优势和长期增长期缩短，终值占比对应的价值大幅下降。",
+                    "probability": "medium",
+                    "impact": "high",
+                    "time_horizon": "5–10年",
+                    "earliest_warning": "新入口交易占比上升而本公司采用率落后",
+                    "reversibility": "partially_reversible",
+                    "management_mitigation": "开放接口并通过合作进入下一代入口",
+                    "source_ids": ["SRC-Q1"],
+                },
             ],
             "bear_case": "最强悲观情形是竞争补贴、监管收紧与错误资本配置同时发生，使增长与利润率永久低于反向估值要求。",
             "fragile_assumptions": [
@@ -431,11 +546,11 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "管理层能够在增长投资与回购纪律之间保持克制",
             ],
             "monitoring_indicators": [
-                {"name": "核心客户续费率", "current_status": "仍处历史稳定区间", "trigger": "若连续四季明显低于长期均值则复核转换成本", "source_ids": ["SRC-Q1"]},
-                {"name": "单位服务收入", "current_status": "同比保持温和增长", "trigger": "若提价后收入与留存同时下降则推翻定价权判断", "source_ids": ["SRC-Q1"]},
-                {"name": "商户网络覆盖", "current_status": "重点场景继续扩张", "trigger": "若新增覆盖停滞且活跃商户下降则复核网络效应", "source_ids": ["SRC-FY"]},
-                {"name": "信用损失水平", "current_status": "风险指标处于目标范围", "trigger": "若损失率跨周期显著恶化则下调现金流质量", "source_ids": ["SRC-Q1"]},
-                {"name": "回购价格纪律", "current_status": "回购均价低于基准价值", "trigger": "若高估值阶段仍扩大回购则下调资本配置评分", "source_ids": ["SRC-FY"]},
+                {"name": "核心客户续费率", "current_status": "仍处历史稳定区间", "trigger": "若连续四季明显低于长期均值则复核转换成本", "why_it_matters": "它直接检验客户关系和转换成本是否仍能保护经常性收入。", "recheck_method": "每季读取官方客户指标并与过去五年同季区间比较。", "source_ids": ["SRC-Q1"]},
+                {"name": "单位服务收入", "current_status": "同比保持温和增长", "trigger": "若提价后收入与留存同时下降则推翻定价权判断", "why_it_matters": "收入与留存同时变化可以区分真实定价权和短期提价幻觉。", "recheck_method": "每次业绩披露后拆分价格、客户数和产品组合变化。", "source_ids": ["SRC-Q1"]},
+                {"name": "商户网络覆盖", "current_status": "重点场景继续扩张", "trigger": "若新增覆盖停滞且活跃商户下降则复核网络效应", "why_it_matters": "商户覆盖决定客户使用场景以及双边网络反馈能否继续增强。", "recheck_method": "年报发布后核对活跃商户、重点场景覆盖和交易频次。", "source_ids": ["SRC-FY"]},
+                {"name": "信用损失水平", "current_status": "风险指标处于目标范围", "trigger": "若损失率跨周期显著恶化则下调现金流质量", "why_it_matters": "信用损失会直接消耗会计利润、监管资本和股东可分配现金。", "recheck_method": "每季比较净核销率、逾期迁徙和拨备覆盖的跨周期趋势。", "source_ids": ["SRC-Q1"]},
+                {"name": "回购价格纪律", "current_status": "回购均价低于基准价值", "trigger": "若高估值阶段仍扩大回购则下调资本配置评分", "why_it_matters": "回购价格决定股份减少是在创造还是毁坏持续股东的每股价值。", "recheck_method": "每年用回购金额除以股数复算均价并与当时价值区间比较。", "source_ids": ["SRC-FY"]},
             ],
         },
         "sources": [
@@ -611,8 +726,36 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 | 转换成本 | 3.5 / 5 | 稳定 | 中 | 核心客户续费稳定且商户受理关系覆盖广泛〔SRC-Q1〕 | 多归属让客户保留竞争网络的使用选择〔SRC-Q1〕 | 新入口自动迁移账户降低主动切换摩擦 |
 | 网络效应 | 4.5 / 5 | 增强 | 中 | 商户覆盖增加带来更多使用场景与交易反馈〔SRC-Q1〕 | 平台补贴可能制造缺乏利润的表面增长〔SRC-Q1〕 | 大型钱包封闭流量并绕开现有网络连接 |""",
         ),
-        ("长期生存与十年后需求", "可靠交易、短期信用和身份信任具有长期需求。公司能否生存二十年取决于持续适应新入口，而不是依赖今天的产品形式。"),
-        ("企业文化、管理层与资本配置", "管理层披露目标时同时说明成本和约束，资本优先投向核心网络。Stop Doing List 限制追逐邻近收入与高价机械回购。"),
+        (
+            "长期生存与十年后需求",
+            """可靠交易、短期信用和身份信任具有长期需求。公司能否生存二十年取决于持续适应新入口，而不是依赖今天的产品形式。
+
+观察期限：20年
+
+总体状态：conditional
+
+结论：需求本身可持续，但公司必须持续适配新入口并抵御监管与技术冲击。
+
+| 维度 | 状态 | 判断 | 证据 | 破坏条件 |
+|---|---|---|---|---|
+| 需求持久性 | strong | 可靠交易、短期信用和身份信任在二十年后仍有明确需求。 | 正式披露显示核心客户持续为可靠性、信用与权益组合付费〔SRC-FY〕。 | 若实时支付与开放身份基础设施使现有服务不再具有独立付费价值。 |
+| 适应能力 | adequate | 既有网络和数据能够支持迁移，但下一代入口的采用速度仍需验证。 | 公司持续扩大数字入口接入并把既有风控能力迁移到新产品〔SRC-Q1〕。 | 若新入口交易占比持续上升而公司接入率连续多年落后。 |
+| 外部冲击 | uncertain | 监管、数据使用限制与替代网络可能同时削弱现金流和资本弹性。 | 季度披露把监管资本、信用损失和数据合规列为持续风险〔SRC-Q1〕。 | 若监管变化永久限制关键数据并要求大幅提高资本缓冲。 |""",
+        ),
+        (
+            "企业文化、管理层与资本配置",
+            """管理层披露目标时同时说明成本和约束，资本优先投向核心网络。承诺不能只看口号，必须把结果与下一次验证写在同一条时间线上。
+
+| 日期 | 承诺 | 兑现状态 | 实际结果 | 下一次验证 |
+|---|---|---|---|---|
+| 2025-02-15 | 管理层承诺保持核心网络投入同时改善经营利润率。 | fulfilled | 2025年收入增长并且经营利润率同比提升。 | 下一份年报逐项核对核心网络投入、收入增速与经营利润率。若网络投入保持且经营利润率不低于2025年水平，则承诺继续成立。FY2026年报发布后 |
+
+| 期间 | 类别 | 金额 | 车道 | 结果状态 | 结果 | 评价 |
+|---|---|---:|---|---|---|---|
+| FY2025 | buyback | 0.18亿美元 | shareholder_return | positive | 稀释后股份同比净减少百分之二，并且未削弱净现金头寸。 | 回购均价低于当时审慎价值区间，提升了持续股东的每股权益。 |
+
+Stop Doing List：不为短期收入进入无法形成客户数据闭环的邻近业务；不在高于审慎内在价值区间时机械扩大股份回购。""",
+        ),
         ("回购明细", "回购金额、股份和均价分别入账，避免把减少股数自动视为创造价值。只有均价低于审慎内在价值且不削弱资产负债表时才加分。"),
         ("治理、债务与红旗", "净现金提供缓冲，但监管、数据治理和激励结构仍需季度复核。若管理层改变资本纪律或隐藏关键损失，将构成治理红旗。"),
         (
@@ -662,13 +805,13 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "Pre-Mortem 事前验尸",
             """事前验尸（Pre-Mortem：先假设投资已经失败，再倒推最可能的原因）显示，永久损失往往来自多个变量叠加，因此每条失败路径都预先定义时间与最早预警。
 
-| 失败路径 | 概率 | 影响 | 期限 | 最早预警 | 可逆性 | 管理层缓解 |
-|---|---|---|---|---|---|---|
-| 核心客户因产品体验停滞而迁移，续费下降导致单位经济性失效。 | 中 | 高 | 1–3年 | 续费率连续四季低于长期均值 | 中 | 重做核心权益并降低无效获客支出 |
-| 商户侧出现更低成本替代网络，覆盖优势逐步转为固定成本负担。 | 中低 | 高 | 3–5年 | 活跃商户下降且新增覆盖连续停滞 | 低 | 调整受理费率并投资高频使用场景 |
-| 监管限制数据使用范围，风控准确性下降并推高信用损失。 | 低 | 严重 | 1–2年 | 合规征询文件扩大禁止使用的数据范围 | 低 | 提前建设替代变量与人工复核流程 |
-| 管理层在高估值阶段过度回购，削弱应对衰退的资产负债表弹性。 | 中 | 重大 | 1–3年 | 回购均价显著超过基准内在价值区间 | 中 | 暂停回购并将自由现金流优先降债 |
-| 新技术改变客户入口，既有品牌无法转化为下一代产品采用。 | 中 | 高 | 5–10年 | 新入口交易占比上升而本公司采用率落后 | 部分可逆 | 开放接口并通过合作进入下一代入口 |
+| 失败路径 | 触发因素 | 经营影响 | 资本 / 现金影响 | 价值影响 | 概率 | 影响 | 期限 | 最早预警 | 可逆性 | 管理层缓解 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 核心客户因产品体验停滞而迁移，续费下降导致单位经济性失效。 | 核心产品迭代长期落后并使高价值客户连续多个季度流失。 | 续费率和单位服务收入同步下降，获客成本回收期明显拉长。 | 维持客户规模需要加大补贴与营销支出，自由现金流率收缩。 | 可分配现金增长转负并压低合理估值区间与长期复利能力。 | 中 | 高 | 1–3年 | 续费率连续四季低于长期均值 | 部分可逆 | 重做核心权益并降低无效获客支出 |
+| 商户侧出现更低成本替代网络，覆盖优势逐步转为固定成本负担。 | 替代网络以更低综合成本覆盖核心高频商户并形成规模。 | 活跃商户和交易频次下降，网络收入与数据反馈同时减弱。 | 既有受理基础设施利用率下降，但维护成本难以同步削减。 | 网络效应反转并导致利润率和终值增长假设永久下调。 | 中低 | 高 | 3–5年 | 活跃商户下降且新增覆盖连续停滞 | 难以逆转 | 调整受理费率并投资高频使用场景 |
+| 监管限制数据使用范围，风控准确性下降并推高信用损失。 | 新监管规则禁止关键风险变量用于授信和持续账户管理。 | 风险识别能力下降，批准率、客户体验和信用损失同时承压。 | 拨备和监管资本需求上升，能够返还股东的现金减少。 | 正常化股东现金流下降且股权成本上升，内在价值显著受损。 | 低 | 严重 | 1–2年 | 合规征询文件扩大禁止使用的数据范围 | 难以逆转 | 提前建设替代变量与人工复核流程 |
+| 管理层在高估值阶段过度回购，削弱应对衰退的资产负债表弹性。 | 回购金额在估值偏高且宏观风险上升时仍明显扩张。 | 核心经营短期不变，但管理层资本纪律和逆周期能力受到质疑。 | 现金缓冲下降并可能增加举债，使衰退期融资成本上升。 | 每股价值被高价回购摧毁，安全边际和长期回报率下降。 | 中 | 重大 | 1–3年 | 回购均价显著超过基准内在价值区间 | 部分可逆 | 暂停回购并将自由现金流优先降债 |
+| 新技术改变客户入口，既有品牌无法转化为下一代产品采用。 | 下一代交易入口快速普及而公司产品接入率持续落后。 | 客户使用频次迁移到新入口，品牌认知无法转化为实际交易。 | 补建技术与渠道需要高额投入，同时旧网络现金贡献衰减。 | 竞争优势和长期增长期缩短，终值占比对应的价值大幅下降。 | 中 | 高 | 5–10年 | 新入口交易占比上升而本公司采用率落后 | 部分可逆 | 开放接口并通过合作进入下一代入口 |
 
 | 补充诊断 | 明确结论 |
 |---|---|
@@ -679,7 +822,18 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 | 存活但股东回报差 | 公司仍能运营，但竞争补贴和高价回购长期压低每股自由现金流，回报低于资本成本。 |""",
         ),
         ("待调查与 Open Questions", "尚待调查企业客户分层留存、商户边际获客成本和新入口使用率。下一轮将优先取得正式分部附注和更细的信用数据，并核对不同客户层的历史迁移与盈利差异。"),
-        ("领先指标与 Monitoring Indicators", "季度跟踪续费、单位收入、商户覆盖、信用损失和回购均价。每项指标都有不同阈值，用于检验护城河、现金流和资本配置。"),
+        (
+            "领先指标与 Monitoring Indicators",
+            """季度跟踪续费、单位收入、商户覆盖、信用损失和回购均价。每项指标都有不同阈值、重要性和复查动作，用于检验护城河、现金流和资本配置。
+
+| 指标 | 当前状态 | 触发阈值 | 为什么重要 | 复查方法 |
+|---|---|---|---|---|
+| 核心客户续费率 | 仍处历史稳定区间 | 若连续四季明显低于长期均值则复核转换成本 | 它直接检验客户关系和转换成本是否仍能保护经常性收入。 | 每季读取官方客户指标并与过去五年同季区间比较。 |
+| 单位服务收入 | 同比保持温和增长 | 若提价后收入与留存同时下降则推翻定价权判断 | 收入与留存同时变化可以区分真实定价权和短期提价幻觉。 | 每次业绩披露后拆分价格、客户数和产品组合变化。 |
+| 商户网络覆盖 | 重点场景继续扩张 | 若新增覆盖停滞且活跃商户下降则复核网络效应 | 商户覆盖决定客户使用场景以及双边网络反馈能否继续增强。 | 年报发布后核对活跃商户、重点场景覆盖和交易频次。 |
+| 信用损失水平 | 风险指标处于目标范围 | 若损失率跨周期显著恶化则下调现金流质量 | 信用损失会直接消耗会计利润、监管资本和股东可分配现金。 | 每季比较净核销率、逾期迁徙和拨备覆盖的跨周期趋势。 |
+| 回购价格纪律 | 回购均价低于基准价值 | 若高估值阶段仍扩大回购则下调资本配置评分 | 回购价格决定股份减少是在创造还是毁坏持续股东的每股价值。 | 每年用回购金额除以股数复算均价并与当时价值区间比较。 |""",
+        ),
         (
             "最终结论",
             """公司质量良好但价格接近合理，应等待更宽安全边际，并让八个判断维度分别保留可推翻的反证。

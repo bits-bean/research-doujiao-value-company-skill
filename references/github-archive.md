@@ -32,6 +32,10 @@ GitHub 提交不等于网站或渠道发布，不触发网站导入或内容生�
 
 三项 observation 的 `repository`、`branch` 和 `base_head` 必须一致。任何写入使用 `--confirm-write-authorization`；同一 `data_as_of` 的修订还需 `--confirm-same-date-revision`；直接 `main` 另需 `--confirm-direct-main-authorization`。只有最终计划 `ready_for_write: true` 才能执行。
 
+远端 canonical 为 Schema 1.x、冻结包为 2.0 时，另须 `--confirm-schema-migration`。只允许 1.x → 2.0 升级，且公司法定身份、ticker、交易所、数据日和估值日仍通过全部门禁；同一数据日还必须同时使用 `--confirm-same-date-revision`。禁止 Schema 降级、2.x 横向换版或仅改版本号。
+
+Schema 迁移包必须是按原始来源重建并通过 `full` 验证的新基线，包含分类、行业指标、二十年 `durability` 三维判断、承诺下一验证、资本配置结果、风险因果链和领先指标复查方法；旧自由文本、护城河分数或估值字段不能直接填充这些契约。
+
 ## 远端路径与替换语义
 
 当前研究包固定直接位于：
@@ -56,7 +60,7 @@ companies/<company-slug>/research-manifest.json
 - 目录不存在：创建全部直接研究文件。
 - 直接文件集合及内容完全相同：公司目录为幂等 `noop`。
 - 任一受管文件缺失或变化：以冻结包完整受管文件集更新；旧的多余受管文件列入 `delete_paths`。
-- 非研究资产无论是否存在都不参与 `noop` 比较，不得列入 `delete_paths`。
+- 非研究资产无论是否存在都不参与 `noop` 比较，不得列入 `delete_paths`；这包括公司 Logo、`images/` 目录、图片 manifest 与 SVG 母版。
 - 发现版本子目录时停止；清理遗留 `research/` 或历史目录必须由用户明确指定精确路径，不得随本次整包提交自动扩张删除范围。
 
 正式 `company.json` 只允许单调前进：
@@ -65,7 +69,7 @@ companies/<company-slug>/research-manifest.json
 - 与研究包中的 `company.json` 完全相同：`noop`。
 - 远端 `data_as_of` 或 `valuation_date` 更新：停止，禁止回退。
 - 同一 `data_as_of` 但内容不同：默认停止；只有人工接受的修订且用户明确授权该次修复时，使用 `--confirm-same-date-revision`。
-- 公司法定身份、ticker、交易所或 `schema_version` 不一致：停止。
+- 公司法定身份、ticker 或交易所不一致：停止。`schema_version` 不一致默认停止；仅显式确认的 1.x → 2.0 迁移可继续。
 
 ## 提交策略
 
@@ -104,5 +108,6 @@ companies/<company-slug>/<直接研究包文件>
 - 分支保护阻止直接提交：改走 PR；若用户明确禁止 PR，则停止。
 - 远端 `main` 并发更新：重新读取并完整重做预检，不得强推。
 - 同日修订未获明确确认：停止，不覆盖。
+- Schema 迁移未获明确确认、不是 1.x → 2.0 或只修改版本号：停止，不覆盖。
 - 部分分支写入：不得合并；修复分支时只操作已确认的目标路径，保持 `main` 不变。
 - 遗留 `research/` 或历史版本子目录需要清理：必须由用户明确指定精确目录；不得把“提交当前研究”扩张为批量删除历史记录。

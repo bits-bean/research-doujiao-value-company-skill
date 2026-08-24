@@ -1,6 +1,6 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term research for listed companies under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for company research, ten-year financials, FCF/Owner Earnings/financial-company FCFE, ROIC or industry-adapted returns, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, formal research reports, schema-valid company.json, earnings updates, Too Hard decisions, frozen handoff packages, and authorized delivery to bits-bean/doujiao-value-system. Do not use for social-media production, short-term price prediction, trading signals, unsupported recommendations, unapproved GitHub writes, website import, or public publishing.
+description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term research for listed companies under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for company classification, industry-metric and chart-routing data, ten-year financials, FCF/Owner Earnings/financial-company FCFE, ROIC or industry-adapted returns, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, formal research reports, schema-valid company.json, earnings updates, Too Hard decisions, frozen handoff packages, and authorized delivery to bits-bean/doujiao-value-system. Do not use for social-media production, short-term price prediction, trading signals, unsupported recommendations, unapproved GitHub writes, website import, or public publishing.
 ---
 
 # 豆角长期价值研究
@@ -29,14 +29,16 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 同时锁定研究协议 commit / digest、Schema commit / blob / SHA-256 / version、公司法定身份、证券、会计准则、财年、币种、单位、数据日、估值日和股价时间戳。任一锚点或关键官方来源不可验证时只能交付计划 / 缺口，不称正式完成。
 
+研究开始时完整读取 [classification-and-chart-routing.md](references/classification-and-chart-routing.md)，先用官方证据确定 `classification`，再选择会计、回报和行业指标框架。`sector` 与行业标签只用于检索；只有 `accounting_profile` 和 `returns_profile` 可控制计算与下游图表路由。银行与支付信贷的回报图固定为长期 ROE / ROTCE 主序列、最新 CET1 / 资本充足率加目标或监管区间的当前仪表，以及“每股权益长期序列”或“至少三个完整财年的回购对股数影响”二选一；不得因缺少八年 CET1 或选择回购替代路径而改用普通企业模板。
+
 ## 3. 证据和十年财务
 
 完整读取 [evidence-and-calculation.md](references/evidence-and-calculation.md)，先做 `evidence-ledger.json` 和 `calculation-ledger.json`，再写结论。
 
 - 默认十个完整财年 + 最新季度 + TTM，统一财年变化、重述、拆股、并购、币种、单位和正负号。
 - 关键数字记录期间、口径、来源 ID 和页码 / 章节；推断和估算记录最强反证与推翻条件。
-- 普通企业复算 FCF、Owner Earnings、ROIC、净债务、市值和 EV；金融、保险、REIT、资源等使用行业适配口径。
-- 护城河同时读取竞争对手和替代品；文化和管理层比较承诺与实际行动。
+- 普通企业复算 FCF、Owner Earnings、ROIC、净债务、市值和 EV；金融、保险、REIT、资源等使用分类契约指定的行业适配口径，并把通用财务字段无法表达的序列写入 `industry_metrics`。
+- 护城河同时读取竞争对手和替代品；长期生存把需求持久性、适应能力和外部冲击拆开验证；文化和管理层比较承诺与实际行动。
 
 ## 4. 长期价值判断
 
@@ -52,7 +54,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 6. 正式研究包
 
-按 [research-contract.md](references/research-contract.md) 建立新版本目录；生成 `income_statement_sankey` 时完整执行 [income-statement-sankey.md](references/income-statement-sankey.md)。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+按 [research-contract.md](references/research-contract.md) 建立新版本目录；生成 `income_statement_sankey` 时完整执行 [income-statement-sankey.md](references/income-statement-sankey.md)。`classification`、`industry_metrics`、二十年以上的结构化 `durability` 判断、承诺的下次验证、资本配置结果、风险因果链和长期跟踪方法必须是有来源的研究产出，不能留给网站或内容层猜测。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
 
 正文只保留投资判断所需的事实、假设、计算过程、限制与反证。Schema 字段映射、JSON 文件名、验证器兼容、归档或生成流程等内部实现说明写入 `schema-gap-report.md`、`research-completeness.md`、台账或 manifest，不塞进研究叙事；但字段背后的真实经济假设仍须在正文直接说清。例如正文应写“第1—5年收入与普通股利润都按8%增长”，而不是解释某个 Schema 字段为何暂存同一数值。
 
@@ -77,6 +79,8 @@ python3 scripts/freeze_research.py <package> \
 ```
 
 新 manifest 固定为 v2。警告默认阻断；只有完整度说明逐项解释原因、影响和待补证据时才能 `--allow-warnings`。只有真实人工审核后才使用 `--human-reviewed`。冻结只表示不可变，不等于投资建议。
+
+Schema 1.x → 2.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建分类、行业指标与新增结构字段，在新目录按 2.0 完整验证后以 `full` 模式冻结。不得把旧包作为当前 2.0 `incremental` 的前序包，也不得仅改 `schema_version`。
 
 ## 8. 增量与下游
 

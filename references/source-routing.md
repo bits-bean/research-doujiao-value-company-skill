@@ -33,6 +33,8 @@
 
 读取研究包自身的 manifest 与冻结文件。若 manifest 为 `1.0`，只能使用 `audit` 模式诊断，不得作为新增量研究的前序版本，不得重新冻结或 GitHub 归档。若要继续生产，按当前研究协议和 Schema 迁移为新的 `2.0` 研究包。
 
+若 manifest 为 v2 但 `company.json.meta.schema_version` 属于 1.x，同样只能按旧锁审计；它不能作为当前 Schema 2.0 incremental 的前序包。迁移时回到原始证据，重建分类、行业指标与新增结构字段，在新目录运行当前 `full` 门禁后冻结，不能把旧自由文本机械改形或只改版本号。
+
 ### 下游交接
 
 本 Skill 不读取平台规范、不生成传播内容。研究包冻结后，只有用户要求内容生产时才交给 `$produce-doujiao-value-content`；下游自行验证 `research_protocol` 与 Schema 锁并加载其内容规则。

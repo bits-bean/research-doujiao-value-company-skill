@@ -61,9 +61,9 @@
 4. 建立“旧数据 vs 新数据”差异；
 5. 更新最新季度/半年度/年度数据；
 6. 重新计算近12个月（TTM）；
-7. 更新受影响的 segments、financials、capital_allocation、buyback_ledger、debt_maturities 等；
+7. 更新受影响的 `classification`、`financials`、`industry_metrics`、`durability`、segments、capital_allocation、buyback_ledger、debt_maturities 等；监管身份或主营经济来源发生变化时重新审定两个路由字段，不能根据新增指标自动换模板；长期生存三维判断只有在新证据改变状态、证据或破坏条件时才更新；
 8. 重新检查 FCF、Owner Earnings、ROIC 与股份变化；
-9. 检查商业模式、护城河、管理层、资本配置和风险是否出现结构性变化；
+9. 检查商业模式、护城河、管理层承诺的下一验证、资本配置结果、风险因果链和长期跟踪方法是否出现结构性变化；
 10. 更新估值与 verdict；
 11. 更新 `meta.data_as_of` 和 `meta.valuation_date`；
 12. 更新 `reporting.latest_report`；
@@ -137,6 +137,8 @@ API 返回失败时：
 不得因同一财报的多份官方材料重复新增同一期间。
 
 `schema_version` 由当前 Skill 信任锁绑定的 Schema 决定；研究协议版本与 Schema 版本分开管理。权威 Schema 更新后，必须先发布新版研究 Skill 才能用于新的正式冻结。历史冻结包保持不可变，并继续由其 manifest 锁定的旧 Schema 解释；升级研究只能创建新版本，不能静默改写历史数字。
+
+Schema 1.x 包不能直接作为 Schema 2.0 增量链的前序包。先新建迁移目录，从原始来源重建 `classification`、`industry_metrics`、`durability`、承诺验证、资本配置结果、风险因果链和领先指标复查方法，运行 2.0 `full` 验证并冻结；不能只改版本号、复制旧自由文本，也不能由网站、护城河分数或估值字段反推分类与长期生存结论。完成该基线迁移后，后续财报才可按 2.0 incremental 链更新。
 
 ## 12. 人工审核
 在系统早期阶段，默认采用：

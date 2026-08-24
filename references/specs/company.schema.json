@@ -7,16 +7,19 @@
   "additionalProperties": false,
   "required": [
     "meta",
+    "classification",
     "brand_identity",
     "verdict",
     "reporting",
     "financials",
+    "industry_metrics",
     "income_statement_sankey",
     "segments",
     "capital_allocation",
     "buyback_ledger",
     "debt_maturities",
     "moat",
+    "durability",
     "management",
     "valuation",
     "risks",
@@ -25,6 +28,9 @@
   "properties": {
     "meta": {
       "$ref": "#/$defs/meta"
+    },
+    "classification": {
+      "$ref": "#/$defs/classification"
     },
     "brand_identity": {
       "$ref": "#/$defs/brandIdentity"
@@ -39,6 +45,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/financialPeriod"
+      }
+    },
+    "industry_metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/industryMetric"
       }
     },
     "income_statement_sankey": {
@@ -74,6 +86,9 @@
         "$ref": "#/$defs/moatItem"
       }
     },
+    "durability": {
+      "$ref": "#/$defs/durability"
+    },
     "management": {
       "$ref": "#/$defs/management"
     },
@@ -92,22 +107,13 @@
   },
   "$defs": {
     "nullableNumber": {
-      "type": [
-        "number",
-        "null"
-      ]
+      "type": ["number", "null"]
     },
     "nullableString": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "ratio": {
-      "type": [
-        "number",
-        "null"
-      ],
+      "type": ["number", "null"],
       "description": "比例统一使用十进制小数表示：0.25 = 25%，-0.10 = -10%。"
     },
     "stringArray": {
@@ -122,6 +128,111 @@
         "type": "string"
       },
       "uniqueItems": true
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sector",
+        "primary_industry",
+        "secondary_industries",
+        "accounting_profile",
+        "returns_profile",
+        "source_ids"
+      ],
+      "properties": {
+        "sector": {
+          "type": "string",
+          "enum": [
+            "consumer_staples",
+            "consumer_discretionary",
+            "financials",
+            "healthcare",
+            "industrials",
+            "information_technology",
+            "communication_services",
+            "energy",
+            "materials",
+            "utilities",
+            "real_estate",
+            "other"
+          ]
+        },
+        "primary_industry": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+        },
+        "secondary_industries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+          },
+          "uniqueItems": true
+        },
+        "accounting_profile": {
+          "type": "string",
+          "enum": [
+            "standard_corporate",
+            "regulated_bank",
+            "insurer",
+            "reit",
+            "resource_cycle"
+          ]
+        },
+        "returns_profile": {
+          "type": "string",
+          "enum": [
+            "standard_roic",
+            "regulated_bank",
+            "payments_credit",
+            "payments_network",
+            "insurer",
+            "reit",
+            "resource_cycle",
+            "software_platform"
+          ]
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "industryMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "code",
+        "label",
+        "value",
+        "value_type",
+        "source_ids"
+      ],
+      "properties": {
+        "period": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "value_type": {
+          "type": "string",
+          "enum": ["amount", "ratio", "per_share", "multiple", "count", "index"]
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
     },
     "meta": {
       "type": "object",
@@ -212,8 +323,8 @@
         },
         "schema_version": {
           "type": "string",
-          "const": "1.2.0",
-          "default": "1.2.0",
+          "const": "2.0.0",
+          "default": "2.0.0",
           "description": "company.json 数据协议版本。"
         },
         "theme": {
@@ -229,21 +340,13 @@
     "logoAsset": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "asset_path",
-        "source_url",
-        "alt",
-        "is_official"
-      ],
+      "required": ["asset_path", "source_url", "alt", "is_official"],
       "properties": {
         "asset_path": {
           "$ref": "#/$defs/nullableString"
         },
         "source_url": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "uri"
         },
         "alt": {
@@ -257,11 +360,7 @@
     "brandPalette": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "primary",
-        "secondary",
-        "accent"
-      ],
+      "required": ["primary", "secondary", "accent"],
       "properties": {
         "primary": {
           "$ref": "#/$defs/nullableString"
@@ -346,12 +445,7 @@
     "reportRecord": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "period",
-        "report_date",
-        "date_status",
-        "source_ids"
-      ],
+      "required": ["period", "report_date", "date_status", "source_ids"],
       "properties": {
         "period": {
           "type": "string",
@@ -359,41 +453,19 @@
           "description": "例如 2026Q2、2025FY。"
         },
         "period_type": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "FY",
-            "Q1",
-            "Q2",
-            "Q3",
-            "Q4",
-            "H1",
-            "H2",
-            null
-          ]
+          "type": ["string", "null"],
+          "enum": ["FY", "Q1", "Q2", "Q3", "Q4", "H1", "H2", null]
         },
         "report_date": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date"
         },
         "date_status": {
           "type": "string",
-          "enum": [
-            "official",
-            "estimated",
-            "unknown"
-          ]
+          "enum": ["official", "estimated", "unknown"]
         },
         "filing_url": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "uri"
         },
         "source_ids": {
@@ -404,10 +476,7 @@
     "reporting": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "latest_report",
-        "next_expected_report"
-      ],
+      "required": ["latest_report", "next_expected_report"],
       "properties": {
         "latest_report": {
           "$ref": "#/$defs/reportRecord"
@@ -416,10 +485,7 @@
           "$ref": "#/$defs/reportRecord"
         },
         "last_checked_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time",
           "description": "自动化系统最近一次检查财报发布状态的时间。"
         },
@@ -454,17 +520,7 @@
         },
         "period_type": {
           "type": "string",
-          "enum": [
-            "FY",
-            "Q1",
-            "Q2",
-            "Q3",
-            "Q4",
-            "H1",
-            "H2",
-            "LTM",
-            "TTM"
-          ]
+          "enum": ["FY", "Q1", "Q2", "Q3", "Q4", "H1", "H2", "LTM", "TTM"]
         },
         "revenue": {
           "$ref": "#/$defs/nullableNumber"
@@ -558,11 +614,7 @@
     "sankeyNode": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "label",
-        "value"
-      ],
+      "required": ["id", "label", "value"],
       "properties": {
         "id": {
           "type": "string",
@@ -586,11 +638,7 @@
     "sankeyLink": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "source",
-        "target",
-        "value"
-      ],
+      "required": ["source", "target", "value"],
       "properties": {
         "source": {
           "type": "string",
@@ -627,9 +675,7 @@
         },
         "basis": {
           "type": "string",
-          "enum": [
-            "income_statement"
-          ]
+          "enum": ["income_statement"]
         },
         "nodes": {
           "type": "array",
@@ -654,12 +700,7 @@
     "segment": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "period",
-        "name",
-        "revenue",
-        "source_ids"
-      ],
+      "required": ["period", "name", "revenue", "source_ids"],
       "properties": {
         "period": {
           "type": "string"
@@ -695,6 +736,10 @@
         "period",
         "category",
         "amount",
+        "lane",
+        "result_status",
+        "result",
+        "assessment",
         "source_ids"
       ],
       "properties": {
@@ -707,6 +752,22 @@
         "amount": {
           "$ref": "#/$defs/nullableNumber"
         },
+        "lane": {
+          "type": "string",
+          "enum": ["reinvest", "risk_reduction", "shareholder_return"]
+        },
+        "result_status": {
+          "type": "string",
+          "enum": ["positive", "mixed", "negative", "pending"]
+        },
+        "result": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assessment": {
+          "type": "string",
+          "minLength": 1
+        },
         "commentary": {
           "$ref": "#/$defs/nullableString"
         },
@@ -718,11 +779,7 @@
     "buybackItem": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "period",
-        "amount",
-        "source_ids"
-      ],
+      "required": ["period", "amount", "source_ids"],
       "properties": {
         "period": {
           "type": "string"
@@ -747,17 +804,10 @@
     "debtMaturity": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "year",
-        "amount",
-        "source_ids"
-      ],
+      "required": ["year", "amount", "source_ids"],
       "properties": {
         "year": {
-          "type": [
-            "integer",
-            "string"
-          ]
+          "type": ["integer", "string"]
         },
         "amount": {
           "$ref": "#/$defs/nullableNumber"
@@ -793,12 +843,9 @@
           "minLength": 1
         },
         "score": {
-          "type": [
-            "number",
-            "null"
-          ],
+          "type": ["number", "null"],
           "minimum": 0,
-          "maximum": 10
+          "maximum": 5
         },
         "evidence": {
           "type": "array",
@@ -817,26 +864,87 @@
         }
       }
     },
-    "managementScore": {
+    "durabilityDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "assessment", "evidence", "breaker", "source_ids"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["strong", "adequate", "uncertain", "weak"]
+        },
+        "assessment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "breaker": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "durability": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "dimension",
-        "score",
-        "assessment",
+        "horizon_years",
+        "overall_status",
+        "conclusion",
+        "demand_durability",
+        "adaptability",
+        "external_shocks",
         "source_ids"
       ],
+      "properties": {
+        "horizon_years": {
+          "type": "integer",
+          "minimum": 20
+        },
+        "overall_status": {
+          "type": "string",
+          "enum": ["durable", "conditional", "fragile", "too_hard"]
+        },
+        "conclusion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "demand_durability": {
+          "$ref": "#/$defs/durabilityDimension"
+        },
+        "adaptability": {
+          "$ref": "#/$defs/durabilityDimension"
+        },
+        "external_shocks": {
+          "$ref": "#/$defs/durabilityDimension"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
+    "managementScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "score", "assessment", "source_ids"],
       "properties": {
         "dimension": {
           "type": "string"
         },
         "score": {
-          "type": [
-            "number",
-            "null"
-          ],
+          "type": ["number", "null"],
           "minimum": 0,
-          "maximum": 10
+          "maximum": 5
         },
         "assessment": {
           "type": "string"
@@ -853,6 +961,8 @@
         "date",
         "commitment",
         "status",
+        "outcome",
+        "next_validation",
         "source_ids"
       ],
       "properties": {
@@ -863,10 +973,33 @@
           "type": "string"
         },
         "status": {
-          "type": "string"
+          "type": "string",
+          "enum": ["fulfilled", "partially_fulfilled", "unfulfilled", "pending"]
         },
         "outcome": {
           "$ref": "#/$defs/nullableString"
+        },
+        "next_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "condition", "timeframe", "source_ids"],
+          "properties": {
+            "method": {
+              "type": "string",
+              "minLength": 1
+            },
+            "condition": {
+              "type": "string",
+              "minLength": 1
+            },
+            "timeframe": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_ids": {
+              "$ref": "#/$defs/sourceIds"
+            }
+          }
         },
         "source_ids": {
           "$ref": "#/$defs/sourceIds"
@@ -876,11 +1009,7 @@
     "management": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "scores",
-        "commitment_timeline",
-        "stop_doing_list"
-      ],
+      "required": ["scores", "commitment_timeline", "stop_doing_list"],
       "properties": {
         "scores": {
           "type": "array",
@@ -902,10 +1031,7 @@
     "dcfScenario": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "name",
-        "fair_value_per_share"
-      ],
+      "required": ["name", "fair_value_per_share", "terminal_value_share"],
       "properties": {
         "name": {
           "type": "string"
@@ -925,6 +1051,9 @@
         "fair_value_per_share": {
           "$ref": "#/$defs/nullableNumber"
         },
+        "terminal_value_share": {
+          "$ref": "#/$defs/ratio"
+        },
         "notes": {
           "$ref": "#/$defs/nullableString"
         }
@@ -933,11 +1062,7 @@
     "dcfSensitivityCell": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "discount_rate",
-        "terminal_growth",
-        "fair_value_per_share"
-      ],
+      "required": ["discount_rate", "terminal_growth", "fair_value_per_share"],
       "properties": {
         "discount_rate": {
           "type": "number"
@@ -953,11 +1078,7 @@
     "expectedReturn": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "horizon_years",
-        "scenario",
-        "annualized_return"
-      ],
+      "required": ["horizon_years", "scenario", "annualized_return"],
       "properties": {
         "horizon_years": {
           "type": "number",
@@ -1012,11 +1133,7 @@
         "multiples": {
           "type": "object",
           "additionalProperties": {
-            "type": [
-              "number",
-              "string",
-              "null"
-            ]
+            "type": ["number", "string", "null"]
           }
         },
         "dcf_scenarios": {
@@ -1027,6 +1144,9 @@
         },
         "dcf_sensitivity": {
           "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/dcfSensitivityCell"
           }
@@ -1038,6 +1158,7 @@
         "fair_value_range": {
           "type": "object",
           "additionalProperties": false,
+          "required": ["low", "base", "high", "currency"],
           "properties": {
             "low": {
               "$ref": "#/$defs/nullableNumber"
@@ -1049,10 +1170,7 @@
               "$ref": "#/$defs/nullableNumber"
             },
             "currency": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "pattern": "^[A-Z]{3}$"
             }
           }
@@ -1065,13 +1183,87 @@
         }
       }
     },
+    "riskCausalChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failure_path",
+        "trigger",
+        "operating_impact",
+        "capital_cash_impact",
+        "value_impact",
+        "probability",
+        "impact",
+        "time_horizon",
+        "earliest_warning",
+        "reversibility",
+        "management_mitigation",
+        "source_ids"
+      ],
+      "properties": {
+        "failure_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operating_impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capital_cash_impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value_impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "probability": {
+          "type": ["string", "null"],
+          "enum": ["low", "medium_low", "medium", "medium_high", "high", null]
+        },
+        "impact": {
+          "type": ["string", "null"],
+          "enum": ["low", "medium", "high", "severe", "catastrophic", null]
+        },
+        "time_horizon": {
+          "type": "string",
+          "minLength": 1
+        },
+        "earliest_warning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reversibility": {
+          "type": "string",
+          "enum": [
+            "reversible",
+            "partially_reversible",
+            "hard_to_reverse",
+            "irreversible"
+          ]
+        },
+        "management_mitigation": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/sourceIds"
+        }
+      }
+    },
     "monitoringIndicator": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "name",
         "current_status",
-        "trigger"
+        "trigger",
+        "why_it_matters",
+        "recheck_method",
+        "source_ids"
       ],
       "properties": {
         "name": {
@@ -1082,6 +1274,14 @@
         },
         "trigger": {
           "type": "string"
+        },
+        "why_it_matters": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recheck_method": {
+          "type": "string",
+          "minLength": 1
         },
         "source_ids": {
           "$ref": "#/$defs/sourceIds"
@@ -1099,7 +1299,10 @@
       ],
       "properties": {
         "pre_mortem": {
-          "$ref": "#/$defs/stringArray"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/riskCausalChain"
+          }
         },
         "bear_case": {
           "type": "string"
@@ -1118,11 +1321,7 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "title",
-        "source_type"
-      ],
+      "required": ["id", "title", "source_type"],
       "properties": {
         "id": {
           "type": "string",
@@ -1152,24 +1351,15 @@
           "$ref": "#/$defs/nullableString"
         },
         "url": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "uri"
         },
         "published_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date"
         },
         "accessed_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date"
         },
         "notes": {

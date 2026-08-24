@@ -37,9 +37,13 @@ from validate_research_package import (  # noqa: E402
     schema_sha256_candidates,
     validate_evidence,
     validate_calculations,
+    validate_classification_and_industry_metrics,
+    validate_durability,
     validate_manifest,
     validate_report,
+    validate_research_modules,
     validate_sankey,
+    validate_schema,
     validate_chinese_display_units,
     validate_too_hard_acknowledgements,
     validate_valuation,
@@ -74,6 +78,242 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_schema_2_classification_routing_and_industry_metric_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            completeness = (package / "research-completeness.md").read_text(encoding="utf-8")
+
+        findings: list[Finding] = []
+        validate_classification_and_industry_metrics(company, completeness, "full", findings)
+        self.assertEqual(findings, [])
+
+        tagged_only = copy.deepcopy(company)
+        tagged_only["classification"]["sector"] = "financials"
+        tagged_only["classification"]["primary_industry"] = "payments"
+        tagged_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(tagged_only, completeness, "full", tagged_findings)
+        self.assertNotIn("classification-routing", {item.code for item in tagged_findings})
+
+        third_party_classification = copy.deepcopy(company)
+        third_party_classification["sources"][0]["source_type"] = "research"
+        third_party_classification["classification"]["source_ids"] = ["SRC-FY"]
+        provenance_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(third_party_classification, completeness, "full", provenance_findings)
+        self.assertIn("classification-provenance", {item.code for item in provenance_findings})
+
+        incompatible = copy.deepcopy(company)
+        incompatible["classification"]["accounting_profile"] = "regulated_bank"
+        routing_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(incompatible, completeness, "full", routing_findings)
+        self.assertIn("classification-routing", {item.code for item in routing_findings})
+
+        duplicate = copy.deepcopy(company)
+        metric = {
+            "period": "FY2025",
+            "code": "rotce",
+            "label": "有形普通股权益回报率",
+            "value": 0.2,
+            "value_type": "ratio",
+            "source_ids": ["SRC-FY"],
+        }
+        duplicate["industry_metrics"] = [metric, copy.deepcopy(metric)]
+        duplicate_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(duplicate, completeness, "full", duplicate_findings)
+        self.assertIn("duplicate-industry-metric", {item.code for item in duplicate_findings})
+
+        payments_credit = copy.deepcopy(company)
+        payments_credit["classification"].update(
+            {
+                "sector": "financials",
+                "primary_industry": "payments_credit",
+                "accounting_profile": "regulated_bank",
+                "returns_profile": "payments_credit",
+            }
+        )
+        latest_period = payments_credit["reporting"]["latest_report"]["period"]
+        latest_source_ids = payments_credit["reporting"]["latest_report"]["source_ids"]
+        payments_credit["industry_metrics"] = [
+            {
+                "period": latest_period,
+                "code": code,
+                "label": label,
+                "value": value,
+                "value_type": value_type,
+                "source_ids": latest_source_ids,
+            }
+            for code, label, value, value_type in (
+                ("cet1_ratio", "普通股一级资本充足率", 0.104, "ratio"),
+                ("cet1_target_low", "普通股一级资本目标区间下限", 0.10, "ratio"),
+                ("cet1_target_high", "普通股一级资本目标区间上限", 0.11, "ratio"),
+            )
+        ]
+        payments_credit["buyback_ledger"] = [
+            {
+                "period": period,
+                "amount": 18_000_000,
+                "shares_repurchased": 2_000_000,
+                "average_price": 9,
+                "shares_outstanding_change": change,
+                "source_ids": ["SRC-FY"],
+            }
+            for period, change in (("FY2023", -0.01), ("FY2024", -0.015), ("FY2025", -0.02))
+        ]
+        payments_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(payments_credit, completeness, "full", payments_findings)
+        self.assertEqual(payments_findings, [])
+
+        short_main_metric = copy.deepcopy(payments_credit)
+        for item in short_main_metric["financials"][:-2]:
+            item["roe"] = None
+        short_main_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(short_main_metric, completeness, "full", short_main_findings)
+        self.assertIn("returns-chart-coverage", {item.code for item in short_main_findings})
+
+        no_capital_range = copy.deepcopy(payments_credit)
+        no_capital_range["industry_metrics"] = [
+            item
+            for item in no_capital_range["industry_metrics"]
+            if item["code"] not in {"cet1_target_low", "cet1_target_high"}
+        ]
+        no_capital_range_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(no_capital_range, completeness, "full", no_capital_range_findings)
+        self.assertIn("returns-chart-coverage", {item.code for item in no_capital_range_findings})
+
+        short_buyback = copy.deepcopy(payments_credit)
+        short_buyback["buyback_ledger"] = short_buyback["buyback_ledger"][:2]
+        short_buyback_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(short_buyback, completeness, "full", short_buyback_findings)
+        self.assertIn("returns-chart-coverage", {item.code for item in short_buyback_findings})
+
+        per_share_alternative = copy.deepcopy(payments_credit)
+        per_share_alternative["buyback_ledger"] = []
+        per_share_alternative["industry_metrics"].extend(
+            {
+                "period": item["period"],
+                "code": "common_equity_per_share",
+                "label": "每股普通股权益",
+                "value": 8.5,
+                "value_type": "per_share",
+                "source_ids": item["source_ids"],
+            }
+            for item in per_share_alternative["financials"]
+            if item["period_type"] == "FY"
+        )
+        per_share_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(per_share_alternative, completeness, "full", per_share_findings)
+        self.assertEqual(per_share_findings, [])
+
+        latest_period_metric = copy.deepcopy(company)
+        latest_period_metric["industry_metrics"] = [
+            {
+                "period": latest_period_metric["reporting"]["latest_report"]["period"],
+                "code": "cet1_ratio",
+                "label": "普通股一级资本充足率",
+                "value": 0.14,
+                "value_type": "ratio",
+                "source_ids": latest_period_metric["reporting"]["latest_report"]["source_ids"],
+            }
+        ]
+        latest_period_findings: list[Finding] = []
+        validate_classification_and_industry_metrics(latest_period_metric, completeness, "incremental", latest_period_findings)
+        self.assertNotIn("industry-metric-period", {item.code for item in latest_period_findings})
+
+    def test_schema_2_risk_causal_chains_and_exact_sensitivity_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, _, company = make_valid_unfrozen_package(Path(temp_dir))
+
+        risk_copy = copy.deepcopy(company)
+        risk_copy["risks"]["pre_mortem"][0]["capital_cash_impact"] = "待补"
+        risk_findings: list[Finding] = []
+        validate_verdict_and_risks(risk_copy, risk_findings)
+        self.assertIn("pre_mortem-causal-chain", {item.code for item in risk_findings})
+
+        valuation_copy = copy.deepcopy(company)
+        valuation_copy["valuation"]["dcf_sensitivity"].pop()
+        valuation_findings: list[Finding] = []
+        validate_valuation(valuation_copy, valuation_findings)
+        self.assertIn("dcf-sensitivity-grid", {item.code for item in valuation_findings})
+
+    def test_schema_2_dcf_grid_uniqueness_and_fair_value_range_are_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, _, company = make_valid_unfrozen_package(Path(temp_dir))
+        schema = json.loads((ROOT / "references/specs/company.schema.json").read_text(encoding="utf-8"))
+
+        duplicate_cell = copy.deepcopy(company)
+        duplicate_cell["valuation"]["dcf_sensitivity"][-1] = copy.deepcopy(
+            duplicate_cell["valuation"]["dcf_sensitivity"][0]
+        )
+        duplicate_findings = validate_schema(duplicate_cell, schema, schema)
+        self.assertIn("schema-unique-items", {item.code for item in duplicate_findings})
+
+        missing_range_key = copy.deepcopy(company)
+        missing_range_key["valuation"]["fair_value_range"].pop("currency")
+        range_findings = validate_schema(missing_range_key, schema, schema)
+        self.assertIn("schema-required", {item.code for item in range_findings})
+
+    def test_schema_2_durability_nullable_observations_and_report_reconciliation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            report = (package / "research-report.md").read_text(encoding="utf-8")
+
+        durability_findings: list[Finding] = []
+        validate_durability(company, durability_findings)
+        self.assertEqual(durability_findings, [])
+
+        weak_contract = copy.deepcopy(company)
+        weak_contract["durability"]["adaptability"]["breaker"] = "待补"
+        weak_findings: list[Finding] = []
+        validate_durability(weak_contract, weak_findings)
+        self.assertIn("durability-dimension", {item.code for item in weak_findings})
+
+        incomplete_sources = copy.deepcopy(company)
+        incomplete_sources["durability"]["source_ids"] = ["SRC-FY"]
+        source_findings: list[Finding] = []
+        validate_durability(incomplete_sources, source_findings)
+        self.assertIn("durability-sources", {item.code for item in source_findings})
+
+        def report_codes(candidate_company: dict, candidate_report: str) -> set[str]:
+            findings: list[Finding] = []
+            validate_report(candidate_company, candidate_report, "full", findings)
+            return {item.code for item in findings}
+
+        altered_durability = report.replace("| 适应能力 | adequate |", "| 适应能力 | weak |", 1)
+        self.assertIn("report-durability-matrix", report_codes(company, altered_durability))
+        uncited_durability = report.replace("持续为可靠性、信用与权益组合付费〔SRC-FY〕", "持续为可靠性、信用与权益组合付费", 1)
+        self.assertIn("report-durability-matrix", report_codes(company, uncited_durability))
+
+        altered_terminal_share = report.replace(
+            f"{company['valuation']['dcf_scenarios'][1]['terminal_value_share']:.1%}",
+            "1.0%",
+            1,
+        )
+        self.assertIn("report-valuation-scenarios", report_codes(company, altered_terminal_share))
+
+        nullable = copy.deepcopy(company)
+        first_risk = nullable["risks"]["pre_mortem"][0]
+        first_risk["probability"] = None
+        first_risk["impact"] = None
+        first_risk["management_mitigation"] = None
+        risk_findings: list[Finding] = []
+        validate_verdict_and_risks(nullable, risk_findings)
+        self.assertNotIn("pre_mortem-causal-chain", {item.code for item in risk_findings})
+        nullable_report = report.replace(
+            "| 中 | 高 | 1–3年 | 续费率连续四季低于长期均值 | 部分可逆 | 重做核心权益并降低无效获客支出 |",
+            "| 无法判断 | 资料不足 | 1–3年 | 续费率连续四季低于长期均值 | 部分可逆 | 未披露 |",
+            1,
+        )
+        self.assertNotIn("report-pre-mortem-path-mapping", report_codes(nullable, nullable_report))
+
+        pending = copy.deepcopy(company)
+        commitment = pending["management"]["commitment_timeline"][0]
+        commitment["status"] = "pending"
+        commitment["outcome"] = None
+        management_findings: list[Finding] = []
+        validate_research_modules(pending, management_findings)
+        self.assertNotIn("management-commitment-substance", {item.code for item in management_findings})
+        pending_report = report.replace("| fulfilled | 2025年收入增长并且经营利润率同比提升。 |", "| pending | 未披露 |", 1)
+        self.assertNotIn("report-culture-commitments", report_codes(pending, pending_report))
+
     def test_sankey_requires_profit_statement_hierarchy_and_reconciliation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))
@@ -705,7 +945,7 @@ class SemanticGateTests(unittest.TestCase):
             ),
             "pre-mortem": (
                 report.replace(
-                    "| 新技术改变客户入口，既有品牌无法转化为下一代产品采用。 | 中 | 高 | 5–10年 | 新入口交易占比上升而本公司采用率落后 | 部分可逆 | 开放接口并通过合作进入下一代入口 |\n",
+                    "| 新技术改变客户入口，既有品牌无法转化为下一代产品采用。 | 下一代交易入口快速普及而公司产品接入率持续落后。 | 客户使用频次迁移到新入口，品牌认知无法转化为实际交易。 | 补建技术与渠道需要高额投入，同时旧网络现金贡献衰减。 | 竞争优势和长期增长期缩短，终值占比对应的价值大幅下降。 | 中 | 高 | 5–10年 | 新入口交易占比上升而本公司采用率落后 | 部分可逆 | 开放接口并通过合作进入下一代入口 |\n",
                     "",
                     1,
                 ),
@@ -874,6 +1114,16 @@ class SemanticGateTests(unittest.TestCase):
         self.assertIn(
             "report-pre-mortem-path-mapping",
             codes(replace_h2_body(report, "Pre-Mortem 事前验尸", unrelated_paths)),
+        )
+        mismatched_horizon = pre_mortem.replace("| 中 | 高 | 1–3年 | 续费率连续四季低于长期均值 |", "| 中 | 高 | 9–12年 | 续费率连续四季低于长期均值 |", 1)
+        self.assertIn(
+            "report-pre-mortem-path-mapping",
+            codes(replace_h2_body(report, "Pre-Mortem 事前验尸", mismatched_horizon)),
+        )
+        mismatched_mitigation = pre_mortem.replace("重做核心权益并降低无效获客支出", "永久停止全部产品投入并退出核心客户市场", 1)
+        self.assertIn(
+            "report-pre-mortem-path-mapping",
+            codes(replace_h2_body(report, "Pre-Mortem 事前验尸", mismatched_mitigation)),
         )
         extra_path = pre_mortem.replace(
             "\n\n| 补充诊断 |",

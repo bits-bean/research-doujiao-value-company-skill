@@ -113,6 +113,7 @@ def canonical_action(
     existing_company_path: Path | None,
     canonical_absent: bool,
     confirm_same_date_revision: bool,
+    confirm_schema_migration: bool = False,
 ) -> str:
     """Return create/update/noop after identity and monotonicity checks."""
     if existing_company_path is not None and canonical_absent:
@@ -131,9 +132,23 @@ def canonical_action(
     new_meta = _meta(new_company, "new company.json")
     existing_meta = _meta(existing_company, "existing canonical company.json")
 
-    for field in CANONICAL_IDENTITY_FIELDS:
+    for field in IDENTITY_FIELDS:
         if new_meta.get(field) != existing_meta.get(field):
             raise ArchivePlanError(f"canonical company.json conflicts on {field}")
+
+    new_schema = new_meta.get("schema_version")
+    existing_schema = existing_meta.get("schema_version")
+    schema_migration = new_schema != existing_schema
+    if schema_migration:
+        allowed = (
+            isinstance(existing_schema, str)
+            and existing_schema.startswith("1.")
+            and new_schema == "2.0.0"
+        )
+        if not allowed:
+            raise ArchivePlanError("canonical company.json only permits a 1.x to 2.0.0 Schema migration")
+        if not confirm_schema_migration:
+            raise ArchivePlanError("canonical Schema migration requires explicit confirmation")
 
     new_date = _iso_date(new_meta.get("data_as_of"), "new company.json meta.data_as_of")
     existing_date = _iso_date(existing_meta.get("data_as_of"), "existing company.json meta.data_as_of")
@@ -149,8 +164,8 @@ def canonical_action(
                 "canonical company.json has different content for the same data_as_of; "
                 "explicitly confirm the accepted same-date revision"
             )
-        return "update-confirmed-revision"
-    return "update"
+        return "update-confirmed-schema-migration" if schema_migration else "update-confirmed-revision"
+    return "update-confirmed-schema-migration" if schema_migration else "update"
 
 
 def scan_sensitive_material(paths: list[Path]) -> None:
@@ -299,6 +314,7 @@ def canonical_preflight_action(
     *,
     company_slug: str,
     confirm_same_date_revision: bool,
+    confirm_schema_migration: bool,
     remote_state: dict[str, Any] | None,
     expected_base_head: str | None,
 ) -> tuple[str, str | None, bool | None]:
@@ -342,6 +358,7 @@ def canonical_preflight_action(
         existing_company_path=source_path,
         canonical_absent=False,
         confirm_same_date_revision=confirm_same_date_revision,
+        confirm_schema_migration=confirm_schema_migration,
     )
     return action, base_head, True
 
@@ -358,6 +375,7 @@ def build_archive_plan(
     remote_slug_registry_state: dict[str, Any] | None = None,
     remote_canonical_state: dict[str, Any] | None = None,
     confirm_same_date_revision: bool = False,
+    confirm_schema_migration: bool = False,
     trusted_lock: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if root.is_symlink() or not root.is_dir():
@@ -441,6 +459,7 @@ def build_archive_plan(
         company_path,
         company_slug=company_slug,
         confirm_same_date_revision=confirm_same_date_revision,
+        confirm_schema_migration=confirm_schema_migration,
         remote_state=remote_canonical_state,
         expected_base_head=base_head,
     )
@@ -448,10 +467,10 @@ def build_archive_plan(
         write_authorized
         and remote_action in {"create", "update", "noop"}
         and slug_action in {"verified-bound", "verified-available"}
-        and canonical in {"create", "update", "update-confirmed-revision", "noop"}
+        and canonical in {"create", "update", "update-confirmed-revision", "update-confirmed-schema-migration", "noop"}
     )
     return {
-        "plan_version": "4.0",
+        "plan_version": "5.0",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -493,6 +512,7 @@ def build_archive_plan(
             "action": canonical,
             "remote_base_head": canonical_head,
             "remote_exists": canonical_exists,
+            "schema_migration_confirmed": confirm_schema_migration,
         },
     }
 
@@ -524,6 +544,11 @@ def main() -> int:
         "--confirm-same-date-revision",
         action="store_true",
         help="Allow an accepted correction to replace different canonical content for the same data_as_of",
+    )
+    parser.add_argument(
+        "--confirm-schema-migration",
+        action="store_true",
+        help="Allow an accepted Schema 1.x package to be replaced by the fully rebuilt Schema 2.0.0 package",
     )
     parser.add_argument("--output", type=Path, help="Write plan outside the frozen package; default stdout")
     args = parser.parse_args()
@@ -564,6 +589,7 @@ def main() -> int:
             remote_slug_registry_state=remote_slug_registry_state,
             remote_canonical_state=remote_canonical_state,
             confirm_same_date_revision=args.confirm_same_date_revision,
+            confirm_schema_migration=args.confirm_schema_migration,
         )
         if args.output is not None:
             output = args.output

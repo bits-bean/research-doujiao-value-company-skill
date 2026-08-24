@@ -40,6 +40,7 @@ REQUIRED = (
     "SKILL.md",
     "agents/openai.yaml",
     "references/source-routing.md",
+    "references/classification-and-chart-routing.md",
     "references/research-contract.md",
     "references/evidence-and-calculation.md",
     "references/income-statement-sankey.md",

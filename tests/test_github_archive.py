@@ -412,6 +412,63 @@ class GithubDeliveryTests(unittest.TestCase):
             self.assertTrue(plan["ready_for_write"])
             self.assertEqual(plan["canonical_guard"]["action"], "update-confirmed-revision")
 
+    def test_schema_1_to_2_migration_requires_explicit_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"]["schema_version"] = "2.0.0"
+            new_company["meta"]["data_as_of"] = "2026-03-31"
+            new_company["meta"]["valuation_date"] = "2026-04-15"
+            write_json(new_path, new_company)
+            existing = root / "existing-schema-1.json"
+            company = json.loads(new_path.read_text(encoding="utf-8"))
+            company["meta"]["schema_version"] = "1.2.0"
+            company["meta"]["data_as_of"] = "2025-12-31"
+            company["meta"]["valuation_date"] = "2026-01-15"
+            write_json(existing, company)
+
+            with self.assertRaisesRegex(ArchivePlanError, "Schema migration requires explicit confirmation"):
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                )
+            self.assertEqual(
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                    confirm_schema_migration=True,
+                ),
+                "update-confirmed-schema-migration",
+            )
+
+            company["meta"]["data_as_of"] = "2026-03-31"
+            company["meta"]["valuation_date"] = "2026-04-15"
+            write_json(existing, company)
+            with self.assertRaisesRegex(ArchivePlanError, "same data_as_of"):
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                    confirm_schema_migration=True,
+                )
+            self.assertEqual(
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=True,
+                    confirm_schema_migration=True,
+                ),
+                "update-confirmed-schema-migration",
+            )
+
     def test_all_three_remote_observations_are_required_at_same_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))

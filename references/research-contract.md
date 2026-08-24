@@ -5,6 +5,7 @@
 - [版本化目录](#版本化目录)
 - [必需文件](#必需文件)
 - [中文展示单位契约](#中文展示单位契约)
+- [Schema 2.0 迁移](#schema-20-迁移)
 - [冻结语义](#冻结语义)
 - [下游交接](#下游交接)
 - [GitHub 归档](#github-归档)
@@ -48,6 +49,12 @@ research/<company-slug>/<YYYY-MM-DD>/
 ### company.json
 
 严格通过锁定 commit 的 `schemas/company.schema.json`。不得加入研究包状态、冻结哈希、制作说明或平台内容；这些属于 sidecar 文件。
+
+Schema 2.0 的 `classification` 与 `industry_metrics` 必须完整执行 [classification-and-chart-routing.md](classification-and-chart-routing.md)。分类来自官方业务与监管证据；宽 sector 和行业 slug 仅用于标签与检索，只有 `accounting_profile` 和 `returns_profile` 控制会计、回报和下游图表路由。行业指标按 `period + code` 唯一，并保留 `value_type` 与来源。银行与支付信贷的主 ROE / ROTCE 必须是长期序列；资本约束可用最新 CET1 / 资本充足率配合同期管理层目标区间或监管最低要求作当前仪表；第三板块必须在每股权益长期序列和至少三个完整财年的回购对股数影响中二选一。当前资本截面不能冒充长期趋势，须在完整度说明中标明限制。
+
+`durability` 必须以至少二十年为期限，分别记录需求持久性、适应能力和外部冲击的标准化状态、判断、证据、破坏条件及来源，并给出总体状态与结论。长期生存不能由护城河分数、估值终值或一句叙事反推。
+
+管理层承诺必须包含兑现状态、结果和下一验证对象；`pending` 可把尚未发生的结果写为 `null`，其他状态必须记录可观察结果。资本配置必须包含三车道、结果状态、结果和评价；`risks.pre_mortem` 必须是一组完整因果链；概率、影响或缓解措施无证据时写 `null`，不得为图表猜测。每个长期跟踪指标必须包含重要性和复查方法。这些字段是研究事实与判断，不由下游根据文字或缺失字段重建。
 
 `income_statement_sankey` 的提取清单、动态层级模板、计算值来源绑定与逐层勾稽统一执行 [income-statement-sankey.md](income-statement-sankey.md)，不得另建简化口径。
 
@@ -197,6 +204,14 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 历史冻结包保持不可变。旧包若由其 manifest 锁定的旧 Schema 声明 `million`、`million_shares` 等缩放单位，审计时必须按旧锁解释；创建新版研究时再把金额和股数机械换算为实际原始数值，重新验证并冻结，禁止原地修改或把旧值直接当作新口径。
 
+## Schema 2.0 迁移
+
+- Schema 1.x 冻结包保持不可变，只按其原 manifest 和旧 Schema 审计；不得在旧目录补字段或改版本号。
+- 新建迁移目录，从原始来源重新验证分类、行业指标、二十年长期生存三维判断、承诺结果与下一验证、资本配置结果、风险因果链和长期跟踪方法；不得把旧自由文本机械塞入新字段，也不得从网站展示、护城河分数或估值字段反推公司类型与长期生存结论。
+- 迁移包必须通过当前 2.0 Schema 的 `full` 验证并作为新的完整基线冻结。Schema 1.x manifest 不能成为 2.0 `incremental` 前序；后续增量从这个 2.0 基线开始。
+- 数据日和估值日不得因迁移回退。同日迁移属于结构化重建，必须经过人工接受；归档时同时显式确认 Schema 迁移和同日修订。
+- 远端 `companies/<slug>/` 仍使用整包替换；只替换受管研究文件，保留 Logo、`images/` 和其他非研究资产。
+
 ## 冻结语义
 
 `research-manifest.json` 是 sidecar，不写入 `company.json`。新冻结清单固定使用 `manifest_version: 2.0`，并分别记录：
@@ -236,4 +251,4 @@ companies/<company-slug>/
 
 GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再向 `research/` 写入副本。本地冻结目录可继续保存不可变审计快照；远端公司目录中的受管研究文件使用整包替换，Git 历史负责记录版本。公司 Logo、品牌图像等非研究资产必须原样保留。不得加入发布回执、制作记录或其他未冻结文件。`companies/<company-slug>/company.json` 是唯一正式副本。
 
-最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份、证券或 Schema 版本不一致拒绝。
+最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份或证券不一致拒绝；Schema 版本不一致默认拒绝，只有显式确认的 1.x → 2.0 迁移可以继续。
