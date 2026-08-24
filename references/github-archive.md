@@ -12,7 +12,7 @@ companies/<company-slug>/
 
 报告、`company.json`、台账、验证结果与 manifest 全部直接位于该目录；`company.json` 只有这一份正式副本。不得再向 `research/` 写入研究副本。
 
-GitHub 提交不等于网站或渠道发布，不触发网站导入或内容生产；公开仓库会公开披露提交内容。
+GitHub 提交不等于网站或渠道发布，不触发网站导入、图表导出、图片生成或内容生产；公开仓库会公开披露提交内容。
 
 ## 发布前门禁
 
@@ -22,7 +22,8 @@ GitHub 提交不等于网站或渠道发布，不触发网站导入或内容生�
 4. 通过 GitHub 连接器取得权限和最新 `main` SHA，确认冻结清单锁定的 Schema commit 是其祖先，且 `main:schemas/company.schema.json` 仍为锁定 blob。
 5. 在同一最新 `main` SHA 下取得当前公司目录、slug / identity registry 与目录内正式 `company.json` 三项 observation。slug 不存在时还要反向确认同一公司身份未绑定其他 slug。
 6. 先运行确定性敏感字符串扫描，再语义复核非公开个人信息、资料保密性和再分发权；任一层失败都阻断提交。
-7. 任一预检不可访问、陈旧或含糊时停止，不得用本地缓存、旧聊天或其他来源猜测远端状态。
+7. 如有新增或明确替换的公司身份素材，完整读取 [identity-assets.md](identity-assets.md)，把素材放在冻结包外的临时目录，取得同一 `main` SHA 的精确远端素材 observation，再由规划器核对目标路径、来源清单、权利依据和 SHA-256。
+8. 任一预检不可访问、陈旧或含糊时停止，不得用本地缓存、旧聊天或其他来源猜测远端状态。
 
 第一次运行规划器可不带 observation，但只能生成 `ready_for_write: false` 的预检计划。取得精确 `main` SHA 后，把以下 JSON 写入任务临时目录再运行：
 
@@ -31,6 +32,8 @@ GitHub 提交不等于网站或渠道发布，不触发网站导入或内容生�
 - `--remote-canonical-state`：同一 `companies/<company-slug>/company.json` 是否存在；存在时包含下载文件路径、SHA-256、大小和身份，不存在时 `content` 为 `null`。该 observation 只承担单调性与身份保护，不产生第二份写入。
 
 三项 observation 的 `repository`、`branch` 和 `base_head` 必须一致。任何写入使用 `--confirm-write-authorization`；同一 `data_as_of` 的修订还需 `--confirm-same-date-revision`；直接 `main` 另需 `--confirm-direct-main-authorization`。只有最终计划 `ready_for_write: true` 才能执行。
+
+身份素材写入另用 `--identity-assets-root` 和 `--remote-identity-assets-state`。observation 必须逐一覆盖 staging 目录准备写入的精确路径并与前三项使用同一 `base_head`。远端同路径不同内容默认拒绝；只有用户明确授权替换且使用 `--confirm-identity-asset-replacement` 才能更新。
 
 远端 canonical 为 Schema 1.x、冻结包为 2.0 时，另须 `--confirm-schema-migration`。只允许 1.x → 2.0 升级，且公司法定身份、ticker、交易所、数据日和估值日仍通过全部门禁；同一数据日还必须同时使用 `--confirm-same-date-revision`。禁止 Schema 降级、2.x 横向换版或仅改版本号。
 
@@ -61,6 +64,8 @@ companies/<company-slug>/research-manifest.json
 - 直接文件集合及内容完全相同：公司目录为幂等 `noop`。
 - 任一受管文件缺失或变化：以冻结包完整受管文件集更新；旧的多余受管文件列入 `delete_paths`。
 - 非研究资产无论是否存在都不参与 `noop` 比较，不得列入 `delete_paths`；这包括公司 Logo、`images/` 目录、图片 manifest 与 SVG 母版。
+- 例外仅限本次显式 staging 的身份素材：新 Logo 只能写入 `companies/<slug>/assets/logo.svg` 且必须与 `company.json.brand_identity.company_logo.asset_path` 完全一致；已有 `logo-primary.*` 只沿用，不创建新的 legacy 文件。
+- 产品素材必须与 `companies/<slug>/assets/visual-assets.json` 成对提交，清单中的 `asset_path`、`asset_sha256`、来源 URL、来源页、发布者、权利依据和官方性全部通过门禁。规划器只 upsert 已声明文件，从不删除或改名其他资产。
 - 发现版本子目录时停止；清理遗留 `research/` 或历史目录必须由用户明确指定精确路径，不得随本次整包提交自动扩张删除范围。
 
 正式 `company.json` 只允许单调前进：
@@ -77,6 +82,7 @@ companies/<company-slug>/research-manifest.json
 
 1. 从预检得到的最新 `main` SHA 创建独立分支。
 2. 在同一个 Git tree 中写入当前公司目录全部受管研究文件并删除其多余受管研究文件，保留非研究资产；其中 `company.json` 同时受 canonical 单调性门禁保护。
+   如计划包含身份素材，只在同一 tree 中附加写入规划器已验证的精确素材路径；不得加入 `images/`、网站截图、渠道成品、背景或模板。
 3. 创建原子 commit 并推送分支。
 4. 建立 PR，说明公司、数据日、估值日、manifest SHA-256、验证结果与公司目录。
 5. 只有用户已要求合并且检查、权限与分支保护允许时才合并；否则返回 PR 等待审核。
@@ -87,9 +93,12 @@ companies/<company-slug>/research-manifest.json
 
 ```text
 companies/<company-slug>/<直接研究包文件>
+companies/<company-slug>/assets/logo.svg                 # 仅新增 / 明确替换
+companies/<company-slug>/assets/visual-assets.json       # 仅有验证产品素材时
+companies/<company-slug>/assets/<declared-product-file>  # 仅由上行清单声明
 ```
 
-禁止修改 Schema、其他公司或其他路径。禁止使用逐文件 contents 更新直接写 `main`，避免中途失败留下不完整状态。
+禁止修改 Schema、其他公司或其他路径。已有 `companies/<slug>/logo-primary.*` 只保留，不作为新路径创建。禁止使用逐文件 contents 更新直接写 `main`，避免中途失败留下不完整状态。
 
 ## 远端复核与回执
 
@@ -98,6 +107,7 @@ companies/<company-slug>/<直接研究包文件>
 - 当前公司目录的直接文件集合；
 - 每个研究包文件的完整内容或 SHA-256；
 - 正式 `company.json` 的完整内容、SHA-256、身份与日期单调性；
+- 本次新增 / 替换身份素材的完整路径、SHA-256，及 Logo 路径或 `visual-assets.json` 来源清单的一致性；
 - commit 所在分支、PR 或合并状态。
 
 只有全部一致才报告成功。回执至少包含仓库、策略、分支或 PR、commit SHA、公司目录与复核结论。不要把回执写入冻结目录。

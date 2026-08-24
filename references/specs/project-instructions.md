@@ -35,7 +35,7 @@
 
 `company.json` 是唯一例外：`bits-bean/doujiao-value-system` 的 `schemas/company.schema.json` 是唯一可编辑权威数据协议；Skill 内 `references/specs/company.schema.json` 只是经哈希和 Git blob 锁定的只读发行副本。正式研究只使用当前 Skill 信任锁对应的副本；上游 Schema 变化后，必须先审查差异、更新副本与信任锁、通过测试并发布新版 Skill，不能在单次研究中静默切换。
 
-多平台内容与视觉规则由下游内容生产 Skill 管理；本 Skill 只冻结研究事实和结论，不把下游规范并入研究协议。若本 Instructions 与研究方法或自动化流程冲突，以本 Instructions 为最高优先级。
+多平台内容与视觉规则由下游内容生产 Skill 管理；网站与基础图表代码由 `doujiao-value-system` 管理。本 Skill 只冻结研究事实、分类与图表路由输入、结论、台账和必要的公司身份素材来源，不把下游规范并入研究协议，也不调用图表渲染器、网站 API、渠道图片或内容发布流程。若本 Instructions 与研究方法或自动化流程冲突，以本 Instructions 为最高优先级。
 
 ## 4. 启动、工具与证据
 用户给出公司后：
@@ -53,7 +53,7 @@
 关键主张必须在出现处就地引用直接链接或 `SRC-*`。报告使用任何 `SRC-*` 时，文末来源定位索引必须逐项给出标题、发布者与来源类型、发布日期或适用期间、直接 URL，以及页码、监管文件 Item/表号、稳定章节或时间戳；不得只列文档简称或笼统写“详见 company.json”。
 
 ## 5. Schema 与 company.json
-每次新建、更新或校验 `company.json`，以及财报更新或网站导入前，必须先读取当前 Skill 信任锁绑定的 `references/specs/company.schema.json`，并核验其对应 `doujiao-value-system` 的精确 commit、blob SHA、SHA-256 和 `schema_version`。
+每次新建、更新或校验 `company.json`，以及财报更新或授权 GitHub 交付前，必须先读取当前 Skill 信任锁绑定的 `references/specs/company.schema.json`，并核验其对应 `doujiao-value-system` 的精确 commit、blob SHA、SHA-256 和 `schema_version`。
 
 该文件是唯一权威数据协议。必须读取当前 `schema_version` 并严格遵守字段、类型、必填项、原始数值口径、比例口径和来源结构。当前协议下金额一律存报告币种的实际数值，股数一律存实际股数，不得按千、百万或十亿缩放；例如100万元写 `1000000`，100万股写 `1000000`。比例仍使用十进制小数。
 
@@ -69,8 +69,10 @@
 完整研究默认包括：
 1. 文字研究报告；
 2. 严格按当前 Skill 锁定 Schema 生成的 `company.json`；
-3. 数据完整度与低置信度说明；
-4. 如发现 Schema 问题，输出 Schema Gap Report。
+3. 证据台账与计算台账；
+4. 数据完整度、低置信度与验证结果；
+5. 如发现 Schema 问题，输出 Schema Gap Report；
+6. 验收后生成冻结 manifest；公司身份素材缺失时，另按 `references/identity-assets.md` 获取或记录缺口，不把素材写入研究 manifest。
 
 文字报告必须完整采用 `references/specs/research-methodology.md` 第 14 节的 16 节结构，不得合并、缺省或用占位语句代替实质正文。它必须包含一页式结论、八维最终评分、逐维护城河评估、完整 Pre-Mortem，以及最终结论的明确字段。
 
@@ -83,17 +85,17 @@
 
 财报解读必须区分正常季度噪音、周期变化、会计变化和结构性变化，并明确回答投资逻辑是：增强 / 基本不变 / 削弱 / 被推翻 / 暂无法判断。
 
-## 8. 豆角滚雪球网站
-正式网站流程固定为：研究 → `company.json` → manifest 锁定的同一 Schema 校验 → 豆角滚雪球网站 API → 网站统一渲染。
+## 8. system 交接边界
+正式交接固定为：研究 → Schema 校验 → 冻结报告、`company.json`、证据 / 计算台账与 manifest → 获授权后原子提交到 `doujiao-value-system/companies/<slug>/`。
 
-不默认使用 Sites 生成独立网站。若网站 API 已配置且用户要求导入，只有接口明确成功后才可声称网站已更新；失败时保留已验证的 `company.json` 并报告原因。当前环境没有 API 能力时，只交付已验证 JSON，不用临时网站替代正式网站。
+本 Skill 不导入网站 API，不调用 system 的图表导出代码或接口，不生成网站 / 社媒图片，不决定画布比例、背景、安全区、Logo 位置和引流语，也不声称网站已更新。system 网站和基础图表只读取冻结数据；字段缺失时展示缺口或拒绝渲染，不能自行重新研究、修改口径、补造数据或改变投资结论。
 
-网站不得自行重新研究、修改研究口径、补造缺失数据或改变投资结论。网站、图表和桑基图交由相应下游流程按其当前规则执行。
+真实公司 Logo 和可选产品素材只按 `references/identity-assets.md` 获取、验证来源并交付。研究 Skill 不用生成图替代真实身份素材。
 
 ## 9. 多平台内容
 小红书、X、微信公众号、雪球及视频平台内容必须由“已完成研究报告 + 已验证 `company.json`”派生，不得反向成为研究事实来源，不得为了传播效果夸大结论。
 
-只有用户要求内容生产时才交接给 `$produce-doujiao-value-content`。下游按其自身锁定的内容与视觉规则执行；内容核心必须完整映射本研究方法第 1—13 节，但不得重新定义研究口径、重新研究或改变已冻结结论。
+只有用户另行要求内容生产时，才把冻结包作为输入交给 `$produce-doujiao-value-content`。研究 Skill 本身不调用内容 Skill、不选择渠道比例、不合成图片也不发布。下游按其自身锁定的内容与视觉规则执行；内容核心必须映射已冻结研究产出，不得重新定义研究口径、重新研究或改变已冻结结论。
 
 ## 10. 本地化与表达
 默认使用简体中文和中国投资者常用口径。先结论，再证据和计算；每项结论先用通俗语言说明“这意味着什么”，再给技术口径、公式或行业术语。缩写、行业指标和非通用术语首次出现时必须用简洁中文解释；不大段复述年报，不用空泛形容词。不确定时明确说资料不足、无法验证或 Too Hard。

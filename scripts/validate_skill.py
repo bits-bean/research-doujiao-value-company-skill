@@ -40,6 +40,7 @@ REQUIRED = (
     "SKILL.md",
     "agents/openai.yaml",
     "references/source-routing.md",
+    "references/identity-assets.md",
     "references/classification-and-chart-routing.md",
     "references/research-contract.md",
     "references/evidence-and-calculation.md",
@@ -106,6 +107,14 @@ def main() -> int:
     if re.search(r"\bTODO\b|\bFIXME\b", skill_text):
         fail("SKILL.md still contains a placeholder")
         errors += 1
+    for required_boundary in (
+        "不调用 `doujiao-value-system` 的图表导出命令或接口",
+        "不生成网站图、社媒图或背景",
+        "不选择平台比例",
+    ):
+        if required_boundary not in skill_text:
+            fail(f"SKILL.md lacks responsibility boundary: {required_boundary}")
+            errors += 1
 
     for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", skill_text):
         if "://" in target or target.startswith("#"):

@@ -10,7 +10,7 @@ import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from freeze_research import TRUSTED_LOCK_PATH, verify_previous_manifest
 from validate_research_package import file_sha256, load_json, validate_research_package, write_json
@@ -45,6 +45,18 @@ SLUG_REGISTRY_STATE_KEYS = {
     "identity_slugs",
 }
 CANONICAL_STATE_KEYS = {"repository", "branch", "base_head", "path", "exists", "content"}
+IDENTITY_ASSET_STATE_KEYS = {"repository", "branch", "base_head", "company_slug", "assets"}
+IDENTITY_ASSET_ENTRY_KEYS = {"path", "exists", "sha256", "size_bytes"}
+PRODUCT_ASSET_SUFFIXES = {".avif", ".jpeg", ".jpg", ".png", ".svg", ".webp"}
+SIGNED_QUERY_KEYS = {
+    "access_token",
+    "key",
+    "sig",
+    "signature",
+    "token",
+    "x-amz-credential",
+    "x-amz-signature",
+}
 SENSITIVE_PATTERNS = (
     (
         "private-key",
@@ -181,6 +193,240 @@ def scan_sensitive_material(paths: list[Path]) -> None:
                 findings.append(f"{path.name}:{code}")
     if findings:
         raise ArchivePlanError(f"sensitive material scan failed: {', '.join(sorted(findings))}")
+
+
+def _nonblank(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _public_http_url(value: Any, label: str) -> str:
+    if not _nonblank(value):
+        raise ArchivePlanError(f"{label} must be a nonempty public URL")
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        raise ArchivePlanError(f"{label} must use a public http/https URL")
+    query_keys = {key.lower() for key, _ in parse_qsl(parsed.query, keep_blank_values=True)}
+    if query_keys & SIGNED_QUERY_KEYS:
+        raise ArchivePlanError(f"{label} cannot contain a signed or tokenized query")
+    return value
+
+
+def _company_logo_asset_path(company: dict[str, Any], company_slug: str) -> str | None:
+    brand = company.get("brand_identity")
+    if not isinstance(brand, dict):
+        raise ArchivePlanError("company.json lacks brand_identity")
+    logo = brand.get("company_logo")
+    if not isinstance(logo, dict):
+        raise ArchivePlanError("company.json lacks brand_identity.company_logo")
+    value = logo.get("asset_path")
+    if value is None:
+        return None
+    if not _nonblank(value):
+        raise ArchivePlanError("company logo asset_path must be null or a nonempty path")
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts or value != path.as_posix():
+        raise ArchivePlanError("company logo asset_path is unsafe")
+    company_root = f"companies/{company_slug}/"
+    if not value.startswith(company_root):
+        raise ArchivePlanError("company logo asset_path belongs to a different company")
+    canonical = f"companies/{company_slug}/assets/logo.svg"
+    legacy = re.fullmatch(rf"companies/{re.escape(company_slug)}/logo-primary\.[A-Za-z0-9]+", value)
+    if value != canonical and legacy is None:
+        raise ArchivePlanError("company logo asset_path must be canonical assets/logo.svg or an existing logo-primary.* legacy path")
+    return value
+
+
+def _validate_svg(path: Path) -> None:
+    if path.stat().st_size <= 0 or path.stat().st_size > 2_000_000:
+        raise ArchivePlanError("logo.svg must be nonempty and no larger than 2 MB")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ArchivePlanError(f"logo.svg must be UTF-8 SVG: {exc}") from exc
+    lowered = text.lower()
+    if "<svg" not in lowered or "</svg>" not in lowered:
+        raise ArchivePlanError("logo.svg is not a complete SVG document")
+    if re.search(r"<\s*script\b|javascript:|\bon\w+\s*=", lowered):
+        raise ArchivePlanError("logo.svg contains executable content")
+    if re.search(r"(?:href|src)\s*=\s*[\"'](?:https?:|//)", lowered):
+        raise ArchivePlanError("logo.svg contains an external resource reference")
+
+
+def _validate_visual_asset_manifest(path: Path, company_slug: str, staging_root: Path) -> tuple[Path, dict[str, Any]]:
+    manifest = _read_object(path, "visual-assets.json")
+    if not _nonblank(manifest.get("manifest_version")):
+        raise ArchivePlanError("visual-assets.json lacks manifest_version")
+    if manifest.get("company_slug") != company_slug:
+        raise ArchivePlanError("visual-assets.json company_slug does not match the research package")
+    localized_copy = manifest.get("localized_copy")
+    if not isinstance(localized_copy, dict):
+        raise ArchivePlanError("visual-assets.json localized_copy must be an object")
+    cover = manifest.get("cover_product")
+    if not isinstance(cover, dict):
+        raise ArchivePlanError("visual-assets.json lacks cover_product")
+    required = {
+        "asset_path",
+        "asset_sha256",
+        "source_url",
+        "source_page_url",
+        "source_publisher",
+        "rights_basis",
+        "is_official",
+    }
+    if not required.issubset(cover):
+        raise ArchivePlanError("visual-assets.json cover_product lacks required provenance fields")
+    asset_path = cover.get("asset_path")
+    expected_prefix = f"companies/{company_slug}/assets/"
+    if not _nonblank(asset_path) or not asset_path.startswith(expected_prefix):
+        raise ArchivePlanError("cover_product.asset_path must stay inside the company's assets directory")
+    relative = asset_path.removeprefix(expected_prefix)
+    product_name = Path(relative)
+    if (
+        product_name.name != relative
+        or product_name.suffix.lower() not in PRODUCT_ASSET_SUFFIXES
+        or relative in {"logo.svg", "visual-assets.json"}
+    ):
+        raise ArchivePlanError("cover_product.asset_path must name one supported direct product asset")
+    product_path = _safe_regular_file(staging_root / relative, "declared cover product asset")
+    expected_sha = cover.get("asset_sha256")
+    if SHA256_PATTERN.fullmatch(str(expected_sha)) is None or file_sha256(product_path) != expected_sha:
+        raise ArchivePlanError("cover_product asset_sha256 does not match the staged product asset")
+    if product_path.stat().st_size <= 0 or product_path.stat().st_size > 25_000_000:
+        raise ArchivePlanError("cover product asset must be nonempty and no larger than 25 MB")
+    _public_http_url(cover.get("source_url"), "cover_product.source_url")
+    _public_http_url(cover.get("source_page_url"), "cover_product.source_page_url")
+    if not _nonblank(cover.get("source_publisher")) or not _nonblank(cover.get("rights_basis")):
+        raise ArchivePlanError("cover_product requires source_publisher and rights_basis")
+    if not isinstance(cover.get("is_official"), bool):
+        raise ArchivePlanError("cover_product.is_official must be boolean")
+    return product_path, manifest
+
+
+def prepare_identity_asset_files(
+    staging_root: Path | None,
+    *,
+    company_slug: str,
+    company: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if staging_root is None:
+        return []
+    if staging_root.is_symlink() or not staging_root.is_dir():
+        raise ArchivePlanError("identity assets root must be a non-symlink directory")
+    staging_root = staging_root.resolve()
+    entries = list(staging_root.iterdir())
+    if any(item.is_symlink() or not item.is_file() for item in entries):
+        raise ArchivePlanError("identity assets root may contain only direct non-symlink files")
+    actual_names = {item.name for item in entries}
+    if not actual_names:
+        raise ArchivePlanError("identity assets root is empty")
+
+    company_logo = _company_logo_asset_path(company, company_slug)
+    expected_names: set[str] = set()
+    files: list[dict[str, Any]] = []
+    logo = staging_root / "logo.svg"
+    if logo.exists():
+        canonical = f"companies/{company_slug}/assets/logo.svg"
+        if company_logo != canonical:
+            raise ArchivePlanError("staged logo.svg must exactly match company.json's canonical logo asset_path")
+        logo_record = company["brand_identity"]["company_logo"]
+        _public_http_url(logo_record.get("source_url"), "company_logo.source_url")
+        if not _nonblank(logo_record.get("alt")) or not isinstance(logo_record.get("is_official"), bool):
+            raise ArchivePlanError("staged company logo requires alt text and an explicit is_official boolean")
+        logo = _safe_regular_file(logo, "logo.svg")
+        _validate_svg(logo)
+        expected_names.add("logo.svg")
+        files.append(
+            {
+                "source_path": str(logo),
+                "target_path": canonical,
+                "sha256": file_sha256(logo),
+                "size_bytes": logo.stat().st_size,
+            }
+        )
+
+    visual_manifest = staging_root / "visual-assets.json"
+    if visual_manifest.exists():
+        visual_manifest = _safe_regular_file(visual_manifest, "visual-assets.json")
+        product, _ = _validate_visual_asset_manifest(visual_manifest, company_slug, staging_root)
+        expected_names.update({"visual-assets.json", product.name})
+        for source, target in (
+            (visual_manifest, f"companies/{company_slug}/assets/visual-assets.json"),
+            (product, f"companies/{company_slug}/assets/{product.name}"),
+        ):
+            files.append(
+                {
+                    "source_path": str(source),
+                    "target_path": target,
+                    "sha256": file_sha256(source),
+                    "size_bytes": source.stat().st_size,
+                }
+            )
+
+    if actual_names != expected_names:
+        extras = ", ".join(sorted(actual_names - expected_names))
+        raise ArchivePlanError(f"identity assets root contains undeclared files: {extras or 'missing manifest or logo'}")
+    text_files = [Path(item["source_path"]) for item in files if Path(item["source_path"]).suffix.lower() in {".json", ".svg"}]
+    scan_sensitive_material(text_files)
+    return sorted(files, key=lambda item: item["target_path"])
+
+
+def identity_asset_action(
+    company_slug: str,
+    local_files: list[dict[str, Any]],
+    remote_state: dict[str, Any] | None,
+    expected_base_head: str | None,
+    *,
+    confirm_replacement: bool,
+) -> tuple[str, str | None]:
+    if not local_files:
+        if remote_state is not None:
+            raise ArchivePlanError("remote identity asset state was supplied without staged identity assets")
+        return "preserve", expected_base_head
+    if remote_state is None:
+        return "remote-preflight-required", None
+    if set(remote_state) != IDENTITY_ASSET_STATE_KEYS:
+        raise ArchivePlanError("remote identity asset state has unexpected or missing fields")
+    base_head = _state_base_head(remote_state, "remote identity asset state", expected_base_head)
+    if remote_state.get("company_slug") != company_slug:
+        raise ArchivePlanError("remote identity asset state is for a different company")
+    observed = remote_state.get("assets")
+    if not isinstance(observed, list):
+        raise ArchivePlanError("remote identity asset state assets must be an array")
+    expected = {item["target_path"]: (item["sha256"], item["size_bytes"]) for item in local_files}
+    actual: dict[str, tuple[bool, Any, Any]] = {}
+    for entry in observed:
+        if not isinstance(entry, dict) or set(entry) != IDENTITY_ASSET_ENTRY_KEYS:
+            raise ArchivePlanError("remote identity asset observation is malformed")
+        path = entry.get("path")
+        exists = entry.get("exists")
+        if path not in expected or path in actual or not isinstance(exists, bool):
+            raise ArchivePlanError("remote identity asset observation has an unexpected path or duplicate")
+        sha256, size = entry.get("sha256"), entry.get("size_bytes")
+        if exists:
+            if SHA256_PATTERN.fullmatch(str(sha256)) is None or not isinstance(size, int) or isinstance(size, bool) or size < 0:
+                raise ArchivePlanError("existing remote identity asset needs a valid SHA-256 and size")
+        elif sha256 is not None or size is not None:
+            raise ArchivePlanError("absent remote identity asset must use null hash and size")
+        actual[path] = (exists, sha256, size)
+    if set(actual) != set(expected):
+        raise ArchivePlanError("remote identity asset observation does not cover every staged target")
+
+    creates = 0
+    replacements = 0
+    changes = 0
+    for path, (sha256, size) in expected.items():
+        exists, remote_sha, remote_size = actual[path]
+        if not exists:
+            creates += 1
+            changes += 1
+        elif (remote_sha, remote_size) != (sha256, size):
+            replacements += 1
+            changes += 1
+    if replacements and not confirm_replacement:
+        raise ArchivePlanError("identity asset replacement requires explicit authorization")
+    if not changes:
+        return "noop", base_head
+    return ("create" if creates == len(expected) else "update"), base_head
 
 
 def package_action(
@@ -374,8 +620,11 @@ def build_archive_plan(
     remote_company_state: dict[str, Any] | None = None,
     remote_slug_registry_state: dict[str, Any] | None = None,
     remote_canonical_state: dict[str, Any] | None = None,
+    identity_assets_root: Path | None = None,
+    remote_identity_assets_state: dict[str, Any] | None = None,
     confirm_same_date_revision: bool = False,
     confirm_schema_migration: bool = False,
+    confirm_identity_asset_replacement: bool = False,
     trusted_lock: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if root.is_symlink() or not root.is_dir():
@@ -447,6 +696,7 @@ def build_archive_plan(
     )
 
     company_path = _safe_regular_file(root / "company.json", "company.json")
+    company = _read_object(company_path, "company.json")
     research = manifest.get("research") if isinstance(manifest.get("research"), dict) else {}
     identity = _research_identity(research)
     slug_action, slug_head = slug_binding_action(
@@ -463,14 +713,62 @@ def build_archive_plan(
         remote_state=remote_canonical_state,
         expected_base_head=base_head,
     )
+    if identity_assets_root is not None:
+        resolved_identity_assets_root = identity_assets_root.resolve()
+        try:
+            resolved_identity_assets_root.relative_to(root)
+        except ValueError:
+            pass
+        else:
+            raise ArchivePlanError("identity assets root must stay outside the frozen research package")
+    identity_files = prepare_identity_asset_files(
+        identity_assets_root,
+        company_slug=company_slug,
+        company=company,
+    )
+    identity_action, identity_head = identity_asset_action(
+        company_slug,
+        identity_files,
+        remote_identity_assets_state,
+        base_head,
+        confirm_replacement=confirm_identity_asset_replacement,
+    )
+
+    logo_path = _company_logo_asset_path(company, company_slug)
+    staged_targets = {item["target_path"] for item in identity_files}
+    if logo_path is None:
+        logo_guard = "not-declared"
+    elif logo_path in staged_targets:
+        logo_guard = "staged"
+    elif remote_canonical_state is None:
+        logo_guard = "remote-preflight-required"
+    elif canonical_exists is False:
+        raise ArchivePlanError("new company.json declares a logo asset_path but no verified logo was staged")
+    else:
+        content = remote_canonical_state.get("content") if isinstance(remote_canonical_state, dict) else None
+        source_value = content.get("source_path") if isinstance(content, dict) else None
+        existing_company = _read_object(
+            _safe_regular_file(Path(source_value), "remote canonical company.json"),
+            "remote canonical company.json",
+        )
+        try:
+            existing_logo_path = _company_logo_asset_path(existing_company, company_slug)
+        except ArchivePlanError:
+            existing_logo_path = None
+        if existing_logo_path != logo_path:
+            raise ArchivePlanError("company logo asset_path changed without staging the verified canonical logo")
+        logo_guard = "preserve-existing"
+
     ready_for_write = (
         write_authorized
         and remote_action in {"create", "update", "noop"}
         and slug_action in {"verified-bound", "verified-available"}
         and canonical in {"create", "update", "update-confirmed-revision", "update-confirmed-schema-migration", "noop"}
+        and identity_action in {"preserve", "create", "update", "noop"}
+        and logo_guard in {"not-declared", "staged", "preserve-existing"}
     )
     return {
-        "plan_version": "5.0",
+        "plan_version": "6.0",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -503,6 +801,16 @@ def build_archive_plan(
             "preserve_unmanaged_company_assets": True,
             "files": package_files,
             "delete_paths": delete_paths,
+        },
+        "identity_assets": {
+            "remote_action": identity_action,
+            "remote_base_head": identity_head,
+            "logo_guard": logo_guard,
+            "company_logo_asset_path": logo_path,
+            "replacement_confirmed": confirm_identity_asset_replacement,
+            "preserve_unlisted_assets": True,
+            "files": identity_files,
+            "delete_paths": [],
         },
         "canonical_guard": {
             "source_path": str(company_path),
@@ -541,6 +849,16 @@ def main() -> int:
         help="Connector-produced exact-main-head canonical path/content observation",
     )
     parser.add_argument(
+        "--identity-assets-root",
+        type=Path,
+        help="Optional staging directory outside the frozen package containing verified identity assets",
+    )
+    parser.add_argument(
+        "--remote-identity-assets-state",
+        type=Path,
+        help="Exact-main-head observation for every staged identity asset target",
+    )
+    parser.add_argument(
         "--confirm-same-date-revision",
         action="store_true",
         help="Allow an accepted correction to replace different canonical content for the same data_as_of",
@@ -549,6 +867,11 @@ def main() -> int:
         "--confirm-schema-migration",
         action="store_true",
         help="Allow an accepted Schema 1.x package to be replaced by the fully rebuilt Schema 2.0.0 package",
+    )
+    parser.add_argument(
+        "--confirm-identity-asset-replacement",
+        action="store_true",
+        help="Allow explicitly staged verified identity assets to replace different bytes at the same path",
     )
     parser.add_argument("--output", type=Path, help="Write plan outside the frozen package; default stdout")
     args = parser.parse_args()
@@ -578,6 +901,14 @@ def main() -> int:
             if args.remote_canonical_state is not None
             else None
         )
+        remote_identity_assets_state = (
+            _read_object(
+                _safe_regular_file(args.remote_identity_assets_state, "remote identity asset state"),
+                "remote identity asset state",
+            )
+            if args.remote_identity_assets_state is not None
+            else None
+        )
         plan = build_archive_plan(
             args.root,
             args.schema,
@@ -588,8 +919,11 @@ def main() -> int:
             remote_company_state=remote_company_state,
             remote_slug_registry_state=remote_slug_registry_state,
             remote_canonical_state=remote_canonical_state,
+            identity_assets_root=args.identity_assets_root,
+            remote_identity_assets_state=remote_identity_assets_state,
             confirm_same_date_revision=args.confirm_same_date_revision,
             confirm_schema_migration=args.confirm_schema_migration,
+            confirm_identity_asset_replacement=args.confirm_identity_asset_replacement,
         )
         if args.output is not None:
             output = args.output
@@ -619,14 +953,23 @@ def main() -> int:
                 args.remote_company_state,
                 args.remote_slug_registry_state,
                 args.remote_canonical_state,
+                args.remote_identity_assets_state,
             ):
                 if observation is not None:
                     forbidden.add(observation.resolve())
             content = remote_canonical_state.get("content") if isinstance(remote_canonical_state, dict) else None
             if isinstance(content, dict) and isinstance(content.get("source_path"), str):
                 forbidden.add(Path(content["source_path"]).resolve())
+            forbidden.update(Path(item["source_path"]).resolve() for item in plan["identity_assets"]["files"])
             if output_resolved in forbidden:
                 raise ArchivePlanError("delivery plan output would overwrite an input or frozen file")
+            if args.identity_assets_root is not None:
+                try:
+                    output_resolved.relative_to(args.identity_assets_root.resolve())
+                except ValueError:
+                    pass
+                else:
+                    raise ArchivePlanError("delivery plan must be written outside the identity assets root")
             output.parent.mkdir(parents=True, exist_ok=True)
             write_json(output, plan)
         else:

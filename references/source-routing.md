@@ -37,7 +37,9 @@
 
 ### 下游交接
 
-本 Skill 不读取平台规范、不生成传播内容。研究包冻结后，只有用户要求内容生产时才交给 `$produce-doujiao-value-content`；下游自行验证 `research_protocol` 与 Schema 锁并加载其内容规则。
+本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，只交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；只有用户另行要求内容生产时才把它作为输入交给 `$produce-doujiao-value-content`，下游自行验证 `research_protocol` 与 Schema 锁并加载其内容规则。
+
+公司身份素材只在缺失或明确授权替换时读取 [identity-assets.md](identity-assets.md)。真实 Logo、产品素材、来源与权利依据可以随研究包原子 GitHub 交付，但不属于冻结研究事实，也不授权本 Skill 选择布局、比例、背景或合成成品图片。
 
 ## 信任锁 v2
 

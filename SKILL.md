@@ -1,11 +1,11 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term research for listed companies under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for company classification, industry-metric and chart-routing data, ten-year financials, FCF/Owner Earnings/financial-company FCFE, ROIC or industry-adapted returns, moat, durability, culture, management, capital allocation, governance, risks, DCF or Reverse DCF, formal research reports, schema-valid company.json, earnings updates, Too Hard decisions, frozen handoff packages, and authorized delivery to bits-bean/doujiao-value-system. Do not use for social-media production, short-term price prediction, trading signals, unsupported recommendations, unapproved GitHub writes, website import, or public publishing.
+description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term company research under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for sourced company classification and chart-routing inputs, ten-year financials, industry metrics, ledgers, moat, durability, culture, management, capital allocation, risks, DCF or Reverse DCF, formal reports, schema-valid company.json, Too Hard decisions, frozen handoffs, and acquiring or verifying missing company identity assets with provenance. Do not use to render website or social images, call chart renderers or website APIs, choose channel ratios or layouts, produce social copy, publish content, predict short-term prices, or make unapproved GitHub writes.
 ---
 
 # 豆角长期价值研究
 
-本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告与结构化数据。传播内容交给下游内容 Skill。
+本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告、结构化数据、台账和必要的公司身份素材。网站图表由 system 代码渲染，渠道包装与传播内容由下游内容 Skill 完成。
 
 ## 1. 权威与边界
 
@@ -14,7 +14,9 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 - 不从旧聊天、旧报告或传播内容补事实；事实、管理层主张、第三方观点、推断和估算必须区分。
 - 不编造、插值或无声填补缺失数据；`null`、`[]` 和真实零值严格区分。
 - 企业质量、估值状态和研究状态分开。诚信、治理、资本韧性和数据可靠性可否决估值吸引力。
-- 审查请求只诊断；修复、GitHub 归档、canonical 提升、网站导入和公开发布各需相应授权。
+- 审查请求只诊断；修复、冻结和 GitHub 交付各需相应授权。网站导入、图表渲染、内容生产和公开发布不属于本 Skill。
+- 本 Skill 不调用 `doujiao-value-system` 的图表导出命令或接口，不生成网站图、社媒图或背景，不选择平台比例、安全区、Logo 位置和引流文案，也不调用内容 Skill 代替用户生产或发布内容。
+- 只在公司身份素材缺失或已获授权替换时，按 [identity-assets.md](references/identity-assets.md) 获取并验证 Logo、明确可识别的产品 / 业务素材及来源；不得用生成式图片替代真实公司、产品或品牌身份。
 
 ## 2. 模式与读取顺序
 
@@ -54,7 +56,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ## 6. 正式研究包
 
-按 [research-contract.md](references/research-contract.md) 建立新版本目录；生成 `income_statement_sankey` 时完整执行 [income-statement-sankey.md](references/income-statement-sankey.md)。`classification`、`industry_metrics`、二十年以上的结构化 `durability` 判断、承诺的下次验证、资本配置结果、风险因果链和长期跟踪方法必须是有来源的研究产出，不能留给网站或内容层猜测。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+按 [research-contract.md](references/research-contract.md) 建立新版本目录；生成 `income_statement_sankey` 时完整执行 [income-statement-sankey.md](references/income-statement-sankey.md)。`classification`、`financials`、`industry_metrics`、`income_statement_sankey`、`segments`、二十年以上的结构化 `durability` 判断、承诺的下次验证、资本配置结果、风险因果链、估值敏感性和长期跟踪方法必须是有来源的研究产出，不能留给网站或内容层猜测。每个结构化 `source_ids` 必须解析到同一 `company.json.sources`，关键计算另由计算台账提供公式、输入和来源，使 system 图表和下游内容无需重新研究即可追溯。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
 
 正文只保留投资判断所需的事实、假设、计算过程、限制与反证。Schema 字段映射、JSON 文件名、验证器兼容、归档或生成流程等内部实现说明写入 `schema-gap-report.md`、`research-completeness.md`、台账或 manifest，不塞进研究叙事；但字段背后的真实经济假设仍须在正文直接说清。例如正文应写“第1—5年收入与普通股利润都按8%增长”，而不是解释某个 Schema 字段为何暂存同一数值。
 
@@ -86,7 +88,7 @@ Schema 1.x → 2.0 是显式迁移：旧冻结包保持不可变且只按旧 man
 
 增量只由比上一报告更新的官方财报或重大事件触发，按公司、期间、发布日期和 source ID 去重。复核旧包、更新受影响事实 / 计算 / 估值 / verdict，并明确长期逻辑：增强 / 基本不变 / 削弱 / 被推翻 / 暂无法判断。
 
-下游内容只接收同一冻结版本的报告、company.json、manifest 和完整度说明；下游不得重新研究、重算估值或覆盖结论。
+system 图表层与内容层只接收同一冻结版本的报告、`company.json`、manifest、完整度说明、证据台账和计算台账；身份素材另按 `identity-assets.md` 验证。下游可以格式化、重排或用同一冻结序列计算展示派生值，但不得补研究事实、重算估值、改变路由或覆盖结论。本 Skill 在交接完成后停止，不调用渲染器、内容 Skill 或发布接口。
 
 ## 9. 授权 GitHub 提交
 
@@ -94,6 +96,8 @@ Schema 1.x → 2.0 是显式迁移：旧冻结包保持不可变且只按旧 man
 
 - GitHub 当前研究包固定为 `companies/<company-slug>/`，报告、`company.json`、台账、验证结果与 manifest 全部直接放在该目录；不得增加日期、`-vN` 或其他版本子目录，远端版本只由 Git 历史追踪。
 - 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。公司 Logo 等非研究资产必须保留。
+- 已存在且与 `company.json` 一致的 canonical 身份素材原样保留；缺失或明确授权替换的素材，按 `identity-assets.md` 验证后与研究文件进入同一原子提交。新 Logo 使用 `companies/<slug>/assets/logo.svg`；已有 `logo-primary.*` 只作为 legacy 沿用。产品素材只由 `assets/visual-assets.json` 声明并保存来源、权利依据与 SHA-256。
+- 禁止把任何网站截图、渠道成品、`images/` 生成图、背景、比例模板或平台文案作为研究提交的一部分。
 - 研究请求、冻结请求仍不自动授权 GitHub；“提交到 GitHub”授权的唯一目标是上述公司目录。
 - 用户要求合并到 `main` 时走独立分支和 PR，检查通过后合并；只有明确说“直接提交到 main”才允许原子、非强制、仅快进直写。
 - 写入前核对最新 HEAD、Schema blob、slug / identity、远端当前公司目录和 `company.json` 单调性；写入后按 commit 重读全部文件并核对 SHA-256。
