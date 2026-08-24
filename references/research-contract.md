@@ -8,6 +8,7 @@
 - [Schema 2.0 迁移](#schema-20-迁移)
 - [冻结语义](#冻结语义)
 - [下游交接](#下游交接)
+- [身份素材交接](#身份素材交接)
 - [GitHub 归档](#github-归档)
 
 ## 版本化目录
@@ -28,7 +29,7 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 不得原地修改已冻结目录。日期冲突时追加稳定版本后缀，例如 `2026-08-19-v2`。
 
-`companies/<company-slug>/company.json` 是系统中的当前正式公司数据路径。只有用户授权更新规范仓库或网站流程时，才把冻结版本同步到该路径；研究包内的 `company.json` 是本次冻结快照。
+`companies/<company-slug>/company.json` 是 system 仓库中的当前正式公司数据路径。只有用户明确授权 GitHub 交付时，才把冻结版本同步到该路径；研究包内的 `company.json` 是本次冻结快照。本 Skill 不调用网站 API、图表渲染器或渠道图片流程。
 
 ## 必需文件
 
@@ -57,6 +58,20 @@ Schema 2.0 的 `classification` 与 `industry_metrics` 必须完整执行 [class
 管理层承诺必须包含兑现状态、结果和下一验证对象；`pending` 可把尚未发生的结果写为 `null`，其他状态必须记录可观察结果。资本配置必须包含三车道、结果状态、结果和评价；`risks.pre_mortem` 必须是一组完整因果链；概率、影响或缓解措施无证据时写 `null`，不得为图表猜测。每个长期跟踪指标必须包含重要性和复查方法。这些字段是研究事实与判断，不由下游根据文字或缺失字段重建。
 
 `income_statement_sankey` 的提取清单、动态层级模板、计算值来源绑定与逐层勾稽统一执行 [income-statement-sankey.md](income-statement-sankey.md)，不得另建简化口径。
+
+system 图表与下游内容所需的数据、路由和来源必须在冻结前完成。最低交接映射为：
+
+| 展示语义 | 冻结研究数据 |
+|---|---|
+| 公司身份与路由 | `meta`、`classification`、`brand_identity` |
+| 商业模式与收支 | `segments`、`income_statement_sankey` |
+| 十年财务与资本回报 | `financials`、`industry_metrics`、`buyback_ledger` |
+| 护城河与长期生存 | `moat`、`durability` |
+| 文化与资本配置 | `management`、`capital_allocation` |
+| 估值 | `valuation` 及计算台账中的起始现金流、逐年折现、终值和股权价值桥接 |
+| 风险与长期跟踪 | `risks.pre_mortem`、`risks.monitoring_indicators`、`verdict` |
+
+每个结构化 `source_ids` 必须解析到同一 `company.json.sources`；计算图需要的公式、输入、结果、期间和来源必须在 `calculation-ledger.json` 中可复算。下游不得从报告散文、图像或字段缺失反推公司类型、补数、换模板或重算估值。
 
 ### research-completeness.md
 
@@ -183,7 +198,7 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 展示层与储存层严格分开：
 
-- **面向人的展示层**：`research-report.md`、`research-completeness.md`、`schema-gap-report.md`、研究摘要、最终回复及由本 Skill 直接生成的表格 / 图表，全部使用中国投资者自然阅读的单位。
+- **面向人的展示层**：`research-report.md`、`research-completeness.md`、`schema-gap-report.md`、研究摘要、最终回复及报告内表格，全部使用中国投资者自然阅读的单位。
 - **机器储存层**：新研究的 `company.json` 与 `calculation-ledger.json` 只存实际原始数值；金额为 `report_currency` 的实际数值，股数为实际股数，比例为 decimal。不得使用 thousand / million / billion 缩放值，也不得把展示层“亿、万股、%”写回机器数据。
 
 展示层按下表转换，保留原报告币种，不自动换算人民币：
@@ -223,15 +238,29 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 - 验证错误与警告数量；
 - 冻结时间和人工审核状态。
 
-`status: frozen` 仅表示快照不可变。默认 `human_review_status: pending`；只有实际人工审核后才标为 `accepted`。冻结不代表投资建议、网站已更新或内容已发布。
+`status: frozen` 仅表示研究快照不可变。默认 `human_review_status: pending`；只有实际人工审核后才标为 `accepted`。冻结不代表投资建议、网站已更新、图表已导出、渠道图片已生成或内容已发布。
 
 历史 `manifest_version: 1.0` 只允许 `audit` 模式复核。它不能成为新增量版本的前序 manifest，不能重新冻结、GitHub 归档或作为当前正式下游交接；要继续使用必须按当前研究协议与 Schema 迁移并新建 v2 版本目录。
 
 ## 下游交接
 
-交给 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json` 和 v2 manifest。下游先验证文件哈希、`research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再生成内容。
+交给 `doujiao-value-system` 图表层或 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json`、证据台账、计算台账、完整度说明和 v2 manifest。下游先验证文件哈希、`research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再读取或展示数据。
 
-若 manifest 缺失、不是 v2、状态不是 `frozen`、文件集合不完整、哈希不匹配、研究协议不受信，或 JSON 未通过 manifest `specification` 指定的同一 Schema，只能做草案或审查，不得声称正式内容交付。研究事实由 manifest 中的研究协议与 Schema 双重锁定；展示规则可以独立升级，但新研究方法或 Schema 改变事实含义时必须先完成迁移和重新冻结。
+若 manifest 缺失、不是 v2、状态不是 `frozen`、文件集合不完整、哈希不匹配、研究协议不受信，或 JSON 未通过 manifest `specification` 指定的同一 Schema，只能做草案或审查，不得声称正式交付。研究事实由 manifest 中的研究协议与 Schema 双重锁定；展示规则可以独立升级，但新研究方法或 Schema 改变事实含义时必须先完成迁移和重新冻结。
+
+研究 Skill 的责任到冻结交接为止。它不调用 system 图表导出代码或接口，不决定最终画布、渠道比例、背景、安全区、品牌元素位置、引流语或社媒文案，也不调用内容 Skill 或发布接口。system 与内容层可以对同一冻结序列做格式化、响应式重排和展示性派生计算，但不得改变研究事实、路由、估值结果或 verdict。
+
+## 身份素材交接
+
+真实公司 Logo 与明确可识别的产品 / 业务素材执行 [identity-assets.md](identity-assets.md)。身份素材与研究包职责分离：
+
+- `company.json.brand_identity.company_logo` 保存精确 asset path、来源 URL、替代文本和官方性；
+- 新 canonical Logo 使用 `companies/<slug>/assets/logo.svg`；已存在的 `logo-primary.*` 只作为 legacy 沿用；
+- 可选产品素材由 `companies/<slug>/assets/visual-assets.json` 声明文件 SHA-256、原始文件 URL、来源页、发布者、权利依据和官方性；
+- 素材在冻结研究目录之外准备，不写入 `research-manifest.json`，但 GitHub 交付时由规划器验证并与研究文件原子提交；
+- 缺失或权利依据不清时保留缺口，不使用 AI 生成图、图库替身或产品拼图补齐。
+
+内容层可以决定经验证素材在不同渠道如何摆放，但不得重新定义素材身份、来源、SHA-256 或官方性。
 
 ## GitHub 提交
 
@@ -250,5 +279,7 @@ companies/<company-slug>/
 ```
 
 GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再向 `research/` 写入副本。本地冻结目录可继续保存不可变审计快照；远端公司目录中的受管研究文件使用整包替换，Git 历史负责记录版本。公司 Logo、品牌图像等非研究资产必须原样保留。不得加入发布回执、制作记录或其他未冻结文件。`companies/<company-slug>/company.json` 是唯一正式副本。
+
+只有缺失或用户明确授权替换的身份素材可以作为同一原子变更的附加写入。附加路径严格限定为 `company.json.brand_identity.company_logo.asset_path` 指定的新 canonical Logo，以及 `assets/visual-assets.json` 和它声明的产品文件；不得删除未列明资产，不得加入 `images/`、网站截图、社媒成品、背景或渠道模板。
 
 最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份或证券不一致拒绝；Schema 版本不一致默认拒绝，只有显式确认的 1.x → 2.0 迁移可以继续。
