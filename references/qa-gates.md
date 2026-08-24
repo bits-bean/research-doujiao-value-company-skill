@@ -117,7 +117,7 @@
 - 前序增量研究包已在当前受信研究协议与 Schema 下重新执行 `full` 验证，fresh errors/warnings 与冻结记录一致；未把自报零错误当作证据。
 - 默认经独立分支和 PR；直接 `main` 需要用户明确指定，并且只使用单一原子提交、非强制、仅快进更新。
 - 最终 diff 只修改 `companies/<company-slug>/` 的受管研究包文件；只允许删除被新冻结包替代的旧受管研究文件，保留 Logo、品牌图像及其他非研究资产，不自动删除旧 `research/` 目录或历史子目录，不包含其他公司、路径或 Schema 文件变化。
-- 如有身份素材附加写入，只包含与 `company.json` 或 `assets/visual-assets.json` 显式绑定、来源与权利依据已验证且 SHA-256 一致的文件；远端不同内容已获明确替换授权。新 Logo 只用 `assets/logo.svg`，已有 `logo-primary.*` 仅沿用；没有 `images/`、网站截图、渠道成品、背景或模板。
+- 如有身份素材附加写入，只包含与 `company.json` 或 `assets/visual-assets.json` 显式绑定、来源与权利依据已验证且 SHA-256 一致的文件；封面产品素材仅为 PNG/JPEG 且 `alt_cn` 非空，远端不同内容已获明确替换授权。新 Logo 只用 `assets/logo.svg`，已有 `logo-primary.*` 仅沿用；没有 `images/`、网站截图、渠道成品、背景或模板。
 - 提交后按 commit 重新读取远端文件并核对全部目标路径与 SHA-256。
 
 任何权限不足、分支保护、远端并发更新、部分写入、哈希不一致或无法复核，都必须准确报告失败或部分完成，不得声称归档成功。
