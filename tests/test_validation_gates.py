@@ -88,7 +88,7 @@ class ValidationGateTests(unittest.TestCase):
                 "valuation_date": "2026-08-19",
                 "source_version": "test",
             },
-            "brand_identity": {"company_logo": {"asset_path": None, "source_url": None, "alt": None, "is_official": False}},
+            "brand_identity": {"company_logo": {"asset_path": "companies/test-company/assets/logo.svg", "source_url": "https://example.com/logo.svg", "alt": "Test Company official logo", "is_official": True}},
             "verdict": {
                 "business_quality": "良好",
                 "valuation_status": "接近合理",
@@ -129,21 +129,23 @@ class ValidationGateTests(unittest.TestCase):
             },
             "sources": [source],
         }
+        package = root / "package"
+        package.mkdir()
         write_json(root / "schema.json", schema)
-        write_json(root / "company.json", company)
+        write_json(package / "company.json", company)
         write_json(
-            root / "evidence-ledger.json",
+            package / "evidence-ledger.json",
             {"claims": [{"id": "CLM-001", "claim": "", "classification": "fact", "confidence": "high", "source_ids": ["SRC-001"]}]},
         )
         write_json(
-            root / "calculation-ledger.json",
+            package / "calculation-ledger.json",
             {"numeric_convention": "base_units", "calculations": [{"id": "CALC-001", "metric": "custom", "formula": "x", "source_ids": []}]},
         )
-        (root / "research-report.md").write_text(
+        (package / "research-report.md").write_text(
             "# 空壳公司 VOID\n一页式结论 数据截至日 商业模式 十年财务 自由现金流 ROIC 护城河 长期生存 Stop Doing 资本配置 回购明细 治理 债务 Reverse DCF Pre-Mortem 待调查 领先指标 最终结论",
             encoding="utf-8",
         )
-        (root / "research-completeness.md").write_text(
+        (package / "research-completeness.md").write_text(
             "已覆盖十年期间标签。无关键缺失。置信度写在这里。影响写在这里。下一步待取得证据。" * 8,
             encoding="utf-8",
         )
@@ -153,7 +155,7 @@ class ValidationGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             schema = self.make_vacuous_package(root)
-            findings = validate_research_package(root, schema, "full")
+            findings = validate_research_package(root / "package", schema, "full", "test-company")
             codes = {item.code for item in findings if item.severity == "error"}
             expected = {
                 "insubstantial-financial-history",
@@ -176,13 +178,15 @@ class ValidationGateTests(unittest.TestCase):
             base = [
                 sys.executable,
                 str(ROOT / "scripts" / "freeze_research.py"),
-                str(root),
+                str(root / "package"),
                 "--schema",
                 str(schema),
                 "--schema-blob-sha",
                 "b" * 40,
                 "--spec-commit",
                 "a" * 40,
+                "--company-slug",
+                "test-company",
             ]
             audit = subprocess.run(base + ["--mode", "audit"], capture_output=True, text=True, check=False)
             self.assertNotEqual(audit.returncode, 0)

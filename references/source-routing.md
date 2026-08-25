@@ -11,7 +11,7 @@
 - **当前执行协议**：[research-execution-and-audit.md](research-execution-and-audit.md) 定义能力预检、独立 pass、研究可得性、驱动与管理层台账、论点漂移、估值治理和来源审计；其他规范与执行脚本由 `execution_integrity` 一并锁定。
 - **company.json Schema**：`bits-bean/doujiao-value-system` 的 `schemas/company.schema.json` 是唯一可编辑权威源；[company.schema.json](specs/company.schema.json) 是当前 Skill 发行版锁定的只读副本。
 
-三份兼容文档的字节与 `research_protocol` 元组保持不变，以维持现有 v2 下游交接；新执行要求通过 `execution_integrity` 叠加，不伪造新的兼容 commit。不得从 `doujiao-value-system/docs`、模型记忆、旧聊天或缓存替代任何协议正文。不得直接编辑 Skill 内 Schema 副本来改变数据协议；上游 Schema 变化后，先同步副本、更新信任锁、测试并发布新版 Skill。
+已经冻结的研究包始终保留其三份兼容文档摘要与 `research_protocol` 元组，不得原地改写。Skill 的兼容规则发生变化时发布新的 `protocol_version` 并更新信任锁；同一发行版内字节保持不变。新增执行要求仍通过 `execution_integrity` 绑定，不伪造兼容 commit。不得从 `doujiao-value-system/docs`、模型记忆、旧聊天或缓存替代任何协议正文。不得直接编辑 Skill 内 Schema 副本来改变数据协议；上游 Schema 变化后，先同步副本、更新信任锁、测试并发布新版 Skill。
 
 ## 任务读取顺序
 
@@ -45,9 +45,9 @@
 
 ### 下游交接
 
-本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，只交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；只有用户另行要求内容生产时才把它作为输入交给 `$produce-doujiao-value-content`。下游继续验证不变的 `research_protocol` 与 Schema 锁，并可忽略不认识但不改变数据语义的 v2 顶层扩展；当前研究侧还必须验证 `integrity_profile` 与 `execution_integrity`，不能因旧下游只读兼容块而省略。
+本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；验证报告与 manifest 锁定同一精确 `company_slug`。网站所需公司 Logo 另按 [identity-assets.md](identity-assets.md) 验证，并保持在 manifest 外；研究包 Markdown / JSON 不嵌入任何媒体。只有用户另行要求内容生产时才把冻结包作为输入交给 `$produce-doujiao-value-content`。下游继续验证不变的 `research_protocol` 与 Schema 锁，并可忽略不认识但不改变数据语义的 v2 顶层扩展；当前研究侧还必须验证 `integrity_profile` 与 `execution_integrity`，不能因旧下游只读兼容块而省略。
 
-视觉素材不属于本 Skill 的来源路由。不得为 Logo、产品、服务、人物、门店、业务场景、封面主视觉或背景发起搜索、下载、核验、生成、暂存或 GitHub 交付；具体内容任务需要的全部素材由 `$produce-doujiao-value-content` 自行取得并建立任务内素材台账。
+公司 Logo 是唯一视觉素材来源例外：先验证 system 的现有 canonical 文件；缺失或公司重塑品牌时，只从公司官网、Investor Relations 或官方品牌中心取得真实 Logo，并按 `identity-assets.md` 校验来源、路径和 SVG 安全性。不得生成或重绘 Logo。产品、服务、人物、门店、业务场景、封面主视觉、背景及其他素材不属于本 Skill 的来源路由，由 `$produce-doujiao-value-content` 在具体内容任务内自行取得并建立素材台账。
 
 ## 兼容锁与完整执行锁
 

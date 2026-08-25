@@ -1445,7 +1445,7 @@ class SemanticGateTests(unittest.TestCase):
             }
             write_json(root / "research-manifest.json", manifest)
             findings: list[Finding] = []
-            validate_manifest(root, schema_path, company, "full", findings)
+            validate_manifest(root, schema_path, company, "full", "test-company", findings)
             codes = {item.code for item in findings}
             expected = {
                 "manifest-repository",
@@ -1510,10 +1510,10 @@ class SemanticGateTests(unittest.TestCase):
             }
             write_json(root / "research-manifest.json", manifest)
             audit_findings: list[Finding] = []
-            validate_manifest(root, schema_path, company, "audit", audit_findings)
+            validate_manifest(root, schema_path, company, "audit", "test-company", audit_findings)
             self.assertNotIn("legacy-manifest-audit-only", {item.code for item in audit_findings})
             full_findings: list[Finding] = []
-            validate_manifest(root, schema_path, company, "full", full_findings)
+            validate_manifest(root, schema_path, company, "full", "test-company", full_findings)
             self.assertIn("legacy-manifest-audit-only", {item.code for item in full_findings})
 
 

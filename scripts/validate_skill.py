@@ -68,6 +68,7 @@ REQUIRED = (
     "references/valuation-qa.md",
     "references/qa-gates.md",
     "references/github-archive.md",
+    "references/identity-assets.md",
     "references/research-execution-and-audit.md",
     "references/trusted-spec-lock.json",
     "references/specs/project-instructions.md",
@@ -283,27 +284,49 @@ def main() -> int:
         "不调用 `doujiao-value-system` 的图表导出命令或接口",
         "不生成网站图、社媒图或背景",
         "不选择平台比例",
-        "不搜索、下载、筛选、核验、生成、暂存或提交",
-        "视觉素材不属于研究交接包",
+        "公司 Logo 是唯一视觉素材例外",
+        "不得生成、重绘或用近似图替代公司 Logo",
+        "除公司 Logo 外",
     ):
         if required_boundary not in skill_text:
             fail(f"SKILL.md lacks responsibility boundary: {required_boundary}")
             errors += 1
 
     archive_text = (ROOT / "scripts/prepare_github_archive.py").read_text(encoding="utf-8")
-    for forbidden_asset_hook in (
+    for required_logo_hook in (
         "--identity-assets-root",
         "--remote-identity-assets-state",
         "--confirm-identity-asset-replacement",
+        "--confirm-identity-asset-clear",
         '"identity_assets"',
         "prepare_identity_asset_files",
+        "sharp.versions",
+        "0.35.3",
+        "8.18.3",
+        "2.62.90",
     ):
-        if forbidden_asset_hook in archive_text:
-            fail(f"research archive still exposes visual-asset management: {forbidden_asset_hook}")
+        if required_logo_hook not in archive_text:
+            fail(f"research archive lacks company Logo delivery guard: {required_logo_hook}")
             errors += 1
-    if (ROOT / "references/identity-assets.md").exists():
-        fail("research skill must not bundle a visual-asset acquisition contract")
-        errors += 1
+    for forbidden_non_logo_hook in (
+        "visual-assets.json",
+        "cover_product",
+        "PRODUCT_ASSET_SUFFIXES",
+    ):
+        if forbidden_non_logo_hook in archive_text:
+            fail(f"research archive exposes non-Logo visual-asset management: {forbidden_non_logo_hook}")
+            errors += 1
+
+    package_validator_text = (ROOT / "scripts/validate_research_package.py").read_text(encoding="utf-8")
+    for required_package_boundary in (
+        "embedded-visual-asset",
+        "markdown_image_pattern",
+        "raw_html_tag_pattern",
+        "company_slug",
+    ):
+        if required_package_boundary not in package_validator_text:
+            fail(f"research package validator lacks boundary: {required_package_boundary}")
+            errors += 1
 
     for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", skill_text):
         if "://" in target or target.startswith("#"):

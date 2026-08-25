@@ -7,6 +7,8 @@ import argparse
 import ast
 from difflib import SequenceMatcher
 import hashlib
+import html
+import ipaddress
 import json
 import math
 import os
@@ -17,7 +19,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 from validate_research_process import validate_research_process
 
@@ -36,10 +38,46 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
-VALIDATOR_VERSION = "research-doujiao-value-company/4.0"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.1"
 INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
+COMPANY_SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+LEGACY_LOGO_EXTENSIONS = "png|svg"
+VISUAL_ASSET_EXTENSIONS = {
+    ".avif",
+    ".bmp",
+    ".gif",
+    ".ico",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".svg",
+    ".svgz",
+    ".tif",
+    ".tiff",
+    ".webp",
+}
+SIGNED_LOGO_QUERY_KEYS = {
+    "access_token",
+    "key",
+    "sig",
+    "signature",
+    "token",
+    "x-amz-credential",
+    "x-amz-security-token",
+    "x-amz-signature",
+    "x-goog-algorithm",
+    "x-goog-credential",
+    "x-goog-date",
+    "x-goog-expires",
+    "x-goog-signature",
+    "googleaccessid",
+    "expires",
+    "key-pair-id",
+    "policy",
+    "sharedaccesssignature",
+}
 PROTOCOL_DOCUMENT_PATHS = (
     "references/specs/automation-workflow.md",
     "references/specs/project-instructions.md",
@@ -1207,6 +1245,222 @@ def validate_completeness(text: str, findings: list[Finding]) -> None:
             add(findings, "error", f"completeness-{code}", "research-completeness.md", f"missing {code} discussion")
 
 
+def stable_public_http_url(value: Any) -> bool:
+    """Return whether value is a credential-free public HTTP(S) URL on a real host."""
+    if not nonblank(value) or value != value.strip() or "\\" in value:
+        return False
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
+        return False
+    if re.search(r"%(?![0-9a-fA-F]{2})", value):
+        return False
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        # Accessing port is intentional: urllib rejects malformed or out-of-range ports lazily.
+        parsed.port
+    except (TypeError, ValueError):
+        return False
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return False
+    normalized_host = hostname.rstrip(".").lower()
+    if not normalized_host or normalized_host == "localhost" or normalized_host.endswith(
+        (".localhost", ".local", ".internal")
+    ):
+        return False
+    try:
+        address = ipaddress.ip_address(normalized_host)
+    except ValueError:
+        try:
+            ascii_host = normalized_host.encode("idna").decode("ascii")
+        except UnicodeError:
+            return False
+        labels = ascii_host.split(".")
+        dns_label = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.I)
+        if (
+            len(ascii_host) > 253
+            or len(labels) < 2
+            or any(dns_label.fullmatch(label) is None for label in labels)
+            or labels[-1].isdigit()
+            or labels[-1] in {"example", "invalid", "localhost", "onion", "test"}
+            or all(re.fullmatch(r"(?:0x[0-9a-f]+|[0-9]+)", label, re.I) is not None for label in labels)
+        ):
+            return False
+    else:
+        if not address.is_global:
+            return False
+    try:
+        query_keys = {key.lower() for key, _value in parse_qsl(parsed.query, keep_blank_values=True)}
+    except ValueError:
+        return False
+    return not bool(query_keys & SIGNED_LOGO_QUERY_KEYS)
+
+
+def validate_company_logo(
+    company: dict[str, Any],
+    completeness: str,
+    company_slug: str,
+    findings: list[Finding],
+) -> None:
+    """Require one exact Logo state and a slug-bound, source-verifiable path."""
+    path_label = "company.json.brand_identity.company_logo"
+    brand = company.get("brand_identity")
+    logo = brand.get("company_logo") if isinstance(brand, dict) else None
+    if not isinstance(logo, dict):
+        add(findings, "error", "company-logo-shape", path_label, "company_logo must be an object")
+        return
+
+    asset_path = logo.get("asset_path")
+    source_url = logo.get("source_url")
+    alt = logo.get("alt")
+    is_official = logo.get("is_official")
+    absent = asset_path is None and source_url is None and alt is None and is_official is False
+    if absent:
+        visible_completeness = visible_markdown_disclosure_text(completeness)
+        logo_lines = " ".join(
+            line.strip().lower()
+            for line in visible_completeness.splitlines()
+            if "logo" in line.lower()
+        )
+        missing_dimensions: list[str] = []
+        if not logo_lines or not any(
+            token in logo_lines
+            for token in (
+                "缺失",
+                "未找到",
+                "未发现",
+                "未提供",
+                "尚未取得",
+                "尚未找到",
+                "尚未提供",
+                "无法取得",
+                "无法获取",
+                "不可用",
+                "missing",
+                "unavailable",
+                "not available",
+            )
+        ):
+            missing_dimensions.append("missing status")
+        if not (
+            (
+                any(token in logo_lines for token in ("官网", "投资者关系", "品牌中心", "媒体资料", "official"))
+                or re.search(r"\bir\b", logo_lines) is not None
+            )
+            and any(token in logo_lines for token in ("尝试", "检索", "查找", "核验", "检查", "未找到", "未发现", "未提供", "attempt", "search", "check"))
+        ):
+            missing_dimensions.append("attempted official sources")
+        if not ("网站" in logo_lines and any(token in logo_lines for token in ("影响", "展示", "回退", "ticker", "代码", "fallback"))):
+            missing_dimensions.append("website impact or ticker fallback")
+        if not any(token in logo_lines for token in ("待补", "后续", "下一步", "待取得", "pending", "recheck", "重新检查")):
+            missing_dimensions.append("pending evidence or recheck condition")
+        if missing_dimensions:
+            add(
+                findings,
+                "error",
+                "unacknowledged-logo-warning",
+                "research-completeness.md",
+                "missing Logo-specific explanation of " + ", ".join(missing_dimensions),
+            )
+        add(
+            findings,
+            "warning",
+            "unofficial-logo",
+            path_label,
+            "official company Logo unavailable; use the documented website fallback and do not synthesize one",
+        )
+        return
+
+    if is_official is not True or not all(nonblank(value) for value in (asset_path, source_url, alt)):
+        code = "official-logo-metadata" if is_official is True else "company-logo-sentinel"
+        add(
+            findings,
+            "error",
+            code,
+            path_label,
+            "company Logo must be either three nonempty strings with is_official true or the exact null/null/null/false sentinel",
+        )
+        return
+
+    assert isinstance(asset_path, str) and isinstance(source_url, str) and isinstance(alt, str)
+    visible_logo_lines = [
+        line.strip().lower()
+        for line in visible_markdown_disclosure_text(completeness).splitlines()
+        if "logo" in line.lower()
+    ]
+    missing_markers = (
+        "缺失",
+        "未找到",
+        "未发现",
+        "未提供",
+        "尚未取得",
+        "尚未找到",
+        "尚未提供",
+        "仍缺",
+        "待补",
+        "继续回退",
+        "无法取得",
+        "无法获取",
+        "不可用",
+        "missing",
+        "unavailable",
+        "not available",
+        "pending",
+    )
+    resolution_markers = (
+        "不再缺失",
+        "现已取得",
+        "现已找到",
+        "现已提供",
+        "已经取得",
+        "已经找到",
+        "已经提供",
+        "已恢复",
+        "resolved",
+        "now available",
+        "obtained",
+        "restored",
+    )
+    if any(
+        any(marker in line for marker in missing_markers)
+        and not any(marker in line for marker in resolution_markers)
+        for line in visible_logo_lines
+    ):
+        add(
+            findings,
+            "error",
+            "company-logo-completeness-contradiction",
+            "research-completeness.md",
+            "official Logo metadata conflicts with an unresolved visible Logo-missing disclosure",
+        )
+    canonical = f"companies/{company_slug}/assets/logo.svg"
+    legacy_pattern = rf"companies/{re.escape(company_slug)}/logo-primary\.(?:{LEGACY_LOGO_EXTENSIONS})"
+    if asset_path != asset_path.strip() or "\\" in asset_path or (
+        asset_path != canonical and re.fullmatch(legacy_pattern, asset_path) is None
+    ):
+        add(
+            findings,
+            "error",
+            "company-logo-path",
+            f"{path_label}.asset_path",
+            "must exactly match the requested company slug's canonical assets/logo.svg or a supported logo-primary.* legacy path",
+        )
+
+    if not stable_public_http_url(source_url):
+        add(
+            findings,
+            "error",
+            "official-logo-source",
+            f"{path_label}.source_url",
+            "official company Logo requires a stable public http/https source URL without credentials or signed query parameters",
+        )
+
+
 def validate_too_hard_acknowledgements(company: dict[str, Any], text: str, findings: list[Finding]) -> None:
     if not is_unable(company):
         return
@@ -2305,7 +2559,7 @@ def mask_non_rendered_markdown(report: str) -> str:
         style_match = re.search(r"(?:^|\s)style\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s]+))", attributes, re.I | re.S)
         style = next((value for value in style_match.groups() if value is not None), "") if style_match else ""
         hidden_style = re.search(r"(?:display\s*:\s*none|visibility\s*:\s*hidden)\b", style, re.I) is not None
-        if tag not in {"template", "script", "style"} and not hidden_attribute and not hidden_style:
+        if tag not in {"code", "pre", "template", "script", "style"} and not hidden_attribute and not hidden_style:
             continue
         closing = re.search(rf"<\s*/\s*{re.escape(tag)}\s*>", report[opening.end():], re.I)
         if closing is None:
@@ -2329,6 +2583,18 @@ def mask_non_rendered_markdown(report: str) -> str:
             continue
         masked.append(line)
     return "".join(masked)
+
+
+def visible_markdown_disclosure_text(value: str) -> str:
+    """Return rendered prose signals, excluding code, comments, URL targets, and HTML attributes."""
+    text = mask_non_rendered_markdown(value)
+    text = re.sub(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[^\n]*$", "", text)
+    text = re.sub(r"!\[[^\]]*\]\([^\n)]*\)", " ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\n)]*\)", r"\1", text)
+    text = re.sub(r"`+[^`\n]*`+", " ", text)
+    text = re.sub(r"(?m)^(?: {4}|\t).*?$", "", text)
+    text = re.sub(r"<(?:\"[^\"]*\"|'[^']*'|[^'\">])*>", " ", text)
+    return html.unescape(text)
 
 
 def raw_html_tags(report: str) -> list[str]:
@@ -4492,7 +4758,14 @@ def load_trusted_spec_lock(findings: list[Finding]) -> dict[str, Any] | None:
     return lock
 
 
-def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mode: str, findings: list[Finding]) -> None:
+def validate_manifest(
+    root: Path,
+    schema_path: Path,
+    company: dict[str, Any],
+    mode: str,
+    company_slug: str,
+    findings: list[Finding],
+) -> None:
     manifest_path = root / "research-manifest.json"
     if not manifest_path.exists():
         return
@@ -4581,12 +4854,33 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mo
         for key in ("company_name_cn", "company_name_en", "ticker", "exchange", "report_currency", "data_as_of", "valuation_date", "source_version"):
             if research.get(key) != meta.get(key):
                 add(findings, "error", "manifest-research-mismatch", f"research-manifest.json.research.{key}", "does not match company.json")
+        if manifest_version == "2.0" and research.get("company_slug") != company_slug:
+            add(
+                findings,
+                "error",
+                "manifest-company-slug",
+                "research-manifest.json.research.company_slug",
+                "must exactly match the company slug used for validation and delivery",
+            )
     validation = manifest.get("validation")
     if not isinstance(validation, dict) or validation.get("mode") != "full" or validation.get("errors") != 0:
         add(findings, "error", "manifest-validation", "research-manifest.json.validation", "frozen package must record full validation with zero errors")
-    elif manifest.get("integrity_profile") == INTEGRITY_PROFILE and trusted is not None:
+    else:
+        warning_count = validation.get("warnings")
+        if not isinstance(warning_count, int) or isinstance(warning_count, bool) or warning_count < 0:
+            add(findings, "error", "manifest-validation", "research-manifest.json.validation.warnings", "must be a non-negative integer")
+        elif warning_count > 0 and manifest.get("warning_acknowledged") is not True:
+            add(
+                findings,
+                "error",
+                "manifest-warning-acknowledgement",
+                "research-manifest.json.warning_acknowledged",
+                "must be true when frozen validation records warnings",
+            )
+    if isinstance(validation, dict) and validation.get("mode") == "full" and validation.get("errors") == 0 and manifest.get("integrity_profile") == INTEGRITY_PROFILE and trusted is not None:
         expected_validation_integrity = {
             "validator": VALIDATOR_VERSION,
+            "company_slug": company_slug,
             "integrity_profile": INTEGRITY_PROFILE,
             "validator_sha256": file_sha256(Path(__file__).resolve()),
             "toolchain_digest_sha256": trusted["execution_integrity"]["toolchain_digest_sha256"],
@@ -4604,6 +4898,8 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mo
             add(findings, "error", "validation-report-status", "validation-report.json", "must record full validation with zero errors")
         elif isinstance(validation, dict):
             comparison_keys = ["validator", "mode", "errors", "warnings"]
+            if manifest_version == "2.0":
+                comparison_keys.append("company_slug")
             if manifest.get("integrity_profile") == INTEGRITY_PROFILE:
                 comparison_keys.extend(("integrity_profile", "validator_sha256", "toolchain_digest_sha256", "protocol_fingerprint"))
             for key in comparison_keys:
@@ -4646,8 +4942,27 @@ def validate_manifest(root: Path, schema_path: Path, company: dict[str, Any], mo
             add(findings, "error", "manifest-hash-mismatch", path, f"hash or size mismatch for {item['path']!r}")
 
 
-def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[Finding]:
+def validate_research_package(root: Path, schema_path: Path, mode: str, company_slug: str) -> list[Finding]:
     findings: list[Finding] = []
+    if COMPANY_SLUG_PATTERN.fullmatch(company_slug) is None:
+        add(findings, "error", "company-slug", "company_slug", "must contain only lowercase letters, digits, and single hyphens")
+    allowed_entries = set(FROZEN_HASH_FILES) | {"research-manifest.json", "schema-gap-report.md"}
+    for candidate in root.iterdir():
+        if candidate.name not in allowed_entries:
+            visual_like = (
+                candidate.suffix.lower() in VISUAL_ASSET_EXTENSIONS
+                or candidate.name.lower() in {"assets", "images", "visuals"}
+                or "logo" in candidate.name.lower()
+            )
+            add(
+                findings,
+                "error",
+                "visual-asset-in-package" if visual_like else "unexpected-package-entry",
+                candidate.name,
+                "the research package accepts only its exact managed files; Logo and every other asset must stay outside",
+            )
+        elif candidate.is_symlink() or not candidate.is_file():
+            add(findings, "error", "invalid-package-entry", candidate.name, "managed package entries must be regular files")
     for name in REQUIRED_FILES:
         path = root / name
         if path.is_symlink():
@@ -4656,6 +4971,56 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
             add(findings, "error", "missing-file", name, "required research package file is missing")
     if findings:
         return findings
+    markdown_image_pattern = re.compile(r"!\s*\[", re.I)
+    embedded_data_pattern = re.compile(
+        r"data(?:\s*:\s*|\\+u0*03a)(?:image|video|audio)/",
+        re.I,
+    )
+    decoded_data_pattern = re.compile(r"data\s*:\s*(?:image|video|audio)/", re.I)
+    raw_html_tag_pattern = re.compile(
+        r"<\s*/?\s*[A-Za-z][A-Za-z0-9-]*(?=\s|/?>)",
+        re.I,
+    )
+    for candidate in root.iterdir():
+        if candidate.suffix.lower() not in {".json", ".md"} or not candidate.is_file() or candidate.is_symlink():
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            add(findings, "error", "text-encoding", candidate.name, "managed text and JSON files must be UTF-8")
+            continue
+        markdown_without_br = re.sub(r"<\s*br\s*/?\s*>", "", text, flags=re.I)
+        embeds_media = embedded_data_pattern.search(text) is not None
+        embeds_media = embeds_media or markdown_image_pattern.search(text) is not None
+        embeds_media = embeds_media or raw_html_tag_pattern.search(markdown_without_br) is not None
+        if candidate.suffix.lower() == ".json":
+            try:
+                decoded_json = json.loads(text)
+            except json.JSONDecodeError:
+                decoded_json = None
+            pending: list[Any] = [decoded_json]
+            while pending and not embeds_media:
+                value = pending.pop()
+                if isinstance(value, str):
+                    decoded_without_br = re.sub(r"<\s*br\s*/?\s*>", "", value, flags=re.I)
+                    embeds_media = (
+                        decoded_data_pattern.search(value) is not None
+                        or markdown_image_pattern.search(value) is not None
+                        or raw_html_tag_pattern.search(decoded_without_br) is not None
+                    )
+                elif isinstance(value, dict):
+                    pending.extend(value.keys())
+                    pending.extend(value.values())
+                elif isinstance(value, list):
+                    pending.extend(value)
+        if embeds_media:
+            add(
+                findings,
+                "error",
+                "embedded-visual-asset",
+                candidate.name,
+                "research files cannot embed Markdown images, raw HTML other than plain br, or data-URI media; company Logo stays outside the package",
+            )
     try:
         schema = load_json(schema_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -4746,6 +5111,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
             else:
                 validate_chinese_display_units(mask_non_rendered_markdown(gap_text), findings, "schema-gap-report.md")
     validate_completeness(completeness, findings)
+    validate_company_logo(company, completeness, company_slug, findings)
     validate_classification_and_industry_metrics(company, completeness, mode, findings)
     validate_financials(company, completeness, mode, findings)
     validate_sankey(company, findings, calculations, known)
@@ -4773,14 +5139,17 @@ def validate_research_package(root: Path, schema_path: Path, mode: str) -> list[
     next_ids = next_report.get("source_ids") if isinstance(next_report.get("source_ids"), list) else []
     if next_report.get("date_status") == "official" and (not next_ids or not any(is_official_report_schedule_source(source_records.get(source_id)) for source_id in next_ids)):
         add(findings, "error", "next-report-provenance", "company.json.reporting.next_expected_report", "an official next-report date must cite a filing/release or a verifiable official IR calendar page")
-    # brand_identity.company_logo is retained only because the locked Schema requires it.
-    # Visual-asset acquisition and provenance are owned by the downstream content Skill,
-    # so research validation neither requires nor evaluates logo availability.
-    validate_manifest(root, schema_path, company, mode, findings)
+    validate_manifest(root, schema_path, company, mode, company_slug, findings)
     return findings
 
 
-def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Finding]) -> dict[str, Any]:
+def report_payload(
+    root: Path,
+    schema_path: Path,
+    mode: str,
+    findings: list[Finding],
+    company_slug: str,
+) -> dict[str, Any]:
     integrity_findings: list[Finding] = []
     trusted = load_trusted_spec_lock(integrity_findings)
     execution = trusted.get("execution_integrity", {}) if isinstance(trusted, dict) else {}
@@ -4792,6 +5161,7 @@ def report_payload(root: Path, schema_path: Path, mode: str, findings: list[Find
         "validator": VALIDATOR_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "root": ".",
+        "company_slug": company_slug,
         "schema": {
             "id": schema.get("$id") if isinstance(schema, dict) else None,
             "version": extract_schema_version(schema) if isinstance(schema, dict) else None,
@@ -4837,21 +5207,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", nargs="?", type=Path, help="Research package root")
     parser.add_argument("--schema", type=Path, help="Locked company.schema.json path")
+    parser.add_argument("--company-slug", required=False, help="Safe company slug used by Logo paths")
     parser.add_argument("--mode", choices=("full", "incremental", "audit"), default="full")
     parser.add_argument("--output", type=Path, help="Write JSON validation report")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
         return self_test()
-    if args.root is None or args.schema is None:
-        parser.error("root and --schema are required unless --self-test is used")
+    if args.root is None or args.schema is None or args.company_slug is None:
+        parser.error("root, --schema, and --company-slug are required unless --self-test is used")
     root, schema_path = args.root.resolve(), args.schema.resolve()
     if not root.is_dir():
         parser.error(f"not a directory: {root}")
     if not schema_path.is_file():
         parser.error(f"schema does not exist: {schema_path}")
-    findings = validate_research_package(root, schema_path, args.mode)
-    payload = report_payload(root, schema_path, args.mode, findings)
+    findings = validate_research_package(root, schema_path, args.mode, args.company_slug)
+    payload = report_payload(root, schema_path, args.mode, findings, args.company_slug)
     if args.output:
         output = args.output.resolve()
         try:

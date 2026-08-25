@@ -35,7 +35,7 @@
 
 `company.json` 是唯一例外：`bits-bean/doujiao-value-system` 的 `schemas/company.schema.json` 是唯一可编辑权威数据协议；Skill 内 `references/specs/company.schema.json` 只是经哈希和 Git blob 锁定的只读发行副本。正式研究只使用当前 Skill 信任锁对应的副本；上游 Schema 变化后，必须先审查差异、更新副本与信任锁、通过测试并发布新版 Skill，不能在单次研究中静默切换。
 
-多平台内容与全部视觉素材由下游内容生产 Skill 管理；网站与基础图表代码由 `doujiao-value-system` 管理。本 Skill 只冻结研究事实、分类与图表路由输入、结论和台账，不查找、下载、核验、生成、暂存或提交任何视觉素材，也不调用图表渲染器、网站 API、渠道图片或内容发布流程。若本 Instructions 与研究方法或自动化流程冲突，以本 Instructions 为最高优先级。
+多平台内容与除公司 Logo 外的视觉素材由下游内容生产 Skill 管理；网站与基础图表代码由 `doujiao-value-system` 管理。本 Skill 只冻结研究事实、分类与图表路由输入、结论和台账，并按 `references/identity-assets.md` 取得、核验和在获授权后归档网站所需的官方公司 Logo；不得生成或重绘 Logo，不管理其他视觉素材，也不调用图表渲染器、网站 API、渠道图片或内容发布流程。若本 Instructions 与研究方法或自动化流程冲突，以本 Instructions 为最高优先级。
 
 ## 4. 启动、工具与证据
 用户给出公司后：
@@ -72,7 +72,8 @@
 3. 证据台账与计算台账；
 4. 数据完整度、低置信度与验证结果；
 5. 如发现 Schema 问题，输出 Schema Gap Report；
-6. 验收后生成冻结 manifest；视觉素材不属于研究输出，缺失时不检索、不记录为研究缺口，也不写入 manifest。
+6. 冻结前完成网站所需官方公司 Logo 的复用 / 获取判断与元数据，并在 `company.json.brand_identity.company_logo` 保存路径、来源、替代文本和官方性。找不到时使用精确空哨兵并在完整度说明记录官方来源尝试、网站 ticker 回退影响和待补条件，不得生成替代 Logo；
+7. 使用同一精确 `company-slug` 完成验证与冻结；manifest 锁定 Logo 元数据但不锁定包外字节。Logo 文件留在冻结包外、不写入 manifest，研究包 Markdown / JSON 不嵌入任何媒体，其他视觉素材不属于研究输出。
 
 文字报告必须完整采用 `references/specs/research-methodology.md` 第 14 节的 16 节结构，不得合并、缺省或用占位语句代替实质正文。它必须包含一页式结论、八维最终评分、逐维护城河评估、完整 Pre-Mortem，以及最终结论的明确字段。
 
@@ -86,11 +87,11 @@
 财报解读必须区分正常季度噪音、周期变化、会计变化和结构性变化，并明确回答投资逻辑是：增强 / 基本不变 / 削弱 / 被推翻 / 暂无法判断。
 
 ## 8. system 交接边界
-正式交接固定为：研究 → Schema 校验 → 冻结报告、`company.json`、证据 / 计算台账与 manifest → 获授权后原子提交到 `doujiao-value-system/companies/<slug>/`。
+正式交接固定为：研究 → 冻结前完成 Logo 复用 / 获取判断及元数据 → 使用同一精确 company slug 做 Schema 与语义校验并锁入验证报告 / manifest → 冻结报告、`company.json`、证据 / 计算台账与 manifest → 获授权后以精确远端 observation、hash、安全门和固定渲染运行时验证包外 Logo 字节，再把研究文件与可选 Logo 原子提交到 `doujiao-value-system/companies/<slug>/`。
 
-本 Skill 不导入网站 API，不调用 system 的图表导出代码或接口，不生成网站 / 社媒图片，不决定画布比例、背景、安全区、Logo 位置和引流语，也不声称网站已更新。system 网站和基础图表只读取冻结数据；字段缺失时展示缺口或拒绝渲染，不能自行重新研究、修改口径、补造数据或改变投资结论。
+本 Skill 不导入网站 API，不调用 system 的图表导出代码或接口，不生成网站 / 社媒图片，不决定画布比例、背景、安全区、Logo 位置和引流语，也不声称网站已更新。取得和验证公司 Logo 只提供网站可读取的身份资产，不构成网站渲染或部署。system 网站和基础图表只读取冻结数据；字段缺失时展示缺口或拒绝渲染，不能自行重新研究、修改口径、补造数据或改变投资结论。
 
-所有公司 Logo、产品、服务、人物、门店、业务场景、封面主视觉和背景素材都由 `$produce-doujiao-value-content` 在具体内容任务中查找、核验并使用。本 Skill 不读取或维护素材清单，不因缺素材阻断研究，不用生成图替代真实身份素材。`company.json.brand_identity.company_logo` 仅为 Schema 兼容字段；没有随研究来源直接提供的元数据时，保持 nullable 字段为 `null` 且 `is_official:false`。
+公司 Logo 是唯一视觉素材例外：本 Skill 先验证并复用 system 的 canonical Logo，缺失时只从公司官网、IR 或官方品牌中心取得真实素材；新 canonical 路径为 `companies/<slug>/assets/logo.svg`，不得生成或重绘。产品、服务、人物、门店、业务场景、封面主视觉和背景等其他素材都由 `$produce-doujiao-value-content` 在具体内容任务中查找、核验并使用。找不到可验证的官方 Logo 时，`company.json.brand_identity.company_logo` 使用 `asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并记录网站展示缺口；远端已有 Logo 引用时另需明确清除引用授权，且只清引用、不删旧文件。
 
 ## 9. 多平台内容
 小红书、X、微信公众号、雪球及视频平台内容必须由“已完成研究报告 + 已验证 `company.json`”派生，不得反向成为研究事实来源，不得为了传播效果夸大结论。
@@ -107,6 +108,6 @@
 Schema 2.0 的 `classification`、`industry_metrics` 和 `durability` 是正式研究数据，不是展示偏好。分类必须有官方来源，`primary_industry` 与 `secondary_industries` 不得用于替代 `accounting_profile` / `returns_profile` 的路由职责。长期生存必须以至少二十年为期限，分别保存需求持久性、适应能力与外部冲击的证据和破坏条件。文化承诺必须保存结果和下一次验证方法；资本配置必须保存三车道归属与结果评价；Pre-Mortem 必须保存触发因素到经营、资本/现金和价值影响的完整因果链，缺证的概率、影响或缓解措施使用 `null`，不得猜测；领先指标必须说明重要性和复查方法。
 
 ## 11. 最终质量控制
-交付前复核：公司身份、期间、数据截至日、估值日、币种、单位、正负号、比例、股数、来源、十年顺序、FCF、ROIC、SBC、回购、债务、Market Cap、EV、DCF/Reverse DCF，以及 `schema_version`、required fields、`null`、`source_ids` 和 `sources`。DCF 还须核对现金流口径、起始现金流总额与每股值、预测期、初期增长、折现率、终值增长、终值占比和股数桥接；出现以 EPS 入模必须退回重做。
+交付前复核：公司身份、期间、数据截至日、估值日、币种、单位、正负号、比例、股数、来源、十年顺序、FCF、ROIC、SBC、回购、债务、Market Cap、EV、DCF/Reverse DCF，以及 `schema_version`、required fields、`null`、`source_ids` 和 `sources`。另核对 `company_logo` 路径、官方来源、alt、官方性和实际文件一致；缺失时完整度说明已标记网站影响。DCF 还须核对现金流口径、起始现金流总额与每股值、预测期、初期增长、折现率、终值增长、终值占比和股数桥接；出现以 EPS 入模必须退回重做。
 
 最后再次检查：当前结论是否由证据推导，而不是为预设故事寻找证据；若不是，重新分析。

@@ -238,10 +238,10 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         },
         "brand_identity": {
             "company_logo": {
-                "asset_path": None,
-                "source_url": None,
-                "alt": None,
-                "is_official": False,
+                "asset_path": "companies/test-company/assets/logo.svg",
+                "source_url": "https://example.com/investors/logo.svg",
+                "alt": "Test Company official logo",
+                "is_official": True,
             },
             "brand_palette": {"primary": "#174A7E", "secondary": "#EAF3FA", "accent": "#C79A45"},
             "product_brands": ["Test Network", "Test Membership"],

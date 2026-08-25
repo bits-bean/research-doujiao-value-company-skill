@@ -181,6 +181,7 @@ def verify_previous_manifest(
     path: Path,
     schema_path: Path,
     trusted_lock: dict[str, Any],
+    company_slug: str,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Verify a predecessor as a complete, immutable, trusted frozen package."""
     errors: list[str] = []
@@ -253,6 +254,7 @@ def verify_previous_manifest(
             errors.append("previous manifest warnings were not acknowledged")
         expected_validation_integrity = {
             "integrity_profile": INTEGRITY_PROFILE,
+            "company_slug": company_slug,
             "validator_sha256": protocol_fingerprint(trusted_lock).get("validator_sha256"),
             "toolchain_digest_sha256": trusted_lock.get("execution_integrity", {}).get("toolchain_digest_sha256"),
             "protocol_fingerprint": protocol_fingerprint(trusted_lock),
@@ -280,6 +282,8 @@ def verify_previous_manifest(
                 for key in RESEARCH_IDENTITY_FIELDS:
                     if not nonblank(transition_research.get(key)):
                         errors.append(f"previous incremental manifest predecessor identity {key} must be nonblank")
+                if transition_research.get("company_slug") != company_slug:
+                    errors.append("previous incremental manifest predecessor company_slug does not match")
                 try:
                     date.fromisoformat(transition_research.get("data_as_of", ""))
                 except (TypeError, ValueError):
@@ -360,6 +364,8 @@ def verify_previous_manifest(
         for key in RESEARCH_MANIFEST_FIELDS:
             if research.get(key) != previous_meta.get(key):
                 errors.append(f"previous manifest research {key} does not match previous company.json")
+        if research.get("company_slug") != company_slug:
+            errors.append("previous manifest company_slug does not match the requested incremental/archive slug")
         for key in RESEARCH_IDENTITY_FIELDS + ("source_version",):
             if not nonblank(research.get(key)):
                 errors.append(f"previous manifest research {key} must be nonblank")
@@ -401,6 +407,7 @@ def verify_previous_manifest(
                 for key in (
                     "validator",
                     "mode",
+                    "company_slug",
                     "errors",
                     "warnings",
                     "integrity_profile",
@@ -415,7 +422,7 @@ def verify_previous_manifest(
     # current full gate after its immutable files, protocol, and Schema anchor
     # have been verified, then reconcile the fresh counts with the frozen record.
     try:
-        fresh_findings = validate_research_package(path.parent, schema_path, "full")
+        fresh_findings = validate_research_package(path.parent, schema_path, "full", company_slug)
     except (OSError, ValueError) as exc:
         errors.append(f"cannot run fresh full validation on previous package: {exc}")
     else:
@@ -438,8 +445,9 @@ def validate_incremental_transition(
     official_trigger_source_id: str,
     schema_path: Path,
     trusted_lock: dict[str, Any],
+    company_slug: str,
 ) -> tuple[list[str], dict[str, Any] | None]:
-    previous, errors = verify_previous_manifest(previous_path, schema_path, trusted_lock)
+    previous, errors = verify_previous_manifest(previous_path, schema_path, trusted_lock, company_slug)
     if previous is None:
         return errors, None
     try:
@@ -487,7 +495,7 @@ def validate_incremental_transition(
         "previous_manifest_sha256": file_sha256(previous_path),
         "previous_research": {
             key: previous_research.get(key)
-            for key in RESEARCH_IDENTITY_FIELDS + ("data_as_of",)
+            for key in RESEARCH_IDENTITY_FIELDS + ("data_as_of", "company_slug")
         },
         "official_trigger_source_id": official_trigger_source_id,
     }
@@ -507,18 +515,27 @@ def build_manifest(
     warning_acknowledged: bool,
     incremental_transition: dict[str, Any] | None = None,
     execution_integrity: dict[str, Any] | None = None,
+    company_slug: str | None = None,
 ) -> dict[str, Any]:
     if not isinstance(research_protocol, dict) or not isinstance(execution_integrity, dict):
         raise ValueError("manifest requires locked research_protocol and execution_integrity objects")
+    if not isinstance(company_slug, str) or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", company_slug) is None:
+        raise ValueError("manifest requires the exact validated company_slug")
     expected_validation = {
         "mode": "full",
         "errors": 0,
+        "company_slug": company_slug,
         "integrity_profile": INTEGRITY_PROFILE,
         "toolchain_digest_sha256": execution_integrity.get("toolchain_digest_sha256"),
     }
     for key, expected in expected_validation.items():
         if validation.get(key) != expected:
             raise ValueError(f"manifest validation {key} does not match the locked full-validation contract")
+    warning_count = validation.get("warnings")
+    if not isinstance(warning_count, int) or isinstance(warning_count, bool) or warning_count < 0:
+        raise ValueError("manifest validation warnings must be a non-negative integer")
+    if warning_count > 0 and not warning_acknowledged:
+        raise ValueError("manifest warnings must be acknowledged before freezing")
     fingerprint = validation.get("protocol_fingerprint")
     if (
         not isinstance(fingerprint, dict)
@@ -563,11 +580,13 @@ def build_manifest(
             "data_as_of": meta.get("data_as_of"),
             "valuation_date": meta.get("valuation_date"),
             "source_version": meta.get("source_version"),
+            "company_slug": company_slug,
         },
         "update_mode": update_mode,
         "validation": {
             "validator": validation.get("validator"),
             "mode": validation.get("mode"),
+            "company_slug": validation.get("company_slug"),
             "errors": validation.get("errors"),
             "warnings": validation.get("warnings"),
             "integrity_profile": validation.get("integrity_profile"),
@@ -597,6 +616,7 @@ def main() -> int:
         help="Locked 40-character Schema commit SHA (--spec-commit remains a compatibility alias)",
     )
     parser.add_argument("--mode", choices=("full", "incremental"), default="full")
+    parser.add_argument("--company-slug", required=True, help="Safe company slug used by Logo paths")
     parser.add_argument("--previous-manifest", type=Path, help="Required frozen predecessor for incremental mode")
     parser.add_argument("--official-trigger-source-id", help="Required new official source ID for incremental mode")
     parser.add_argument("--allow-warnings", action="store_true", help="Freeze only after warnings and their impact were reviewed")
@@ -614,6 +634,8 @@ def main() -> int:
         parser.error("--schema-commit must be an exact 40-character SHA")
     if re.fullmatch(r"[0-9a-fA-F]{40}", args.schema_blob_sha) is None:
         parser.error("--schema-blob-sha must be an exact 40-character blob SHA")
+    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", args.company_slug) is None:
+        parser.error("--company-slug must contain only lowercase letters, digits, and single hyphens")
     try:
         trusted_lock = load_json(TRUSTED_LOCK_PATH)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -670,6 +692,7 @@ def main() -> int:
             args.official_trigger_source_id,
             schema_path,
             trusted_lock,
+            args.company_slug,
         )
         if transition_errors:
             print(json.dumps({"incremental_transition_errors": transition_errors}, ensure_ascii=False, indent=2), file=sys.stderr)
@@ -678,8 +701,8 @@ def main() -> int:
         parser.error("incremental transition arguments are only valid with --mode incremental")
 
     # Every final package, including an incremental update, must pass the complete gate.
-    findings = validate_research_package(root, schema_path, "full")
-    validation = report_payload(root, schema_path, "full", findings)
+    findings = validate_research_package(root, schema_path, "full", args.company_slug)
+    validation = report_payload(root, schema_path, "full", findings, args.company_slug)
     validation_path = root / "validation-report.json"
     try:
         write_json(validation_path, validation)
@@ -708,13 +731,14 @@ def main() -> int:
         human_reviewed=args.human_reviewed,
         warning_acknowledged=args.allow_warnings,
         incremental_transition=incremental_transition,
+        company_slug=args.company_slug,
     )
     try:
         write_json(manifest_path, manifest)
     except OSError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    post_findings = validate_research_package(root, schema_path, "full")
+    post_findings = validate_research_package(root, schema_path, "full", args.company_slug)
     post_errors = [item for item in post_findings if item.severity == "error"]
     if post_errors:
         manifest_path.unlink(missing_ok=True)

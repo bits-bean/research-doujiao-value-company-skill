@@ -1,11 +1,11 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term company research under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for sourced company classification and chart-routing inputs, ten-year financials, industry metrics, ledgers, moat, durability, culture, management, capital allocation, risks, DCF or Reverse DCF, formal reports, schema-valid company.json, Too Hard decisions, and frozen research handoffs. Do not use to find, download, verify, generate, stage, or submit any visual asset; render website or social images; call chart renderers or website APIs; choose channel ratios or layouts; produce social copy; publish content; predict short-term prices; or make unapproved GitHub writes.
+description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term company research under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for sourced company classification and chart-routing inputs, ten-year financials, industry metrics, ledgers, moat, durability, culture, management, capital allocation, risks, DCF or Reverse DCF, formal reports, schema-valid company.json, Too Hard decisions, frozen research handoffs, and acquiring, verifying, or archiving the official company Logo required by the system website. Do not use to generate or redraw a company Logo; find or manage other visual assets; render website or social images; call chart renderers or website APIs; choose channel ratios or layouts; produce social copy; publish content; predict short-term prices; or make unapproved GitHub writes.
 ---
 
 # 豆角长期价值研究
 
-本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告、结构化数据与台账。网站图表由 system 代码渲染；所有视觉素材的查找、下载、核验、任务内台账和使用均由下游内容 Skill 完成。
+本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告、结构化数据、台账和网站所需的官方公司 Logo。网站图表由 system 代码渲染；除公司 Logo 外的视觉素材仍由下游内容 Skill 完成。
 
 ## 1. 权威与边界
 
@@ -17,8 +17,10 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 - 企业质量、估值状态和研究状态分开。诚信、治理、资本韧性和数据可靠性可否决估值吸引力。
 - 审查请求只诊断；修复、冻结和 GitHub 交付各需相应授权。网站导入、图表渲染、内容生产和公开发布不属于本 Skill。
 - 本 Skill 不调用 `doujiao-value-system` 的图表导出命令或接口，不生成网站图、社媒图或背景，不选择平台比例、安全区、Logo 位置和引流文案，也不调用内容 Skill 代替用户生产或发布内容。
-- 本 Skill 不搜索、下载、筛选、核验、生成、暂存或提交 Logo、产品、服务、人物、门店、业务场景、封面主视觉、背景及其他任何视觉素材。研究结论不得因素材缺失而降级或阻断；内容生产需要素材时由 `$produce-doujiao-value-content` 在其任务内独立完成。
-- `company.json.brand_identity.company_logo` 仅是锁定 Schema 的兼容字段。没有上游研究事实直接提供该元数据时，写入 `asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`；不得为了填充该字段发起素材检索，也不得把它当作下游素材来源。
+- 公司 Logo 是唯一视觉素材例外。首次研究缺少 Logo、公司已重塑品牌，或用户明确授权替换时，完整执行 [identity-assets.md](references/identity-assets.md)：先复用 system 中已验证的 canonical Logo，否则从公司官网、Investor Relations 或官方品牌中心取得并验证真实 Logo，写入 `company.json.brand_identity.company_logo`。不得生成、重绘或用近似图替代公司 Logo。
+- 除公司 Logo 外，本 Skill 不搜索、下载、筛选、核验、生成、暂存或提交产品、服务、人物、门店、业务场景、封面主视觉、背景及其他视觉素材。研究结论不得因这些素材缺失而降级或阻断；内容生产需要时由 `$produce-doujiao-value-content` 在其任务内独立完成。
+- 找不到可验证的官方 Logo 时，写入 `asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 记录 Logo 缺口；不得合成替代 Logo，也不得声称网站身份素材完整。
+- 研究包内所有 Markdown / JSON 只保存 Logo 元数据，不嵌入 Logo、图片、视频、音频、HTML 媒体标签或 `data:` 媒体 URI；Logo 字节只存在于冻结目录外的临时交付目录或 system 仓库。
 
 ## 2. 模式与读取顺序
 
@@ -77,7 +79,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 ```bash
 python3 scripts/validate_research_package.py <package> \
-  --schema references/specs/company.schema.json --mode full \
+  --schema references/specs/company.schema.json --company-slug <company-slug> --mode full \
   --output <package>/validation-report.json
 ```
 
@@ -86,10 +88,11 @@ python3 scripts/validate_research_package.py <package> \
 ```bash
 python3 scripts/freeze_research.py <package> \
   --schema references/specs/company.schema.json \
-  --schema-blob-sha <locked-blob> --schema-commit <locked-commit>
+  --schema-blob-sha <locked-blob> --schema-commit <locked-commit> \
+  --company-slug <company-slug>
 ```
 
-新 manifest 固定为 v2，保留既有 `research_protocol` 兼容块，并新增 `integrity_profile: execution-bound-v1` 与当前 `execution_integrity`；验证报告同时记录验证器、工具链和协议指纹。风险加权来源审计必须重新打开公司身份、估值输入、起始现金流、DCF 假设、适用的监管资本及全部关键论断来源，并按确定性种子抽检普通主张。警告默认阻断；只有完整度说明逐项解释原因、影响和待补证据时才能 `--allow-warnings`。只有真实人工审核后才使用 `--human-reviewed`。冻结只表示不可变，不等于投资建议。
+新 manifest 固定为 v2，保留既有 `research_protocol` 兼容块，并新增 `integrity_profile: execution-bound-v1` 与当前 `execution_integrity`；验证报告与 manifest 同时锁定精确 `company_slug`，并记录验证器、工具链和协议指纹。Logo 元数据随 `company.json` 被锁定，但包外 Logo 字节要到授权归档规划时才按 observation、hash、安全门和固定渲染运行时验证。风险加权来源审计必须重新打开公司身份、估值输入、起始现金流、DCF 假设、适用的监管资本及全部关键论断来源，并按确定性种子抽检普通主张。警告默认阻断；只有完整度说明逐项解释原因、影响和待补证据时才能 `--allow-warnings`。只有真实人工审核后才使用 `--human-reviewed`。冻结只表示不可变，不等于投资建议、网站已具备 Logo 或网站已更新。
 
 Schema 1.x → 2.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建分类、行业指标与新增结构字段，在新目录按 2.0 完整验证后以 `full` 模式冻结。不得把旧包作为当前 2.0 `incremental` 的前序包，也不得仅改 `schema_version`。
 
@@ -97,15 +100,16 @@ Schema 1.x → 2.0 是显式迁移：旧冻结包保持不可变且只按旧 man
 
 增量只由比上一报告更新的官方财报或重大事件触发，按公司、期间、发布日期和 source ID 去重。复核旧包、更新受影响事实 / 计算 / 估值 / verdict，并在 `thesis` 中明确长期逻辑：增强 / 基本不变 / 削弱 / 被推翻 / 暂无法判断；假设状态或估值参数的每一处变化都必须绑定新证据和修订原因。
 
-system 图表层与内容层只接收同一冻结版本的报告、`company.json`、manifest、完整度说明、证据台账和计算台账。视觉素材不属于研究交接包；下游内容 Skill 必须自行取得并核验。下游可以格式化、重排或用同一冻结序列计算展示派生值，但不得补研究事实、重算估值、改变路由或覆盖结论。本 Skill 在交接完成后停止，不调用渲染器、内容 Skill 或发布接口。
+system 图表层与内容层只接收同一冻结版本的报告、`company.json`、manifest、完整度说明、证据台账和计算台账；公司 Logo 作为 manifest 外的已验证身份素材按 `identity-assets.md` 单独交接，供 system 网站身份展示直接读取。社媒内容任务的素材仍按内容 Skill 自身契约独立核验，本 Skill 不把研究归档路径解释为内容制作授权。下游可以格式化、重排或用同一冻结序列计算展示派生值，但不得补研究事实、重算估值、改变路由或覆盖结论。本 Skill 在交接完成后停止，不调用渲染器、内容 Skill 或发布接口。
 
 ## 9. 授权 GitHub 提交
 
 用户明确要求提交 / 合并时完整读取 [github-archive.md](references/github-archive.md)。只把人工已接受、v2、零错误的冻结包提交到 `bits-bean/doujiao-value-system`。
 
 - GitHub 当前研究包固定为 `companies/<company-slug>/`，报告、`company.json`、台账、验证结果与 manifest 全部直接放在该目录；不得增加日期、`-vN` 或其他版本子目录，远端版本只由 Git 历史追踪。
-- 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。公司 Logo 等非研究资产必须原样保留且不参与计划、比较、创建、更新或删除。
-- 最终差异白名单只包含冻结 manifest 声明的直接研究文件和 `research-manifest.json`。即使用户同时要求补素材，也必须把素材任务交给内容 Skill 另行处理；研究归档不得附带任何 `assets/*`、`images/*`、图片 manifest、Logo 或封面文件。
+- 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。已有且与 `company.json` 一致的 Logo 原样保留；缺失或明确授权替换的 Logo 按 `identity-assets.md` 验证后与研究文件进入同一原子提交。
+- 新 canonical Logo 固定使用 `companies/<slug>/assets/logo.svg`；已有 `logo-primary.svg` 或 `logo-primary.png` 只作为 legacy 沿用，其他 legacy 格式先迁移并重新验证。最终差异白名单只包含冻结 manifest 声明的直接研究文件、`research-manifest.json`，以及本次显式暂存且通过门禁的这一个 Logo。任何 `images/*`、产品图、图片 manifest、封面、背景或其他素材仍禁止进入研究归档。
+- 远端已有 Logo 只能精确沿用或经另行授权替换；若已确认没有可验证的官方 Logo，可在完整记录缺口后用独立的“清除旧引用”授权把四元组改为精确空哨兵。清除只更新 `company.json` 引用，不删除旧文件，也不能代替 Logo 替换授权。
 - 禁止把任何网站截图、渠道成品、`images/` 生成图、背景、比例模板或平台文案作为研究提交的一部分。
 - 研究请求、冻结请求仍不自动授权 GitHub；“提交到 GitHub”授权的唯一目标是上述公司目录。
 - 用户要求合并到 `main` 时走独立分支和 PR，检查通过后合并；只有明确说“直接提交到 main”才允许原子、非强制、仅快进直写。
@@ -113,4 +117,4 @@ system 图表层与内容层只接收同一冻结版本的报告、`company.json
 
 ## 10. 完成状态
 
-只有证据、计算、行业适配、现金流估值、16 节报告、Schema、一致性和冻结门禁全部通过，才称正式完成；否则准确标记为计划、草案、证据不完整、待人工复核、Too Hard、审查结果或迁移未完成。
+只有证据、计算、行业适配、现金流估值、16 节报告、Schema、一致性和冻结门禁全部通过，才称正式研究完成；否则准确标记为计划、草案、证据不完整、待人工复核、Too Hard、审查结果或迁移未完成。Logo 缺失不改变投资研究结论，但必须明确标记网站身份素材未完整。
