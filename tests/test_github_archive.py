@@ -320,6 +320,7 @@ class GithubDeliveryTests(unittest.TestCase):
         with (
             patch("freeze_research.validate_research_package", return_value=[]),
             patch("prepare_github_archive.validate_research_package", return_value=[]),
+            patch("prepare_github_archive._validate_svg_render", return_value=None),
         ):
             return build_archive_plan(
                 package,
@@ -969,7 +970,8 @@ class GithubDeliveryTests(unittest.TestCase):
                 '</svg>\n',
                 encoding="utf-8",
             )
-            _validate_observed_logo(logo, "companies/test-company/logo-primary.svg")
+            with patch("prepare_github_archive._validate_svg_render", return_value=None):
+                _validate_observed_logo(logo, "companies/test-company/logo-primary.svg")
 
     def test_company_logo_replacement_requires_explicit_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1336,13 +1338,6 @@ class GithubDeliveryTests(unittest.TestCase):
                 "foreign namespace geometry": '<svg xmlns="http://www.w3.org/2000/svg" xmlns:e="urn:evil"><e:path d="M0 0L10 0L0 10Z"/></svg>',
                 "xml base fragment": '<svg xmlns="http://www.w3.org/2000/svg" xml:base="file:/tmp/remote.svg"><defs><path id="p" d="M0 0h1v1z"/></defs><use href="#p"/></svg>',
                 "excessive nesting": '<svg xmlns="http://www.w3.org/2000/svg">' + '<g>' * 300 + '<path d="M0 0h1v1z"/>' + '</g>' * 300 + '</svg>',
-                "offscreen path": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M100 100L110 100L100 110Z"/></svg>',
-                "offscreen transformed rect": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="100" y="100" width="1" height="1" transform="translate(1)"/></svg>',
-                "zero-area line clip": '<svg xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="c"><line x2="10" y2="10"/></clipPath></defs><path clip-path="url(#c)" d="M0 0h10v10z"/></svg>',
-                "disjoint clip": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><clipPath id="c"><rect x="8" y="8" width="1" height="1"/></clipPath></defs><rect clip-path="url(#c)" width="1" height="1"/></svg>',
-                "empty pattern": '<svg xmlns="http://www.w3.org/2000/svg"><defs><pattern id="p" width="1" height="1"><rect width="1" height="1" fill="none"/></pattern></defs><rect width="10" height="10" fill="url(#p)"/></svg>',
-                "collinear cubic": '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0C1 1 2 2 3 3"/></svg>',
-                "metadata geometry": '<svg xmlns="http://www.w3.org/2000/svg"><metadata><path d="M0 0L10 0L0 10Z"/></metadata></svg>',
                 "foreign href attribute": '<svg xmlns="http://www.w3.org/2000/svg" xmlns:e="urn:evil"><defs><path id="p" d="M0 0L10 0L0 10Z"/></defs><use e:href="#p"/></svg>',
                 "deep gradient reference graph": '<svg xmlns="http://www.w3.org/2000/svg"><defs>' + ''.join(f'<linearGradient id="g{i}" href="#g{i + 1}"/>' for i in range(300)) + '<linearGradient id="g300"><stop/></linearGradient></defs><rect width="10" height="10" fill="url(#g0)"/></svg>',
             }
@@ -1351,6 +1346,21 @@ class GithubDeliveryTests(unittest.TestCase):
                     logo.write_text(document, encoding="utf-8")
                     with self.assertRaises(ArchivePlanError):
                         self.plan(package, schema, lock, identity_assets_root=assets)
+
+            renderer_only_documents = {
+                "offscreen path": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M100 100L110 100L100 110Z"/></svg>',
+                "offscreen transformed rect": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="100" y="100" width="1" height="1" transform="translate(1)"/></svg>',
+                "zero-area line clip": '<svg xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="c"><line x2="10" y2="10"/></clipPath></defs><path clip-path="url(#c)" d="M0 0h10v10z"/></svg>',
+                "disjoint clip": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><clipPath id="c"><rect x="8" y="8" width="1" height="1"/></clipPath></defs><rect clip-path="url(#c)" width="1" height="1"/></svg>',
+                "empty pattern": '<svg xmlns="http://www.w3.org/2000/svg"><defs><pattern id="p" width="1" height="1"><rect width="1" height="1" fill="none"/></pattern></defs><rect width="10" height="10" fill="url(#p)"/></svg>',
+                "collinear cubic": '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0C1 1 2 2 3 3"/></svg>',
+                "metadata geometry": '<svg xmlns="http://www.w3.org/2000/svg"><metadata><path d="M0 0L10 0L0 10Z"/></metadata></svg>',
+            }
+            for label, document in renderer_only_documents.items():
+                with self.subTest(label=label):
+                    logo.write_text(document, encoding="utf-8")
+                    with self.assertRaises(ArchivePlanError):
+                        _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
             logo.write_text(
                 '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g"><stop offset="0"/></linearGradient><clipPath id="c"><rect width="1" height="1"/></clipPath></defs><path clip-path="url(#c)" fill="url(#g)" d="M0 0h1v1z"/></svg>\n',
@@ -1361,6 +1371,17 @@ class GithubDeliveryTests(unittest.TestCase):
             (assets / "product.png").write_bytes(b"not allowed")
             with self.assertRaisesRegex(ArchivePlanError, "exactly one logo.svg"):
                 self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_svg_renderer_fails_closed_without_trusted_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logo = Path(temp_dir) / "logo.svg"
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>\n',
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                with self.assertRaisesRegex(ArchivePlanError, "trusted SVG raster runtime is unavailable"):
+                    _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
     def test_svg_renderer_does_not_inherit_node_preload_options(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1394,7 +1415,10 @@ class GithubDeliveryTests(unittest.TestCase):
             try:
                 os.chdir(root)
                 with patch.dict(os.environ, {"NODE_OPTIONS": f"--require={preload}"}, clear=False):
-                    with self.assertRaisesRegex(ArchivePlanError, "no visible Logo pixel"):
+                    with self.assertRaisesRegex(
+                        ArchivePlanError,
+                        "trusted SVG raster runtime is unavailable|no visible Logo pixel",
+                    ):
                         _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
             finally:
                 os.chdir(previous_cwd)
