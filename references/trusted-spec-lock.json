@@ -1,22 +1,22 @@
 {
-  "lock_version": "2.0",
+  "lock_version": "3.0",
   "research_protocol": {
     "authority": "research-doujiao-value-company",
     "repository": "bits-bean/doujiao-value-research-skill",
     "ref": "main",
     "commit": "f6260decac7ffa221a7454fc3dfef1b9bed1b720",
-    "protocol_version": "2.1.0",
-    "digest_sha256": "bad099a7d1f2c77348ada12b39953d98e7ff36fc0da279914f89ed35dab60083",
+    "protocol_version": "2.2.0",
+    "digest_sha256": "931a12f4bdb2a4bdec5ae5b6773a6fe562b751418319eb5ce846db11d51c6d41",
     "documents": [
       {
         "path": "references/specs/automation-workflow.md",
-        "sha256": "488c77d63fc83281788731ed4abd78fb4120bac36107c6b4783cbe0c694a752f",
-        "size_bytes": 7027
+        "sha256": "2762730a602632ae123130ceb97fc62622e7f9cf8fdb14d27b6e6cd5a5049034",
+        "size_bytes": 7111
       },
       {
         "path": "references/specs/project-instructions.md",
-        "sha256": "9a1a0051730f61e4f99eee13b443da62d86eabb75475de1f61e63f32e465ef43",
-        "size_bytes": 13201
+        "sha256": "1c853755a0e07da103d5d3d07918d701c14949faee8c9e5bad2fc8ef4a9ada69",
+        "size_bytes": 13509
       },
       {
         "path": "references/specs/research-methodology.md",
@@ -24,6 +24,140 @@
         "size_bytes": 20106
       }
     ]
+  },
+  "execution_integrity": {
+    "profile": "execution-bound-v1",
+    "normative_digest_sha256": "70597b5c6563e8834fb3dd69022dc4390e9fc7911aa1e7916f90a47aeb596375",
+    "toolchain_digest_sha256": "1638ee3caec72952a7e5f3e007e0a335b9beb2daf99027cae648f5f48257e47b",
+    "bundle_digest_sha256": "3a26a59f07987ce5dd268d3a8bf121428e3d8b81771d48fd0b9935d923cd077b",
+    "artifacts": [
+      {
+        "path": "SKILL.md",
+        "role": "normative",
+        "sha256": "44bb2166d55d1c1eb33059dcbfdc617bbf45e0ffc25ac2e92d6b1073bef666b8",
+        "size_bytes": 15893
+      },
+      {
+        "path": "agents/openai.yaml",
+        "role": "normative",
+        "sha256": "72d2505a5dcec966bdfc249cf55bef533d09a0e0ff243ea483d2edda5a2f0d93",
+        "size_bytes": 636
+      },
+      {
+        "path": "references/classification-and-chart-routing.md",
+        "role": "normative",
+        "sha256": "1fb53c787a938e6a14992e3d819ecc84a3cbd0bf08f743d6469f1ef3a310b600",
+        "size_bytes": 7487
+      },
+      {
+        "path": "references/evidence-and-calculation.md",
+        "role": "normative",
+        "sha256": "e2e74a8db850ef9745e7ced6f507d587a1666dc96dcd456da74107b78fc2f1da",
+        "size_bytes": 11961
+      },
+      {
+        "path": "references/github-archive.md",
+        "role": "normative",
+        "sha256": "402b701635918094ab45b61a8a55967fc7dec1f707d7f5c7835372d009ca772d",
+        "size_bytes": 6895
+      },
+      {
+        "path": "references/income-statement-sankey.md",
+        "role": "normative",
+        "sha256": "1682be1bd959c2b2f8c4aba3d5bb32793c6b365a45eac3d7e8e6f1f22e456b99",
+        "size_bytes": 4609
+      },
+      {
+        "path": "references/qa-gates.md",
+        "role": "normative",
+        "sha256": "50221c53956cbc19edfe2f2b433b798e3d5c09292dc88514fb16fc322bbcadc0",
+        "size_bytes": 18403
+      },
+      {
+        "path": "references/research-contract.md",
+        "role": "normative",
+        "sha256": "a853fe46a2a4f3ea1fa58e314793f8bc00e69d461e354ddaa7a68e96dfd4fa00",
+        "size_bytes": 25842
+      },
+      {
+        "path": "references/research-execution-and-audit.md",
+        "role": "normative",
+        "sha256": "f3c29a642c3e0f45ef97a18d4727af9edfbf864866ad1263ffb1ad0f249d1bf8",
+        "size_bytes": 13358
+      },
+      {
+        "path": "references/source-routing.md",
+        "role": "normative",
+        "sha256": "8d6caeda43d73a80ecd8e60786f06ae008ed9b196fb3212559af04a1d81d9c52",
+        "size_bytes": 9045
+      },
+      {
+        "path": "references/specs/automation-workflow.md",
+        "role": "normative",
+        "sha256": "2762730a602632ae123130ceb97fc62622e7f9cf8fdb14d27b6e6cd5a5049034",
+        "size_bytes": 7111
+      },
+      {
+        "path": "references/specs/project-instructions.md",
+        "role": "normative",
+        "sha256": "1c853755a0e07da103d5d3d07918d701c14949faee8c9e5bad2fc8ef4a9ada69",
+        "size_bytes": 13509
+      },
+      {
+        "path": "references/specs/research-methodology.md",
+        "role": "normative",
+        "sha256": "01cb3abad1b02f90bcbba8ad0534c83fd49ef825351eb10cf5e66ac4bc4ffcea",
+        "size_bytes": 20106
+      },
+      {
+        "path": "references/valuation-qa.md",
+        "role": "normative",
+        "sha256": "3211ddde2da7259a3079ba9823dd869414430738191f3492313eb773d7d50bbb",
+        "size_bytes": 12121
+      },
+      {
+        "path": "scripts/freeze_research.py",
+        "role": "toolchain",
+        "sha256": "2d3da8a82140370d51b455dcbb2e29c5fa0374654f675ac2c1a711a881049d16",
+        "size_bytes": 38473
+      },
+      {
+        "path": "scripts/prepare_github_archive.py",
+        "role": "toolchain",
+        "sha256": "8e555362ab863631278b3313af88fabbfa6c8d88e9499a8a0ec4e1099af8c419",
+        "size_bytes": 29448
+      },
+      {
+        "path": "scripts/validate_research_package.py",
+        "role": "toolchain",
+        "sha256": "52c2a6861748809b7a399d682f00898c3f49d811fc109fdd03c72c8e332e21fa",
+        "size_bytes": 262680
+      },
+      {
+        "path": "scripts/validate_research_process.py",
+        "role": "toolchain",
+        "sha256": "1cbb5cd239021f87da0a86d0712a46f44edee42717806baf0497c9ec1ef5bfc4",
+        "size_bytes": 75968
+      },
+      {
+        "path": "scripts/validate_skill.py",
+        "role": "toolchain",
+        "sha256": "73ad1b48b53068e2d0799a558cdc702053c08deab68214e5952dfc7d88f489bc",
+        "size_bytes": 18139
+      },
+      {
+        "path": "scripts/verify_spec_anchor.py",
+        "role": "toolchain",
+        "sha256": "02b06ca79fa2167320d49a525acf684e5cf704438912d28efd2f104d408b30f3",
+        "size_bytes": 5183
+      }
+    ],
+    "source_binding": {
+      "repository": "bits-bean/doujiao-value-research-skill",
+      "ref": "main",
+      "payload_commit": null,
+      "verification_status": "unverified"
+    }
   },
   "company_schema": {
     "repository": "bits-bean/doujiao-value-system",

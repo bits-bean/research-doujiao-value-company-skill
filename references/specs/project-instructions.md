@@ -35,7 +35,7 @@
 
 `company.json` 是唯一例外：`bits-bean/doujiao-value-system` 的 `schemas/company.schema.json` 是唯一可编辑权威数据协议；Skill 内 `references/specs/company.schema.json` 只是经哈希和 Git blob 锁定的只读发行副本。正式研究只使用当前 Skill 信任锁对应的副本；上游 Schema 变化后，必须先审查差异、更新副本与信任锁、通过测试并发布新版 Skill，不能在单次研究中静默切换。
 
-多平台内容与视觉规则由下游内容生产 Skill 管理；网站与基础图表代码由 `doujiao-value-system` 管理。本 Skill 只冻结研究事实、分类与图表路由输入、结论、台账和必要的公司身份素材来源，不把下游规范并入研究协议，也不调用图表渲染器、网站 API、渠道图片或内容发布流程。若本 Instructions 与研究方法或自动化流程冲突，以本 Instructions 为最高优先级。
+多平台内容与全部视觉素材由下游内容生产 Skill 管理；网站与基础图表代码由 `doujiao-value-system` 管理。本 Skill 只冻结研究事实、分类与图表路由输入、结论和台账，不查找、下载、核验、生成、暂存或提交任何视觉素材，也不调用图表渲染器、网站 API、渠道图片或内容发布流程。若本 Instructions 与研究方法或自动化流程冲突，以本 Instructions 为最高优先级。
 
 ## 4. 启动、工具与证据
 用户给出公司后：
@@ -72,7 +72,7 @@
 3. 证据台账与计算台账；
 4. 数据完整度、低置信度与验证结果；
 5. 如发现 Schema 问题，输出 Schema Gap Report；
-6. 验收后生成冻结 manifest；公司身份素材缺失时，另按 `references/identity-assets.md` 获取或记录缺口，不把素材写入研究 manifest。
+6. 验收后生成冻结 manifest；视觉素材不属于研究输出，缺失时不检索、不记录为研究缺口，也不写入 manifest。
 
 文字报告必须完整采用 `references/specs/research-methodology.md` 第 14 节的 16 节结构，不得合并、缺省或用占位语句代替实质正文。它必须包含一页式结论、八维最终评分、逐维护城河评估、完整 Pre-Mortem，以及最终结论的明确字段。
 
@@ -90,7 +90,7 @@
 
 本 Skill 不导入网站 API，不调用 system 的图表导出代码或接口，不生成网站 / 社媒图片，不决定画布比例、背景、安全区、Logo 位置和引流语，也不声称网站已更新。system 网站和基础图表只读取冻结数据；字段缺失时展示缺口或拒绝渲染，不能自行重新研究、修改口径、补造数据或改变投资结论。
 
-真实公司 Logo 和可选产品素材只按 `references/identity-assets.md` 获取、验证来源并交付。研究 Skill 不用生成图替代真实身份素材。
+所有公司 Logo、产品、服务、人物、门店、业务场景、封面主视觉和背景素材都由 `$produce-doujiao-value-content` 在具体内容任务中查找、核验并使用。本 Skill 不读取或维护素材清单，不因缺素材阻断研究，不用生成图替代真实身份素材。`company.json.brand_identity.company_logo` 仅为 Schema 兼容字段；没有随研究来源直接提供的元数据时，保持 nullable 字段为 `null` 且 `is_official:false`。
 
 ## 9. 多平台内容
 小红书、X、微信公众号、雪球及视频平台内容必须由“已完成研究报告 + 已验证 `company.json`”派生，不得反向成为研究事实来源，不得为了传播效果夸大结论。

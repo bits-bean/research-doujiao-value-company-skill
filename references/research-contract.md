@@ -4,11 +4,12 @@
 
 - [版本化目录](#版本化目录)
 - [必需文件](#必需文件)
+- [执行与审计记录](#evidence-ledgerjson)
 - [中文展示单位契约](#中文展示单位契约)
 - [Schema 2.0 迁移](#schema-20-迁移)
 - [冻结语义](#冻结语义)
 - [下游交接](#下游交接)
-- [身份素材交接](#身份素材交接)
+- [视觉素材边界](#视觉素材边界)
 - [GitHub 归档](#github-归档)
 
 ## 版本化目录
@@ -47,6 +48,8 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 关键数字和关键主张在出现处就地引用直接链接或标注 `SRC-*`。采用 `SRC-*` 时，精确定位由文末来源定位索引统一解析，正文不必重复；索引必须对每个 ID 给出标题、发布者与来源类型、发布日期或适用期间、直接 URL，以及页码、监管文件 Item/表号、稳定章节或时间戳中的至少一项。每项结论先给通俗含义，再给技术口径、计算和限制。
 
+报告用白话呈现 2—5 个经营与价值驱动、管理层关键决策的过程与结果、当前关键假设、相对上一版本的论点变化、重要冲突和估值模型边界。能力探针、actor、抽样种子和机器状态只保存在证据台账 / manifest，不写进投资叙事；但它们支持或削弱的经济结论不能从正文消失。
+
 ### company.json
 
 严格通过锁定 commit 的 `schemas/company.schema.json`。不得加入研究包状态、冻结哈希、制作说明或平台内容；这些属于 sidecar 文件。
@@ -82,31 +85,70 @@ system 图表与下游内容所需的数据、路由和来源必须在冻结前�
 - 低置信度结论及原因；
 - 会计口径、重述、拆股、并购或币种可比性限制；
 - 对最终结论和估值的影响；
-- 尚待取得的关键证据。
+- 尚待取得的关键证据；
+- 研究可得性和商业论点确定性各自的限制；
+- 能力预检、关键来源审计或独立性存在的任何真实缺口。
 
 ### evidence-ledger.json
 
-使用：
+严格执行 [research-execution-and-audit.md](research-execution-and-audit.md)。根级结构使用：
 
 ```json
 {
+  "ledger_version": "2.0",
+  "run": {
+    "run_id": "RUN-2026-08-24-001",
+    "research_mode": "full",
+    "workflow_tier": "standard",
+    "data_cutoff_at": "2026-08-24T17:00:00Z",
+    "status": "ready_to_freeze",
+    "protocol_fingerprint": {},
+    "preflight": [],
+    "passes": []
+  },
+  "researchability": {},
+  "business_driver_map": {"equation": "", "value_capture_chain": [], "drivers": []},
+  "management_decision_ledger": [],
+  "thesis": {
+    "overall_change": "baseline",
+    "assumptions": [],
+    "valuation_assumption_changes": [],
+    "rejected_claim_ids": [],
+    "unresolved_conflicts": [],
+    "revision_log": []
+  },
+  "valuation_review": {
+    "model_applicability": [],
+    "risk_placements": [],
+    "model_conflicts": [],
+    "conclusion_stability": {}
+  },
+  "source_audit": {"audit_pass_id": "PASS-AUDIT", "selection_seed": "...", "checks": []},
   "claims": [
     {
       "id": "CLM-001",
       "claim": "可验证的主张",
       "classification": "fact",
+      "research_module": "business",
+      "decision_relevance": "critical",
       "period": "FY2025",
       "source_ids": ["SRC-001"],
       "location": "Annual report p. 42",
       "confidence": "high",
       "counterevidence": [],
+      "counterevidence_search": "重新检索竞争对手与监管原件",
+      "adjudication": "upheld",
       "would_falsify": "什么新证据会推翻该判断"
     }
   ]
 }
 ```
 
-`classification` 只使用 `fact / management_claim / third_party / inference / estimate`；`confidence` 只使用 `high / medium / low`。
+`run` 先完成六项真实能力探针，正式标准档再记录主研究、隔离对抗审查、隔离来源审计与综合四个 pass；审计档至少两个独立对抗审查。`researchability` 把资料可得性与论点确定性分开。驱动图、管理层决策过程 / 结果、关键论断裁决、假设状态、被否决主张、未解冲突、估值适用性、风险归位、模型冲突、九格稳定性与来源抽检都不得省略。
+
+`classification` 只使用 `fact / management_claim / third_party / inference / estimate`；`confidence` 只使用 `high / medium / low`。`decision_relevance: critical` 的论断必须有反面检索、可检验推翻条件并由隔离 pass 裁决。被否决论断保留在 `claims`，不得删除；增量研究的假设与估值参数变化必须连接上一冻结版本和新证据。
+
+`source_audit` 的审计者必须重新打开原始来源，100% 核验身份 / 证券、估值日股价 / 股数 / 市值 / EV、唯一起始现金流、DCF 关键假设、适用的监管资本以及全部关键论断。普通主张以规范化 `company.json` SHA-256 为确定性种子抽检至少 15%，存在普通主张时不少于三条；文件间自洽检查不能替代来源重开。
 
 ### calculation-ledger.json
 
@@ -229,42 +271,42 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 ## 冻结语义
 
-`research-manifest.json` 是 sidecar，不写入 `company.json`。新冻结清单固定使用 `manifest_version: 2.0`，并分别记录：
+`research-manifest.json` 是 sidecar，不写入 `company.json`。新冻结清单继续固定使用 `manifest_version: 2.0`，以保持现有下游兼容；同时使用 `integrity_profile: execution-bound-v1` 声明当前正式执行，并分别记录：
 
-- `research_protocol`：当前研究 Skill 的 authority、repository、ref、发行 commit、`protocol_version`、聚合摘要及三份权威文档 SHA-256/大小；
+- `research_protocol`：原样保留 v2 兼容元组，包括 authority、repository、ref、历史发行 commit、`protocol_version`、聚合摘要及三份兼容文档 SHA-256/大小；
+- `execution_integrity`：当前规范与工具链的逐文件清单、规范摘要、工具链摘要、聚合摘要和源码绑定验证状态；
 - `specification`：只记录权威 Schema 仓库、ref、精确 commit、路径、Schema SHA-256、Git blob SHA 与 `schema_version`；
 - `schema_version`、公司身份、数据日、估值日；
 - 报告、JSON、台账和验证报告的 SHA-256；
-- 验证错误与警告数量；
+- 验证错误与警告数量，以及验证器 SHA-256、工具链摘要和 `protocol_fingerprint`；
 - 冻结时间和人工审核状态。
+
+`execution_integrity` 必须与当前信任锁完全一致；验证器自身和新增执行脚本均在工具链摘要内，不能由未受信脚本自报通过。`evidence-ledger.json.run.protocol_fingerprint`、验证报告与 manifest 的协议 / Schema / 验证器身份必须一致。外部源码 commit 没有实证时记录未验证，不能以格式正确的 commit 字符串替代来源绑定证明。
 
 `status: frozen` 仅表示研究快照不可变。默认 `human_review_status: pending`；只有实际人工审核后才标为 `accepted`。冻结不代表投资建议、网站已更新、图表已导出、渠道图片已生成或内容已发布。
 
-历史 `manifest_version: 1.0` 只允许 `audit` 模式复核。它不能成为新增量版本的前序 manifest，不能重新冻结、GitHub 归档或作为当前正式下游交接；要继续使用必须按当前研究协议与 Schema 迁移并新建 v2 版本目录。
+历史 `manifest_version: 1.0` 只允许 `audit` 模式复核。它不能成为新增量版本的前序 manifest，不能重新冻结、GitHub 归档或作为当前正式下游交接；要继续使用必须按当前研究协议与 Schema 迁移并新建 v2 版本目录。历史 v2 若缺少当前 `integrity_profile` 或 `execution_integrity`，同样只允许 audit 诊断，不得原地补字段后重新冻结，也不得作为当前 incremental 的前序包。
 
 ## 下游交接
 
-交给 `doujiao-value-system` 图表层或 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json`、证据台账、计算台账、完整度说明和 v2 manifest。下游先验证文件哈希、`research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再读取或展示数据。
+交给 `doujiao-value-system` 图表层或 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json`、证据台账、计算台账、完整度说明和 v2 manifest。下游先验证文件哈希、不变的 `research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再读取或展示数据。当前研究侧在交接前还必须验证 `integrity_profile` 与 `execution_integrity`；旧下游对未知 v2 顶层字段的兼容不能削弱研究侧门禁。
 
-若 manifest 缺失、不是 v2、状态不是 `frozen`、文件集合不完整、哈希不匹配、研究协议不受信，或 JSON 未通过 manifest `specification` 指定的同一 Schema，只能做草案或审查，不得声称正式交付。研究事实由 manifest 中的研究协议与 Schema 双重锁定；展示规则可以独立升级，但新研究方法或 Schema 改变事实含义时必须先完成迁移和重新冻结。
+若 manifest 缺失、不是 v2、状态不是 `frozen`、文件集合不完整、哈希不匹配、研究协议或完整执行清单不受信，或 JSON 未通过 manifest `specification` 指定的同一 Schema，只能做草案或审查，不得声称正式交付。研究事实由 manifest 中的兼容研究协议、完整执行锁与 Schema 共同锁定；展示规则可以独立升级，但新研究方法或 Schema 改变事实含义时必须先完成迁移和重新冻结。
 
 研究 Skill 的责任到冻结交接为止。它不调用 system 图表导出代码或接口，不决定最终画布、渠道比例、背景、安全区、品牌元素位置、引流语或社媒文案，也不调用内容 Skill 或发布接口。system 与内容层可以对同一冻结序列做格式化、响应式重排和展示性派生计算，但不得改变研究事实、路由、估值结果或 verdict。
 
-## 身份素材交接
+## 视觉素材边界
 
-真实公司 Logo 与明确可识别的产品 / 业务素材执行 [identity-assets.md](identity-assets.md)。身份素材与研究包职责分离：
+视觉素材不属于研究包、研究完整度或研究交接。本 Skill 不查找、下载、筛选、核验、生成、暂存或提交公司 Logo、产品、服务、人物、门店、业务场景、封面主视觉、背景及其他视觉素材。
 
-- `company.json.brand_identity.company_logo` 保存精确 asset path、来源 URL、替代文本和官方性；
-- 新 canonical Logo 使用 `companies/<slug>/assets/logo.svg`；已存在的 `logo-primary.*` 只作为 legacy 沿用；
-- 可选产品素材由 `companies/<slug>/assets/visual-assets.json` 声明 PNG/JPEG 文件 SHA-256、非空中文 `alt_cn`、原始文件 URL、来源页、发布者、权利依据和官方性；
-- 素材在冻结研究目录之外准备，不写入 `research-manifest.json`，但 GitHub 交付时由规划器验证并与研究文件原子提交；
-- 缺失或权利依据不清时保留缺口；下游正式封面必须 fail closed、只能保留草案，不使用 AI 生成图、无产品图正式模板、图库替身或产品拼图补齐。
-
-内容层可以决定经验证素材在不同渠道如何摆放，但不得重新定义素材身份、来源、SHA-256 或官方性。
+- `company.json.brand_identity.company_logo` 只为兼容锁定 Schema；没有研究来源直接提供的元数据时，`asset_path`、`source_url` 与 `alt` 为 `null`，`is_official:false`。
+- 不为了填充该字段发起图片或品牌素材检索，也不把已有文件、搜索结果或下游素材反向写成研究证据。
+- 视觉素材缺失不进入 `research-completeness.md`，不阻断研究验证或冻结。
+- 下游内容生产 Skill 在每个内容任务内独立查找、核验、建立素材台账并使用素材；其台账不进入研究包，也不得反向改变研究事实或结论。
 
 ## GitHub 提交
 
-GitHub 提交是 v2 冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`，v1 研究包不得提交。授权提交后，整个当前研究包作为一个原子变更写入唯一公司目录：
+GitHub 提交是 v2 冻结后的可选交付，不属于研究请求的默认权限。只有用户明确授权时才写入 `bits-bean/doujiao-value-system`；v1 或缺少当前 `execution_integrity` 的历史 v2 研究包不得提交。授权提交后，整个当前研究包作为一个原子变更写入唯一公司目录：
 
 ```text
 companies/<company-slug>/
@@ -280,6 +322,6 @@ companies/<company-slug>/
 
 GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再向 `research/` 写入副本。本地冻结目录可继续保存不可变审计快照；远端公司目录中的受管研究文件使用整包替换，Git 历史负责记录版本。公司 Logo、品牌图像等非研究资产必须原样保留。不得加入发布回执、制作记录或其他未冻结文件。`companies/<company-slug>/company.json` 是唯一正式副本。
 
-只有缺失或用户明确授权替换的身份素材可以作为同一原子变更的附加写入。附加路径严格限定为 `company.json.brand_identity.company_logo.asset_path` 指定的新 canonical Logo，以及 `assets/visual-assets.json` 和它声明的产品文件；不得删除未列明资产，不得加入 `images/`、网站截图、社媒成品、背景或渠道模板。
+归档器只管理冻结研究文件；`assets/`、`images/`、Logo、图片 manifest、产品图、网站截图、社媒成品、背景和渠道模板一律不允许作为附加写入。远端已有非研究资产必须原样保留，且不参与 `noop` 比较或删除计划。
 
 最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份或证券不一致拒绝；Schema 版本不一致默认拒绝，只有显式确认的 1.x → 2.0 迁移可以继续。

@@ -88,7 +88,7 @@ class ValidationGateTests(unittest.TestCase):
                 "valuation_date": "2026-08-19",
                 "source_version": "test",
             },
-            "brand_identity": {"company_logo": {"is_official": True, "source_url": "https://example.com/logo.svg"}},
+            "brand_identity": {"company_logo": {"asset_path": None, "source_url": None, "alt": None, "is_official": False}},
             "verdict": {
                 "business_quality": "良好",
                 "valuation_status": "接近合理",

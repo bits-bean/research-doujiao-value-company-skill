@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from datetime import date, datetime, timezone
@@ -17,6 +18,7 @@ from validate_research_package import (
     EXPECTED_SCHEMA_PATH,
     EXPECTED_SPEC_REPOSITORY,
     FROZEN_HASH_FILES,
+    INTEGRITY_PROFILE,
     PRIMARY_SOURCE_TYPES,
     extract_schema_version,
     file_sha256,
@@ -25,6 +27,7 @@ from validate_research_package import (
     load_trusted_spec_lock,
     nonblank,
     report_payload,
+    protocol_fingerprint,
     schema_sha256_candidates,
     validate_research_package,
     write_json,
@@ -40,6 +43,7 @@ RESEARCH_IDENTITY_FIELDS = (
     "report_currency",
 )
 RESEARCH_MANIFEST_FIELDS = RESEARCH_IDENTITY_FIELDS + ("data_as_of", "valuation_date", "source_version")
+DCF_PARAMETER_FIELDS = ("revenue_growth", "margin", "discount_rate", "terminal_growth")
 
 
 def valid_aware_datetime(value: Any) -> bool:
@@ -50,6 +54,127 @@ def valid_aware_datetime(value: Any) -> bool:
     except ValueError:
         return False
     return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def validate_incremental_research_drift(
+    current_root: Path,
+    previous_root: Path,
+) -> list[str]:
+    """Reject silent thesis-state and DCF-assumption drift across frozen versions."""
+    errors: list[str] = []
+    try:
+        current_evidence = load_json(current_root / "evidence-ledger.json")
+        previous_evidence = load_json(previous_root / "evidence-ledger.json")
+        current_company = load_json(current_root / "company.json")
+        previous_company = load_json(previous_root / "company.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [f"cannot read incremental drift inputs: {exc}"]
+    if not all(isinstance(item, dict) for item in (current_evidence, previous_evidence, current_company, previous_company)):
+        return ["incremental drift inputs must all be JSON objects"]
+
+    current_run = current_evidence.get("run") if isinstance(current_evidence.get("run"), dict) else {}
+    if current_run.get("research_mode") != "incremental":
+        errors.append("incremental evidence run must declare research_mode incremental")
+
+    current_thesis = current_evidence.get("thesis")
+    previous_thesis = previous_evidence.get("thesis")
+    if not isinstance(current_thesis, dict) or not isinstance(previous_thesis, dict):
+        return ["incremental research requires structured thesis state in both current and predecessor evidence ledgers"]
+    if current_thesis.get("overall_change") == "baseline":
+        errors.append("incremental thesis overall_change cannot be baseline")
+
+    def assumption_index(thesis: dict[str, Any], label: str) -> dict[str, dict[str, Any]]:
+        result: dict[str, dict[str, Any]] = {}
+        items = thesis.get("assumptions")
+        if not isinstance(items, list):
+            errors.append(f"{label} thesis assumptions must be an array")
+            return result
+        for item in items:
+            if not isinstance(item, dict) or not nonblank(item.get("id")):
+                errors.append(f"{label} thesis contains an invalid assumption record")
+                continue
+            if item["id"] in result:
+                errors.append(f"{label} thesis repeats assumption id {item['id']!r}")
+                continue
+            result[item["id"]] = item
+        return result
+
+    current_assumptions = assumption_index(current_thesis, "current")
+    previous_assumptions = assumption_index(previous_thesis, "previous")
+    revision_text = json.dumps(current_thesis.get("revision_log", []), ensure_ascii=False, sort_keys=True)
+    for assumption_id, previous in previous_assumptions.items():
+        current = current_assumptions.get(assumption_id)
+        if current is None:
+            if assumption_id not in revision_text:
+                errors.append(f"removed assumption {assumption_id!r} is absent from the incremental revision log")
+            continue
+        if current.get("prior_status") != previous.get("current_status"):
+            errors.append(f"assumption {assumption_id!r} prior_status does not match the predecessor current_status")
+        changed = current.get("current_status") != previous.get("current_status")
+        if changed and current.get("change_type") in {None, "none", "wording", "market_price"}:
+            errors.append(f"assumption {assumption_id!r} changed status without a substantive change_type")
+        if changed and not current.get("evidence_claim_ids"):
+            errors.append(f"assumption {assumption_id!r} changed status without new evidence claims")
+    for assumption_id in sorted(set(current_assumptions) - set(previous_assumptions)):
+        if assumption_id not in revision_text:
+            errors.append(f"new assumption {assumption_id!r} is absent from the incremental revision log")
+
+    def scenario_index(company: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        valuation = company.get("valuation") if isinstance(company.get("valuation"), dict) else {}
+        scenarios = valuation.get("dcf_scenarios") if isinstance(valuation.get("dcf_scenarios"), list) else []
+        return {
+            str(item.get("name")): item
+            for item in scenarios
+            if isinstance(item, dict) and nonblank(item.get("name"))
+        }
+
+    previous_scenarios = scenario_index(previous_company)
+    current_scenarios = scenario_index(current_company)
+    recorded_changes = current_thesis.get("valuation_assumption_changes")
+    if not isinstance(recorded_changes, list):
+        errors.append("incremental thesis valuation_assumption_changes must be an array")
+        recorded_changes = []
+    change_index: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in recorded_changes:
+        if not isinstance(item, dict):
+            errors.append("incremental valuation assumption change must be an object")
+            continue
+        key = (str(item.get("scenario")), str(item.get("parameter")))
+        if key in change_index:
+            errors.append(f"incremental valuation assumption change is duplicated for {key!r}")
+        change_index[key] = item
+
+    actual_changes: set[tuple[str, str]] = set()
+    for scenario_name in sorted(set(previous_scenarios) | set(current_scenarios)):
+        previous = previous_scenarios.get(scenario_name)
+        current = current_scenarios.get(scenario_name)
+        if previous is None or current is None:
+            errors.append(f"incremental DCF scenario set changed for {scenario_name!r}; use a full baseline or document a methodology migration")
+            continue
+        for parameter in DCF_PARAMETER_FIELDS:
+            old_value = previous.get(parameter)
+            new_value = current.get(parameter)
+            if isinstance(old_value, (int, float)) and not isinstance(old_value, bool) and isinstance(new_value, (int, float)) and not isinstance(new_value, bool):
+                changed = not math.isclose(float(old_value), float(new_value), rel_tol=1e-12, abs_tol=1e-12)
+            else:
+                changed = old_value != new_value
+            key = (scenario_name, parameter)
+            if not changed:
+                continue
+            actual_changes.add(key)
+            record = change_index.get(key)
+            if record is None:
+                errors.append(f"DCF parameter drift for {scenario_name!r}.{parameter} is not recorded")
+                continue
+            if record.get("previous_value") != old_value or record.get("current_value") != new_value:
+                errors.append(f"recorded DCF parameter values do not match {scenario_name!r}.{parameter}")
+            if record.get("change_type") in {None, "none", "market_price", "wording"}:
+                errors.append(f"DCF parameter drift for {scenario_name!r}.{parameter} lacks a substantive change_type")
+            if not nonblank(record.get("reason")) or not record.get("evidence_claim_ids"):
+                errors.append(f"DCF parameter drift for {scenario_name!r}.{parameter} lacks reason or evidence claims")
+    for key in sorted(set(change_index) - actual_changes):
+        errors.append(f"recorded valuation assumption change {key!r} does not correspond to an actual DCF parameter change")
+    return errors
 
 
 def verify_previous_manifest(
@@ -102,6 +227,10 @@ def verify_previous_manifest(
             errors.append("previous manifest Schema blob does not match the supplied Schema bytes")
     if manifest.get("research_protocol") != trusted_lock.get("research_protocol"):
         errors.append("previous manifest research_protocol does not match the current Skill trust lock")
+    if manifest.get("integrity_profile") != INTEGRITY_PROFILE:
+        errors.append("previous manifest lacks the current execution integrity profile and is audit-only")
+    if manifest.get("execution_integrity") != trusted_lock.get("execution_integrity"):
+        errors.append("previous manifest execution_integrity does not match the complete current Skill release")
 
     validation = manifest.get("validation")
     if not isinstance(validation, dict):
@@ -122,6 +251,15 @@ def verify_previous_manifest(
             errors.append("previous manifest validation warnings must be a non-negative integer")
         elif warning_count > 0 and warning_acknowledged is not True:
             errors.append("previous manifest warnings were not acknowledged")
+        expected_validation_integrity = {
+            "integrity_profile": INTEGRITY_PROFILE,
+            "validator_sha256": protocol_fingerprint(trusted_lock).get("validator_sha256"),
+            "toolchain_digest_sha256": trusted_lock.get("execution_integrity", {}).get("toolchain_digest_sha256"),
+            "protocol_fingerprint": protocol_fingerprint(trusted_lock),
+        }
+        for key, expected in expected_validation_integrity.items():
+            if validation.get(key) != expected:
+                errors.append(f"previous manifest validation {key} does not match the current locked execution")
 
     update_mode = manifest.get("update_mode")
     if update_mode not in {"full", "incremental"}:
@@ -260,7 +398,16 @@ def verify_previous_manifest(
                     or report_warnings < 0
                 ):
                     errors.append("previous validation-report.json warnings must be a non-negative integer")
-                for key in ("validator", "mode", "errors", "warnings"):
+                for key in (
+                    "validator",
+                    "mode",
+                    "errors",
+                    "warnings",
+                    "integrity_profile",
+                    "validator_sha256",
+                    "toolchain_digest_sha256",
+                    "protocol_fingerprint",
+                ):
                     if validation.get(key) != validation_report.get(key):
                         errors.append(f"previous manifest validation {key} does not match validation-report.json")
 
@@ -335,6 +482,7 @@ def validate_incremental_transition(
     latest = reporting.get("latest_report") if isinstance(reporting.get("latest_report"), dict) else {}
     if latest.get("date_status") != "official" or official_trigger_source_id not in latest.get("source_ids", []):
         errors.append("latest_report must be official and cite the incremental trigger source")
+    errors.extend(validate_incremental_research_drift(root, previous_path.parent))
     transition = {
         "previous_manifest_sha256": file_sha256(previous_path),
         "previous_research": {
@@ -358,7 +506,26 @@ def build_manifest(
     human_reviewed: bool,
     warning_acknowledged: bool,
     incremental_transition: dict[str, Any] | None = None,
+    execution_integrity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if not isinstance(research_protocol, dict) or not isinstance(execution_integrity, dict):
+        raise ValueError("manifest requires locked research_protocol and execution_integrity objects")
+    expected_validation = {
+        "mode": "full",
+        "errors": 0,
+        "integrity_profile": INTEGRITY_PROFILE,
+        "toolchain_digest_sha256": execution_integrity.get("toolchain_digest_sha256"),
+    }
+    for key, expected in expected_validation.items():
+        if validation.get(key) != expected:
+            raise ValueError(f"manifest validation {key} does not match the locked full-validation contract")
+    fingerprint = validation.get("protocol_fingerprint")
+    if (
+        not isinstance(fingerprint, dict)
+        or fingerprint.get("execution_bundle_digest_sha256") != execution_integrity.get("bundle_digest_sha256")
+        or fingerprint.get("research_protocol_digest_sha256") != research_protocol.get("digest_sha256")
+    ):
+        raise ValueError("manifest validation protocol_fingerprint does not match the locked protocol and execution bundle")
     company = load_json(root / "company.json")
     schema = load_json(schema_path)
     meta = company.get("meta", {}) if isinstance(company, dict) else {}
@@ -385,6 +552,8 @@ def build_manifest(
             "schema_version": extract_schema_version(schema),
         },
         "research_protocol": research_protocol,
+        "integrity_profile": INTEGRITY_PROFILE,
+        "execution_integrity": execution_integrity,
         "research": {
             "company_name_cn": meta.get("company_name_cn"),
             "company_name_en": meta.get("company_name_en"),
@@ -401,6 +570,10 @@ def build_manifest(
             "mode": validation.get("mode"),
             "errors": validation.get("errors"),
             "warnings": validation.get("warnings"),
+            "integrity_profile": validation.get("integrity_profile"),
+            "validator_sha256": validation.get("validator_sha256"),
+            "toolchain_digest_sha256": validation.get("toolchain_digest_sha256"),
+            "protocol_fingerprint": validation.get("protocol_fingerprint"),
         },
         "files": files,
     }
@@ -450,19 +623,20 @@ def main() -> int:
     lock_findings: list[Any] = []
     validated_lock = load_trusted_spec_lock(lock_findings)
     if validated_lock is None:
-        parser.error("bundled v2 trust lock or local authoritative protocol files failed integrity validation")
+        parser.error("bundled v3 trust lock or local research execution files failed integrity validation")
     trusted_lock = validated_lock
     trusted_schema = trusted_lock.get("company_schema") if isinstance(trusted_lock.get("company_schema"), dict) else {}
     if (
-        trusted_lock.get("lock_version") != "2.0"
+        trusted_lock.get("lock_version") != "3.0"
         or trusted_schema.get("repository") != EXPECTED_SPEC_REPOSITORY
         or trusted_schema.get("ref") != "main"
         or trusted_schema.get("commit") != args.schema_commit.lower()
         or trusted_schema.get("path") != EXPECTED_SCHEMA_PATH
         or trusted_schema.get("blob_sha1") != args.schema_blob_sha.lower()
         or not isinstance(trusted_lock.get("research_protocol"), dict)
+        or not isinstance(trusted_lock.get("execution_integrity"), dict)
     ):
-        parser.error("Schema commit/blob or research protocol is not approved by this Skill release's v2 trust lock")
+        parser.error("Schema commit/blob, research protocol, or execution bundle is not approved by this Skill release's v3 trust lock")
     try:
         schema = load_json(schema_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -528,6 +702,7 @@ def main() -> int:
         schema_ref=trusted_schema["ref"],
         schema_blob_sha=args.schema_blob_sha.lower(),
         research_protocol=trusted_lock["research_protocol"],
+        execution_integrity=trusted_lock["execution_integrity"],
         update_mode=args.mode,
         validation=validation,
         human_reviewed=args.human_reviewed,

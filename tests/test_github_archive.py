@@ -26,8 +26,10 @@ from validate_research_package import (  # noqa: E402
     EXPECTED_SPEC_REPOSITORY,
     FROZEN_HASH_FILES,
     Finding,
+    INTEGRITY_PROFILE,
     file_sha256,
     git_blob_sha1_candidates,
+    protocol_fingerprint,
     write_json,
 )
 
@@ -46,9 +48,23 @@ class GithubDeliveryTests(unittest.TestCase):
             "digest_sha256": "d" * 64,
             "documents": [],
         }
+        execution_integrity = {
+            "profile": INTEGRITY_PROFILE,
+            "normative_digest_sha256": "e" * 64,
+            "toolchain_digest_sha256": "f" * 64,
+            "bundle_digest_sha256": "1" * 64,
+            "artifacts": [],
+            "source_binding": {
+                "repository": "bits-bean/doujiao-value-research-skill",
+                "ref": "main",
+                "payload_commit": None,
+                "verification_status": "unverified",
+            },
+        }
         trusted_lock = {
-            "lock_version": "2.0",
+            "lock_version": "3.0",
             "research_protocol": research_protocol,
+            "execution_integrity": execution_integrity,
             "company_schema": {
                 "repository": EXPECTED_SPEC_REPOSITORY,
                 "ref": "main",
@@ -57,6 +73,13 @@ class GithubDeliveryTests(unittest.TestCase):
                 "blob_sha1": schema_blob,
                 "schema_version": "test-1",
             },
+        }
+        fingerprint = protocol_fingerprint(trusted_lock)
+        validation_integrity = {
+            "integrity_profile": INTEGRITY_PROFILE,
+            "validator_sha256": fingerprint["validator_sha256"],
+            "toolchain_digest_sha256": execution_integrity["toolchain_digest_sha256"],
+            "protocol_fingerprint": fingerprint,
         }
         package = root / "package"
         package.mkdir()
@@ -92,7 +115,13 @@ class GithubDeliveryTests(unittest.TestCase):
             if name == "validation-report.json":
                 write_json(
                     package / name,
-                    {"validator": "doujiao-research-validator", "mode": "full", "errors": 0, "warnings": 0},
+                    {
+                        "validator": "doujiao-research-validator",
+                        "mode": "full",
+                        "errors": 0,
+                        "warnings": 0,
+                        **validation_integrity,
+                    },
                 )
             elif name.endswith(".json"):
                 write_json(package / name, {"ok": True})
@@ -114,6 +143,8 @@ class GithubDeliveryTests(unittest.TestCase):
                 "schema_version": "test-1",
             },
             "research_protocol": research_protocol,
+            "integrity_profile": INTEGRITY_PROFILE,
+            "execution_integrity": execution_integrity,
             "research": {
                 key: meta[key]
                 for key in (
@@ -133,6 +164,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 "mode": "full",
                 "errors": 0,
                 "warnings": 0,
+                **validation_integrity,
             },
             "files": [
                 {
@@ -222,16 +254,6 @@ class GithubDeliveryTests(unittest.TestCase):
                     )
                 },
             },
-        }
-
-    @staticmethod
-    def identity_asset_state(paths: list[dict], base_head: str = "c" * 40) -> dict:
-        return {
-            "repository": EXPECTED_SPEC_REPOSITORY,
-            "branch": "main",
-            "base_head": base_head,
-            "company_slug": "test-company",
-            "assets": paths,
         }
 
     @staticmethod
@@ -638,32 +660,11 @@ class GithubDeliveryTests(unittest.TestCase):
                     confirm_same_date_revision=False,
                 )
 
-    def test_new_company_declared_logo_requires_verified_staging(self) -> None:
+    def test_research_archive_never_manages_visual_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema, lock = self.make_package(Path(temp_dir))
             self.set_company_logo(package, "companies/test-company/assets/logo.svg")
-            with self.assertRaisesRegex(ArchivePlanError, "no verified logo was staged"):
-                self.plan(
-                    package,
-                    schema,
-                    lock,
-                    write_authorized=True,
-                    remote_company_state=self.company_state(),
-                    remote_slug_registry_state=self.registry_state(),
-                    remote_canonical_state=self.canonical_absent_state(),
-                )
-
-    def test_verified_logo_is_planned_as_atomic_identity_asset_create(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            package, schema, lock = self.make_package(root)
-            self.set_company_logo(package, "companies/test-company/assets/logo.svg")
-            assets = root / "identity-assets"
-            assets.mkdir()
-            logo = assets / "logo.svg"
-            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>\n', encoding="utf-8")
-            target = "companies/test-company/assets/logo.svg"
-            ready = self.plan(
+            plan = self.plan(
                 package,
                 schema,
                 lock,
@@ -671,112 +672,13 @@ class GithubDeliveryTests(unittest.TestCase):
                 remote_company_state=self.company_state(),
                 remote_slug_registry_state=self.registry_state(),
                 remote_canonical_state=self.canonical_absent_state(),
-                identity_assets_root=assets,
-                remote_identity_assets_state=self.identity_asset_state(
-                    [{"path": target, "exists": False, "sha256": None, "size_bytes": None}]
-                ),
             )
-            self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["identity_assets"]["remote_action"], "create")
-            self.assertEqual(ready["identity_assets"]["logo_guard"], "staged")
-            self.assertEqual([item["target_path"] for item in ready["identity_assets"]["files"]], [target])
-            self.assertEqual(ready["identity_assets"]["delete_paths"], [])
-
-    def test_identity_asset_replacement_requires_explicit_authorization(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            package, schema, lock = self.make_package(root)
-            self.set_company_logo(package, "companies/test-company/assets/logo.svg")
-            assets = root / "identity-assets"
-            assets.mkdir()
-            logo = assets / "logo.svg"
-            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h2v2z"/></svg>\n', encoding="utf-8")
-            target = "companies/test-company/assets/logo.svg"
-            state = self.identity_asset_state(
-                [{"path": target, "exists": True, "sha256": "f" * 64, "size_bytes": 1}]
-            )
-            kwargs = {
-                "remote_company_state": self.company_state(),
-                "remote_slug_registry_state": self.registry_state(),
-                "remote_canonical_state": self.canonical_absent_state(),
-                "identity_assets_root": assets,
-                "remote_identity_assets_state": state,
-            }
-            with self.assertRaisesRegex(ArchivePlanError, "replacement requires explicit"):
-                self.plan(package, schema, lock, **kwargs)
-            confirmed = self.plan(
-                package,
-                schema,
-                lock,
-                confirm_identity_asset_replacement=True,
-                **kwargs,
-            )
-            self.assertEqual(confirmed["identity_assets"]["remote_action"], "update")
-            self.assertTrue(confirmed["identity_assets"]["replacement_confirmed"])
-
-    def test_visual_asset_manifest_hash_and_undeclared_files_are_fail_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            package, schema, lock = self.make_package(root)
-            assets = root / "identity-assets"
-            assets.mkdir()
-            product = assets / "product.jpg"
-            product.write_bytes(b"product")
-            write_json(
-                assets / "visual-assets.json",
-                {
-                    "manifest_version": "1.0",
-                    "company_slug": "test-company",
-                    "cover_product": {
-                        "asset_path": "companies/test-company/assets/product.jpg",
-                        "asset_sha256": "0" * 64,
-                        "alt_cn": "测试公司的代表性产品",
-                        "source_url": "https://example.com/product.jpg",
-                        "source_page_url": "https://example.com/product",
-                        "source_publisher": "Example",
-                        "rights_basis": "Official media kit",
-                        "is_official": True,
-                    },
-                    "localized_copy": {},
-                },
-            )
-            with self.assertRaisesRegex(ArchivePlanError, "asset_sha256"):
-                self.plan(package, schema, lock, identity_assets_root=assets)
-
-    def test_cover_product_requires_chinese_alt_text_and_supported_raster(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            package, schema, lock = self.make_package(root)
-            assets = root / "identity-assets"
-            assets.mkdir()
-            product = assets / "product.webp"
-            product.write_bytes(b"product")
-            manifest = {
-                "manifest_version": "1.0",
-                "company_slug": "test-company",
-                "cover_product": {
-                    "asset_path": "companies/test-company/assets/product.webp",
-                    "asset_sha256": file_sha256(product),
-                    "alt_cn": "测试公司的代表性产品",
-                    "source_url": "https://example.com/product.webp",
-                    "source_page_url": "https://example.com/product",
-                    "source_publisher": "Example",
-                    "rights_basis": "Official media kit",
-                    "is_official": True,
-                },
-                "localized_copy": {},
-            }
-            write_json(assets / "visual-assets.json", manifest)
-            with self.assertRaisesRegex(ArchivePlanError, "supported direct product asset"):
-                self.plan(package, schema, lock, identity_assets_root=assets)
-
-            product.rename(assets / "product.jpg")
-            manifest["cover_product"]["asset_path"] = "companies/test-company/assets/product.jpg"
-            manifest["cover_product"]["asset_sha256"] = file_sha256(assets / "product.jpg")
-            manifest["cover_product"]["alt_cn"] = ""
-            write_json(assets / "visual-assets.json", manifest)
-            with self.assertRaisesRegex(ArchivePlanError, "alt_cn"):
-                self.plan(package, schema, lock, identity_assets_root=assets)
+            self.assertTrue(plan["ready_for_write"])
+            self.assertEqual(plan["plan_version"], "8.0")
+            self.assertNotIn("identity_assets", plan)
+            target_paths = [item["target_path"] for item in plan["company_package"]["files"]]
+            self.assertTrue(target_paths)
+            self.assertFalse(any("/assets/" in path or "/images/" in path for path in target_paths))
 
     def test_direct_main_requires_separate_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
