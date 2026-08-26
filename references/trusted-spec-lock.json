@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "07dee888063b8d5e107b62a0564b9f7fe522864baf04bb711eaa2c145ac028b6",
-    "toolchain_digest_sha256": "59f52e4b7719c20c8983103e723ae8ba0bb0458733a86800f82ecf1b5ebba1a4",
-    "bundle_digest_sha256": "0d030691722cd61c9d9692473d307e5e556607610279b14722c686d142512760",
+    "normative_digest_sha256": "b039eab121da24df400c6a2548fba204462dcac4db66b467bee84c96fa705474",
+    "toolchain_digest_sha256": "a6a8b063992be8c6226080e0712bc92f18b2f05d3ba2472d2d5babd46f1146e6",
+    "bundle_digest_sha256": "ab07c81118dfb0245e80e50bd5a68179f83b17a55ab2519b97718bc51461ed42",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "2cbc89a382f203ad947c5a33dd22d7018e402eae41cd762ae89852c866a327f4",
-        "size_bytes": 17746
+        "sha256": "0d3b44f2dcea45de9b8faadcf5ac4639347a3f1fe675dd40d1b09fe258fbcef7",
+        "size_bytes": 18655
       },
       {
         "path": "agents/openai.yaml",
@@ -58,14 +58,14 @@
       {
         "path": "references/github-archive.md",
         "role": "normative",
-        "sha256": "48c3dbcb576dbc5545978a4f9b10cd4e3ec41faa736973a0a2e508423dcb3192",
-        "size_bytes": 9503
+        "sha256": "46f233dc7d8ba129028095cbb0357c0fba065a386914d9d0211b06b50bdc1e45",
+        "size_bytes": 10565
       },
       {
         "path": "references/identity-assets.md",
         "role": "normative",
-        "sha256": "965c90cd65824628bcb09b50c7a61f8c02452907ea24ef8ab2a220c49c2b811c",
-        "size_bytes": 8707
+        "sha256": "3e006805b17cf349970e3bf125f1ca3d4bf67dacd7bf25cf63f326bcf425cefa",
+        "size_bytes": 10417
       },
       {
         "path": "references/income-statement-sankey.md",
@@ -76,8 +76,8 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "a5822c487722c2a3dd9313c3788caf6e77dbd616f59ccde2c68ccec1608c18a4",
-        "size_bytes": 19839
+        "sha256": "c648f6fddc754c2e234653f699f38fc86959c4c45f827888000b25338fe4ff2c",
+        "size_bytes": 20715
       },
       {
         "path": "references/research-contract.md",
@@ -130,14 +130,14 @@
       {
         "path": "scripts/prepare_github_archive.py",
         "role": "toolchain",
-        "sha256": "938cbe25669526a606c27f032aa8094b6b54c5ba5856b3a67de0fefff8e1bdfc",
-        "size_bytes": 103419
+        "sha256": "749b5306ed3033f0184d11fa41e76442c2812168eee708cdfb198f37c3c81b49",
+        "size_bytes": 104552
       },
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "9fa91c2d8abf502b10985a2c94ec15eedf15b5f1af0bd85514b9e85574d41132",
-        "size_bytes": 277043
+        "sha256": "093097eac81f3e5593c8a4d4a3f1a4fa041632009f56e7ce881f067b38eddd1b",
+        "size_bytes": 278127
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -148,8 +148,8 @@
       {
         "path": "scripts/validate_skill.py",
         "role": "toolchain",
-        "sha256": "03fb0380223f58d25da6e43fa915179bce7190bada696d07302f0d6c234d88c9",
-        "size_bytes": 18929
+        "sha256": "77db4f27550be1336b20e8f5a6f507311f02f1ef63a2ed239f1d45a7079e7bfe",
+        "size_bytes": 19098
       },
       {
         "path": "scripts/verify_spec_anchor.py",

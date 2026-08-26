@@ -298,6 +298,9 @@ def main() -> int:
         "--remote-identity-assets-state",
         "--confirm-identity-asset-replacement",
         "--confirm-identity-asset-clear",
+        "--confirm-new-company-without-logo",
+        "missing-explicitly-authorized",
+        "new_company_without_logo_confirmed",
         '"identity_assets"',
         "prepare_identity_asset_files",
         "sharp.versions",
@@ -323,6 +326,7 @@ def main() -> int:
         "markdown_image_pattern",
         "raw_html_tag_pattern",
         "company_slug",
+        "future_or_negated_search",
     ):
         if required_package_boundary not in package_validator_text:
             fail(f"research package validator lacks boundary: {required_package_boundary}")

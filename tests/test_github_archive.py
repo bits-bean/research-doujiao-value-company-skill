@@ -346,19 +346,35 @@ class GithubDeliveryTests(unittest.TestCase):
             )
             self.assertEqual(preflight["canonical_guard"]["action"], "remote-preflight-required")
 
+            delivery_kwargs = {
+                "write_authorized": True,
+                "remote_company_state": self.company_state(),
+                "remote_slug_registry_state": self.registry_state(),
+                "remote_canonical_state": self.canonical_absent_state(),
+            }
+            with self.assertRaisesRegex(ArchivePlanError, "explicit no-Logo delivery authorization"):
+                self.plan(package, schema, lock, **delivery_kwargs)
+
+            manifest_path = package / "research-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["warning_acknowledged"] = True
+            write_json(manifest_path, manifest)
+            with self.assertRaisesRegex(ArchivePlanError, "explicit no-Logo delivery authorization"):
+                self.plan(package, schema, lock, **delivery_kwargs)
+
             ready = self.plan(
                 package,
                 schema,
                 lock,
-                write_authorized=True,
-                remote_company_state=self.company_state(),
-                remote_slug_registry_state=self.registry_state(),
-                remote_canonical_state=self.canonical_absent_state(),
+                confirm_new_company_without_logo=True,
+                **delivery_kwargs,
             )
             self.assertTrue(ready["ready_for_write"])
             self.assertEqual(ready["delivery_mode"], "single-company-directory")
             self.assertEqual(ready["company_package"]["remote_action"], "create")
             self.assertEqual(ready["canonical_guard"]["action"], "create")
+            self.assertEqual(ready["identity_assets"]["logo_guard"], "missing-explicitly-authorized")
+            self.assertTrue(ready["identity_assets"]["new_company_without_logo_confirmed"])
 
     def test_v1_unaccepted_or_mutated_package_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -953,7 +969,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 ),
             )
             self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["plan_version"], "9.1")
+            self.assertEqual(ready["plan_version"], "9.2")
             self.assertEqual(ready["identity_assets"]["remote_action"], "create")
             self.assertEqual(ready["identity_assets"]["logo_guard"], "staged")
             self.assertEqual([item["target_path"] for item in ready["identity_assets"]["files"]], [target])
@@ -1488,6 +1504,29 @@ class GithubDeliveryTests(unittest.TestCase):
             with patch("sys.argv", argv), patch("prepare_github_archive.build_archive_plan", return_value=fake_plan):
                 self.assertEqual(archive_main(), 1)
             self.assertEqual(observed_logo.read_bytes(), original)
+
+    def test_cli_wires_explicit_new_company_without_logo_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package = root / "package"
+            package.mkdir()
+            schema = root / "schema.json"
+            schema.write_text("{}\n", encoding="utf-8")
+            argv = [
+                "prepare_github_archive.py",
+                str(package),
+                "--schema",
+                str(schema),
+                "--company-slug",
+                "test-company",
+                "--confirm-new-company-without-logo",
+            ]
+            with patch("sys.argv", argv), patch(
+                "prepare_github_archive.build_archive_plan",
+                return_value={},
+            ) as build:
+                self.assertEqual(archive_main(), 0)
+            self.assertTrue(build.call_args.kwargs["confirm_new_company_without_logo"])
 
     def test_direct_main_requires_separate_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1800,6 +1800,7 @@ def build_archive_plan(
     confirm_schema_migration: bool = False,
     confirm_identity_asset_replacement: bool = False,
     confirm_identity_asset_clear: bool = False,
+    confirm_new_company_without_logo: bool = False,
     trusted_lock: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if root.is_symlink() or not root.is_dir():
@@ -1928,6 +1929,15 @@ def build_archive_plan(
         company_slug=company_slug,
         company=company,
     )
+    new_company_without_logo = canonical_exists is False and logo_path is None
+    if confirm_new_company_without_logo and not new_company_without_logo:
+        raise ArchivePlanError(
+            "--confirm-new-company-without-logo is valid only after exact remote observation proves a new company with no verified Logo"
+        )
+    if new_company_without_logo and not confirm_new_company_without_logo:
+        raise ArchivePlanError(
+            "new company without a verified official Logo requires explicit no-Logo delivery authorization"
+        )
     new_logo_record = company["brand_identity"]["company_logo"]
     existing_logo_path: str | None = None
     existing_logo_record: Any = None
@@ -2003,7 +2013,7 @@ def build_archive_plan(
     elif canonical_exists is False:
         if logo_path is not None:
             raise ArchivePlanError("new company.json declares a company logo but no verified logo was staged")
-        logo_guard = "not-declared"
+        logo_guard = "missing-explicitly-authorized"
     else:
         if logo_path is None:
             logo_guard = "not-declared"
@@ -2018,10 +2028,16 @@ def build_archive_plan(
         and slug_action in {"verified-bound", "verified-available"}
         and canonical in {"create", "update", "update-confirmed-revision", "update-confirmed-schema-migration", "noop"}
         and identity_action in {"preserve", "create", "update", "noop", "clear-reference"}
-        and logo_guard in {"not-declared", "staged", "preserve-existing", "cleared-explicitly"}
+        and logo_guard in {
+            "not-declared",
+            "staged",
+            "preserve-existing",
+            "cleared-explicitly",
+            "missing-explicitly-authorized",
+        }
     )
     return {
-        "plan_version": "9.1",
+        "plan_version": "9.2",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -2065,6 +2081,7 @@ def build_archive_plan(
             "company_logo_asset_path": logo_path,
             "replacement_confirmed": confirm_identity_asset_replacement,
             "clear_confirmed": confirm_identity_asset_clear,
+            "new_company_without_logo_confirmed": confirm_new_company_without_logo,
             "preserve_unlisted_assets": True,
             "files": identity_files,
             "delete_paths": [],
@@ -2135,6 +2152,11 @@ def main() -> int:
         action="store_true",
         help="Allow an accepted null-Logo package to clear a claimed legacy Logo reference without deleting the old file",
     )
+    parser.add_argument(
+        "--confirm-new-company-without-logo",
+        action="store_true",
+        help="Allow first delivery of a new company only after the user explicitly accepts the documented missing official Logo",
+    )
     parser.add_argument("--output", type=Path, help="Write plan outside the frozen package; default stdout")
     args = parser.parse_args()
 
@@ -2187,6 +2209,7 @@ def main() -> int:
             confirm_schema_migration=args.confirm_schema_migration,
             confirm_identity_asset_replacement=args.confirm_identity_asset_replacement,
             confirm_identity_asset_clear=args.confirm_identity_asset_clear,
+            confirm_new_company_without_logo=args.confirm_new_company_without_logo,
         )
         if args.output is not None:
             output = args.output
