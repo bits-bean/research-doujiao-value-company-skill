@@ -38,7 +38,7 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
-VALIDATOR_VERSION = "research-doujiao-value-company/4.1"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.2"
 INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
@@ -1347,12 +1347,54 @@ def validate_company_logo(
             )
         ):
             missing_dimensions.append("missing status")
+        completed_search = any(
+            token in logo_lines
+            for token in (
+                "已尝试",
+                "已检索",
+                "已查找",
+                "已核验",
+                "已检查",
+                "尝试过",
+                "检索过",
+                "查找过",
+                "核验过",
+                "检查过",
+                "attempted",
+                "searched",
+                "checked",
+                "verified",
+            )
+        )
+        future_or_negated_search = any(
+            token in logo_lines
+            for token in (
+                "尚未检查",
+                "尚未检索",
+                "未检查",
+                "未检索",
+                "计划检查",
+                "计划检索",
+                "下一步检查",
+                "下一步检索",
+                "待检查",
+                "待检索",
+                "not checked",
+                "not searched",
+                "not yet checked",
+                "will check",
+                "will search",
+                "plan to check",
+                "plan to search",
+            )
+        )
         if not (
             (
                 any(token in logo_lines for token in ("官网", "投资者关系", "品牌中心", "媒体资料", "official"))
                 or re.search(r"\bir\b", logo_lines) is not None
             )
-            and any(token in logo_lines for token in ("尝试", "检索", "查找", "核验", "检查", "未找到", "未发现", "未提供", "attempt", "search", "check"))
+            and completed_search
+            and not future_or_negated_search
         ):
             missing_dimensions.append("attempted official sources")
         if not ("网站" in logo_lines and any(token in logo_lines for token in ("影响", "展示", "回退", "ticker", "代码", "fallback"))):

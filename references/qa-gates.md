@@ -8,7 +8,7 @@
 - `research_protocol` 兼容元组保持不变；当前运行另绑定 `integrity_profile: execution-bound-v1`、验证器 SHA-256 和 `protocol_fingerprint`。外部源码 commit 未实证时没有伪装成已验证。
 - 已锁定 `doujiao-value-system` 的单一 Schema commit、blob、SHA-256 与 `schema_version`，Skill 内只读副本一致。
 - 公司法定名称、主要证券、ticker、交易所、财年、会计准则和报告币种无歧义。
-- `company_logo` 使用 system 中已验证的现有 Logo，或使用来自公司官网 / IR / 官方品牌中心、通过 `identity-assets.md` 门禁的新 Logo；不得生成或重绘。找不到时使用精确空哨兵并逐项记录官方来源尝试、网站 ticker 回退影响和待补条件。
+- `company_logo` 使用 system 中已验证的现有 Logo，或使用来自公司官网 / IR / 官方品牌中心、通过 `identity-assets.md` 门禁的新 Logo；不得生成或重绘。首个官方候选不合格时已继续检查官网实际加载的 DOM / CSS / 静态资源、IR、品牌 / 媒体资料及适用的官方产品 / 商户 / 支持页面，并逐项记录候选 URL、格式、核验结果与拒绝原因。只有完成后才可使用精确空哨兵，并记录网站 ticker 回退影响和待补条件。
 - 数据截至日、估值日和股价时间戳明确。
 - `classification` 已由官方业务与监管来源验证；sector / 行业 slug 只作标签，`accounting_profile` 与 `returns_profile` 兼容并唯一决定行业适配与图表路由。
 - `protocol_access / schema_access / official_source_retrieval / challenge_source_retrieval / calculation_runtime / package_write` 六项真实能力探针全部通过；两项来源探针绑定不同、已解析的来源 ID 与实际取回内容 SHA-256。
@@ -106,6 +106,7 @@
 ## 8. 冻结与交接
 
 - 机械验证为 0 error；警告已解释，不影响结论或被显式降级。
+- `--allow-warnings` 只确认研究冻结中的已解释警告；它不构成新公司首次无 Logo GitHub 归档授权，也不能由 `human_review_status: accepted` 或普通写入授权替代该独立确认。
 - Too Hard 的每一项可豁免警告都必须在 `research-completeness.md` 独占一行，写出精确 finding code、原因、对结论的影响和待补证据或退出条件；笼统的“已知悉”不能解锁冻结。
 - 新 manifest 必须为 `manifest_version: 2.0`，哈希与实际文件一致，状态为 `frozen`；v1 只允许 audit。
 - manifest 保留原有 `research_protocol` 兼容块，并包含 `integrity_profile: execution-bound-v1` 与当前 `execution_integrity`；验证报告 / manifest 的验证器 SHA-256、工具链摘要、Schema 摘要和 `protocol_fingerprint` 与证据台账一致。
@@ -136,6 +137,7 @@
 - 默认经独立分支和 PR；直接 `main` 需要用户明确指定，并且只使用单一原子提交、非强制、仅快进更新。
 - 最终 diff 只修改 `companies/<company-slug>/` 的受管研究包文件，以及本次显式暂存、验证通过的可选 `assets/logo.svg`；只允许删除被新冻结包替代的旧受管研究文件，保留其他 Logo、品牌图像及非研究资产，不自动删除旧 `research/` 目录或历史子目录，不包含其他公司、路径或 Schema 文件变化。
 - 非空 Logo 路径与 `company.json` 完全一致，并有同一最新 `main` SHA 的精确文件 observation；沿用时确认 `exists:true`，新增 / 替换时核对 SHA-256。来源 URL 实际可打开且为官方公开来源，alt 非空；SVG 使用标准命名空间且无脚本、事件处理器、外部样式、远程引用、敏感信息或跨渲染器颜色函数，并通过锁定 Sharp / libvips / librsvg 版本的实际非透明像素探针；legacy PNG 通过完整 chunk、CRC、解压和像素可见性验证。远端不同内容只有在用户明确授权替换时更新；清除既有引用另需独立授权、精确 observation 和完整缺口说明，且不删除旧文件。`images/`、图片 manifest、产品图、网站截图、渠道成品、背景和模板全部排除。
+- canonical observation 证明是新公司且 Logo 为空时，普通“提交到 GitHub”、warning 确认和人工接受均保持阻断；只有用户另外明确接受无 Logo 交付时才使用 `--confirm-new-company-without-logo`，并核对计划为 `logo_guard: missing-explicitly-authorized`、`new_company_without_logo_confirmed:true`。未获该授权的新公司最终 diff 必须实际包含经验证的 `assets/logo.svg`。
 - 提交后按 commit 重新读取远端文件并核对全部研究目标与可选 Logo 的路径、SHA-256 和 `company.json` 元数据。
 
 任何权限不足、分支保护、远端并发更新、部分写入、哈希不一致或无法复核，都必须准确报告失败或部分完成，不得声称归档成功。

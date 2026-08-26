@@ -195,6 +195,16 @@ class IncrementalChainTests(unittest.TestCase):
                         & {item.code for item in findings}
                     )
 
+            incomplete_search_disclosures = (
+                "Logo 缺失：尚未检查公司官网、投资者关系 IR 与官方品牌中心；网站展示回退 ticker，后续待补。",
+                "Logo 缺失：计划下一步检查公司官网、投资者关系 IR 与官方品牌中心；网站展示回退 ticker，后续待补。",
+            )
+            for disclosure in incomplete_search_disclosures:
+                with self.subTest(disclosure=disclosure):
+                    completeness_path.write_text(base_completeness + "\n" + disclosure + "\n", encoding="utf-8")
+                    findings = validate_research_package(package, schema_path, "full", "test-company")
+                    self.assertIn("unacknowledged-logo-warning", {item.code for item in findings})
+
             completeness_path.write_text(
                 base_completeness
                 + "\nLogo 缺失：已检查公司官网、投资者关系 IR 与官方品牌中心，均未提供可核验文件；网站展示将回退 ticker，后续待补官方媒体资料。\n",
