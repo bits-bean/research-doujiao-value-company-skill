@@ -119,4 +119,20 @@ DCF、Reverse DCF、分部估值、剩余收益、资产价值、周期中枢或
 
 银行和保险不得机械使用普通企业无杠杆 FCF DCF；股息、回购、账面价值、剩余收益和 P/TBV 只作交叉验证。资源与强周期公司使用周期中枢价格和成本，REIT 使用 AFFO/NAV 与债务结构，高 SBC 软件公司把真实稀释纳入每股价值。
 
+### 下游稳定字段与适用性
+
+研究层先决定指标是否适用，再把可复算结果写入 `company.json.valuation` 和 `calculation-ledger.json`。下游不得靠猜测字段名、从报告散文提数，或把不适用项目渲染成空卡片。适用但缺证据的值保持 `null` 并写入完整度说明；不适用项目不进入该分类的展示清单。
+
+受监管银行与 `payments_credit` 优先使用下列稳定键；只写有来源且已入计算台账的项目：
+
+- `multiples.pe_ttm_common_earnings`、`multiples.ttm_common_earnings_yield`；
+- `multiples.price_to_total_book_value`，并用说明明确它不是 P/TBV；只有普通股有形权益分母完整时才另写有形账面倍数；
+- `multiples.ttm_common_earnings_per_diluted_share`、`multiples.price_to_owner_earnings`、`multiples.owner_earnings_yield`；
+- 按同一 TTM 期间与估值日市值计算的 `multiples.ttm_cash_dividend_yield`、`multiples.ttm_buyback_yield`、`multiples.ttm_shareholder_distribution_yield`，并明确它们是历史分配强度，不是未来回报承诺；
+- `reverse_dcf.implied_distributable_cash_cagr`、`implied_starting_distributable_cash`、`implied_starting_payout_ratio`、`implied_regulatory_capital_retention_ratio`，以及至少一个资本约束维度，例如 `implied_rwa_growth_at_target_cet1`；
+- `reverse_dcf.comparison_to_history` 与 `sensitivity_and_threshold`；
+- 每个 `expected_returns[]` 保留 `horizon_years`、`scenario`、`annualized_return` 与 `assumptions`，并在计算台账保存同一现金流和终值路径反解的年化回报。
+
+不得为填满界面补造 Forward P/E、P/TBV、EV/EBIT、普通企业 FCF Yield，或把“剔除投资资产后增长”等普通企业指标套给受监管支付信贷公司。新增生产者必须使用上述稳定键；下游可读取历史别名作兼容，但不得让历史别名继续成为新包的事实标准。
+
 安全边际与业务稳定性、资产负债表、治理、数据质量和估值不确定性匹配。估值结论与企业质量、研究状态分开表达，并保留最强反证和 thesis breakers。

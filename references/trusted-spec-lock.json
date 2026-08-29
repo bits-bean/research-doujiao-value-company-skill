@@ -27,9 +27,9 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "b039eab121da24df400c6a2548fba204462dcac4db66b467bee84c96fa705474",
+    "normative_digest_sha256": "cfa03b910ed7ed1783de2bb7afbcc448b717289d26aebdb1af0e22421b7c4da3",
     "toolchain_digest_sha256": "a6a8b063992be8c6226080e0712bc92f18b2f05d3ba2472d2d5babd46f1146e6",
-    "bundle_digest_sha256": "ab07c81118dfb0245e80e50bd5a68179f83b17a55ab2519b97718bc51461ed42",
+    "bundle_digest_sha256": "1d8d348d7ad3d48ef70bdd384f85270870a8946b4191e2f9dbdf146eedac1ac6",
     "artifacts": [
       {
         "path": "SKILL.md",
@@ -76,8 +76,8 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "c648f6fddc754c2e234653f699f38fc86959c4c45f827888000b25338fe4ff2c",
-        "size_bytes": 20715
+        "sha256": "4fcc4be03fedf566ae87ed36ded981e729d78a041d5504c0f29a2ab462abe7fb",
+        "size_bytes": 21186
       },
       {
         "path": "references/research-contract.md",
@@ -118,8 +118,8 @@
       {
         "path": "references/valuation-qa.md",
         "role": "normative",
-        "sha256": "3211ddde2da7259a3079ba9823dd869414430738191f3492313eb773d7d50bbb",
-        "size_bytes": 12121
+        "sha256": "abb6aaf883c7432e0041e02fa15c173de10139845181482c5be25696dbba8050",
+        "size_bytes": 14054
       },
       {
         "path": "scripts/freeze_research.py",

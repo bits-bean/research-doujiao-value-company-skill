@@ -371,7 +371,14 @@ class IncrementalChainTests(unittest.TestCase):
             root = Path(temp_dir)
             manifest_path, schema_path, trusted_lock, _ = self.make_predecessor(root)
             link = root / "research-manifest.json"
-            link.symlink_to(manifest_path)
+            try:
+                link.symlink_to(manifest_path)
+            except OSError as error:
+                if sys.platform == "win32" and getattr(error, "winerror", None) == 1314:
+                    self.skipTest(
+                        "Windows symbolic-link creation requires Developer Mode or elevation",
+                    )
+                raise
             previous, errors = verify_previous_manifest(link, schema_path, trusted_lock, "test-company")
             self.assertIsNone(previous)
             self.assertTrue(any("non-symlink" in item for item in errors), errors)
