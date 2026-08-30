@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "cfa03b910ed7ed1783de2bb7afbcc448b717289d26aebdb1af0e22421b7c4da3",
-    "toolchain_digest_sha256": "a6a8b063992be8c6226080e0712bc92f18b2f05d3ba2472d2d5babd46f1146e6",
-    "bundle_digest_sha256": "1d8d348d7ad3d48ef70bdd384f85270870a8946b4191e2f9dbdf146eedac1ac6",
+    "normative_digest_sha256": "46ba4ef8742f6347b4750007724b3cf897403a30cba1cf3dbccb134d76d2edaa",
+    "toolchain_digest_sha256": "6846bb127b287c1e2fe166839976abdd5e30d60c520ff38310019096a8bcb2e0",
+    "bundle_digest_sha256": "2bc7ca9c3c00f37e36e93505ff19be992cb0eb533b6da20a3be4e2fded120186",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "0d3b44f2dcea45de9b8faadcf5ac4639347a3f1fe675dd40d1b09fe258fbcef7",
-        "size_bytes": 18655
+        "sha256": "87a61edd601c6978cc4315be2c4db2d2e330cac5b0f5bd34eab655fefc372156",
+        "size_bytes": 18854
       },
       {
         "path": "agents/openai.yaml",
@@ -52,14 +52,14 @@
       {
         "path": "references/evidence-and-calculation.md",
         "role": "normative",
-        "sha256": "e2e74a8db850ef9745e7ced6f507d587a1666dc96dcd456da74107b78fc2f1da",
-        "size_bytes": 11961
+        "sha256": "17474bfb3c136b618c5040f8af5a1f7b79f66dac8db6eb4cfb2fac8edc4f100a",
+        "size_bytes": 12441
       },
       {
         "path": "references/github-archive.md",
         "role": "normative",
-        "sha256": "46f233dc7d8ba129028095cbb0357c0fba065a386914d9d0211b06b50bdc1e45",
-        "size_bytes": 10565
+        "sha256": "a538fcda6fe5a667a99b4062a228b81fcc7197cdf4eae2958668d7bafe0262e0",
+        "size_bytes": 10666
       },
       {
         "path": "references/identity-assets.md",
@@ -76,14 +76,14 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "4fcc4be03fedf566ae87ed36ded981e729d78a041d5504c0f29a2ab462abe7fb",
-        "size_bytes": 21186
+        "sha256": "54c18cd489ec915f3de84906b6b863e290667f58945823bc16e332445f47c8ac",
+        "size_bytes": 21904
       },
       {
         "path": "references/research-contract.md",
         "role": "normative",
-        "sha256": "527bf760e00443eca1480cc1df120bd5498b5536871803bdf1e35afda10f9fc2",
-        "size_bytes": 27281
+        "sha256": "1cf26ea9ad3788a09fe1e88d433e4cc06ec97d81b8ff3e37b028e9de002b18a5",
+        "size_bytes": 27789
       },
       {
         "path": "references/research-execution-and-audit.md",
@@ -94,8 +94,8 @@
       {
         "path": "references/source-routing.md",
         "role": "normative",
-        "sha256": "ce3d007cfe9159db668dcf51c41b70b1d3f6051d078e2cb5d08453cc0ff0d9ab",
-        "size_bytes": 9607
+        "sha256": "01f66376378035e6c6c19109438307ab368808078fd2e9fbd4a1cb3ebba96a70",
+        "size_bytes": 10061
       },
       {
         "path": "references/specs/automation-workflow.md",
@@ -124,20 +124,20 @@
       {
         "path": "scripts/freeze_research.py",
         "role": "toolchain",
-        "sha256": "5a51a7236c6e101bd097f53d7dbe995083fc5b4f1fc9561bfca328729ae300bd",
-        "size_bytes": 40141
+        "sha256": "da579764547007711442e0aa8a4f33795cff018f6257e8e8e799deacee2d7c90",
+        "size_bytes": 40161
       },
       {
         "path": "scripts/prepare_github_archive.py",
         "role": "toolchain",
-        "sha256": "749b5306ed3033f0184d11fa41e76442c2812168eee708cdfb198f37c3c81b49",
-        "size_bytes": 104552
+        "sha256": "ff6a51fe7913b70402a9d8216ede26cb15191c3cfd8e9467264aa96e6f10d037",
+        "size_bytes": 106634
       },
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "093097eac81f3e5593c8a4d4a3f1a4fa041632009f56e7ce881f067b38eddd1b",
-        "size_bytes": 278127
+        "sha256": "4f0d5e931a1d301bbf8fd949929c557165bacce7c8a98ba328cfba2f33c00de0",
+        "size_bytes": 280762
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -148,8 +148,8 @@
       {
         "path": "scripts/validate_skill.py",
         "role": "toolchain",
-        "sha256": "77db4f27550be1336b20e8f5a6f507311f02f1ef63a2ed239f1d45a7079e7bfe",
-        "size_bytes": 19098
+        "sha256": "2c59dd584e83c88e4606d75c500a13beee6f1c397ec628abaeb51f25a7ef7105",
+        "size_bytes": 19732
       },
       {
         "path": "scripts/verify_spec_anchor.py",
@@ -168,12 +168,12 @@
   "company_schema": {
     "repository": "bits-bean/doujiao-value-system",
     "ref": "main",
-    "commit": "ff2cbe2e7a7d5c93990499e83380104197fbc193",
+    "commit": "9c4311df63b47d89f92fefeeccf33094113d6b29",
     "path": "schemas/company.schema.json",
-    "blob_sha1": "19073980953e19b815f6944dc88887ccb84c5c2f",
-    "sha256": "d128294bf29ac5a97c87f17d172e1a1325b79e98741b12123843031a323adc32",
-    "size_bytes": 33740,
-    "schema_version": "2.0.0",
+    "blob_sha1": "70842635e27c5f54b00f4dc1d9b8c2890a6cd469",
+    "sha256": "9816e8c941f5ec68a6340521470fe24c349f06ed6bcf9a81c2a36f1f775eaf8a",
+    "size_bytes": 34381,
+    "schema_version": "2.1.0",
     "bundled_path": "references/specs/company.schema.json"
   }
 }

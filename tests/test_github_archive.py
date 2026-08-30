@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from prepare_github_archive import (  # noqa: E402
     ArchivePlanError,
+    TRUSTED_RUNTIME_BUNDLE_VERSION,
     _public_http_url,
     _validate_observed_logo,
     main as archive_main,
@@ -555,19 +556,19 @@ class GithubDeliveryTests(unittest.TestCase):
             self.assertTrue(plan["ready_for_write"])
             self.assertEqual(plan["canonical_guard"]["action"], "update-confirmed-revision")
 
-    def test_schema_1_to_2_migration_requires_explicit_confirmation(self) -> None:
+    def test_schema_2_0_to_2_1_migration_requires_explicit_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             package, _, _ = self.make_package(root)
             new_path = package / "company.json"
             new_company = json.loads(new_path.read_text(encoding="utf-8"))
-            new_company["meta"]["schema_version"] = "2.0.0"
+            new_company["meta"]["schema_version"] = "2.1.0"
             new_company["meta"]["data_as_of"] = "2026-03-31"
             new_company["meta"]["valuation_date"] = "2026-04-15"
             write_json(new_path, new_company)
-            existing = root / "existing-schema-1.json"
+            existing = root / "existing-schema-2-0.json"
             company = json.loads(new_path.read_text(encoding="utf-8"))
-            company["meta"]["schema_version"] = "1.2.0"
+            company["meta"]["schema_version"] = "2.0.0"
             company["meta"]["data_as_of"] = "2025-12-31"
             company["meta"]["valuation_date"] = "2026-01-15"
             write_json(existing, company)
@@ -578,6 +579,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     existing_company_path=existing,
                     canonical_absent=False,
                     confirm_same_date_revision=False,
+                    locked_schema_version="2.1.0",
                 )
             self.assertEqual(
                 canonical_action(
@@ -586,6 +588,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
+                    locked_schema_version="2.1.0",
                 ),
                 "update-confirmed-schema-migration",
             )
@@ -600,6 +603,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
+                    locked_schema_version="2.1.0",
                 )
             self.assertEqual(
                 canonical_action(
@@ -608,9 +612,114 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=True,
                     confirm_schema_migration=True,
+                    locked_schema_version="2.1.0",
                 ),
                 "update-confirmed-schema-migration",
             )
+
+    def test_schema_migration_rejects_downgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["data_as_of"] = "2026-03-31"
+            new_company["meta"]["valuation_date"] = "2026-04-15"
+            write_json(new_path, new_company)
+            existing = root / "existing-newer-schema.json"
+            company = copy.deepcopy(new_company)
+            company["meta"]["schema_version"] = "2.2.0"
+            company["meta"]["data_as_of"] = "2025-12-31"
+            company["meta"]["valuation_date"] = "2026-01-15"
+            write_json(existing, company)
+            with self.assertRaisesRegex(ArchivePlanError, "current locked Schema version"):
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                    confirm_schema_migration=True,
+                    locked_schema_version="2.1.0",
+                )
+
+    def test_schema_1_x_to_2_1_migration_is_a_confirmed_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["data_as_of"] = "2026-03-31"
+            new_company["meta"]["valuation_date"] = "2026-04-15"
+            write_json(new_path, new_company)
+
+            existing = root / "existing-schema-1-x.json"
+            old_company = copy.deepcopy(new_company)
+            old_company["meta"]["schema_version"] = "1.9.0"
+            old_company["meta"]["data_as_of"] = "2025-12-31"
+            old_company["meta"]["valuation_date"] = "2026-01-15"
+            write_json(existing, old_company)
+
+            self.assertEqual(
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                    confirm_schema_migration=True,
+                    locked_schema_version="2.1.0",
+                ),
+                "update-confirmed-schema-migration",
+            )
+
+    def test_schema_migration_rejects_unsupported_legacy_or_noncurrent_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["data_as_of"] = "2026-03-31"
+            new_company["meta"]["valuation_date"] = "2026-04-15"
+            write_json(new_path, new_company)
+
+            for legacy_version in ("0.9.0", "2.0.1"):
+                with self.subTest(legacy_version=legacy_version):
+                    existing = root / f"existing-{legacy_version}.json"
+                    old_company = copy.deepcopy(new_company)
+                    old_company["meta"]["schema_version"] = legacy_version
+                    old_company["meta"]["data_as_of"] = "2025-12-31"
+                    old_company["meta"]["valuation_date"] = "2026-01-15"
+                    write_json(existing, old_company)
+                    with self.assertRaisesRegex(ArchivePlanError, "current locked Schema version"):
+                        canonical_action(
+                            new_path,
+                            existing_company_path=existing,
+                            canonical_absent=False,
+                            confirm_same_date_revision=False,
+                            confirm_schema_migration=True,
+                            locked_schema_version="2.1.0",
+                        )
+
+            noncurrent = copy.deepcopy(new_company)
+            noncurrent["meta"]["schema_version"] = "2.2.0"
+            write_json(new_path, noncurrent)
+            existing = root / "existing-schema-2-0.json"
+            old_company = copy.deepcopy(new_company)
+            old_company["meta"]["schema_version"] = "2.0.0"
+            old_company["meta"]["data_as_of"] = "2025-12-31"
+            old_company["meta"]["valuation_date"] = "2026-01-15"
+            write_json(existing, old_company)
+            with self.assertRaisesRegex(ArchivePlanError, "current locked Schema version"):
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                    confirm_schema_migration=True,
+                    locked_schema_version="2.1.0",
+                )
 
     def test_all_three_remote_observations_are_required_at_same_head(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1400,6 +1509,8 @@ class GithubDeliveryTests(unittest.TestCase):
                     _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
     def test_svg_renderer_does_not_inherit_node_preload_options(self) -> None:
+        if os.environ.get("CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION") != TRUSTED_RUNTIME_BUNDLE_VERSION:
+            self.skipTest("locked SVG runtime is unavailable, so the NODE_OPTIONS path cannot be exercised")
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             logo = root / "offscreen.svg"
@@ -1439,6 +1550,14 @@ class GithubDeliveryTests(unittest.TestCase):
             finally:
                 os.chdir(previous_cwd)
 
+    def test_svg_renderer_rejects_unlocked_runtime_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            logo = root / "logo.svg"
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>\n',
+                encoding="utf-8",
+            )
             fake_runtime = root / "fake-runtime"
             fake_node = fake_runtime / "dependencies" / "node" / "bin" / "node"
             fake_modules = fake_runtime / "dependencies" / "node" / "node_modules"
@@ -1527,6 +1646,29 @@ class GithubDeliveryTests(unittest.TestCase):
             ) as build:
                 self.assertEqual(archive_main(), 0)
             self.assertTrue(build.call_args.kwargs["confirm_new_company_without_logo"])
+
+    def test_cli_wires_explicit_schema_migration_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package = root / "package"
+            package.mkdir()
+            schema = root / "schema.json"
+            schema.write_text("{}\n", encoding="utf-8")
+            argv = [
+                "prepare_github_archive.py",
+                str(package),
+                "--schema",
+                str(schema),
+                "--company-slug",
+                "test-company",
+                "--confirm-schema-migration",
+            ]
+            with patch("sys.argv", argv), patch(
+                "prepare_github_archive.build_archive_plan",
+                return_value={},
+            ) as build:
+                self.assertEqual(archive_main(), 0)
+            self.assertTrue(build.call_args.kwargs["confirm_schema_migration"])
 
     def test_direct_main_requires_separate_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

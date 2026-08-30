@@ -35,7 +35,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 4. [research-execution-and-audit.md](references/research-execution-and-audit.md)；
 5. 增量任务再读上一 v2 冻结包与 `automation-workflow.md`。
 
-同时锁定兼容研究协议摘要、完整执行摘要、验证器 SHA-256、Schema commit / blob / SHA-256 / version、公司法定身份、证券、会计准则、财年、币种、单位、数据日、估值日和股价时间戳。先实测协议、Schema、官方来源、挑战来源、计算运行时和草稿目录写入六项能力；任一能力、锚点或关键官方来源不可验证时只能交付计划 / 缺口，不称正式完成。
+同时锁定兼容研究协议摘要、完整执行摘要、验证器 SHA-256、Schema commit / blob / SHA-256 / version、公司法定身份、证券、会计准则、财年、币种、单位、数据日、估值日和股价时间戳。`company_schema.schema_version` 表示新研究必须输出的当前活动/default 版本；Schema enum 中保留的旧版本只用于读取历史冻结包。先实测协议、Schema、官方来源、挑战来源、计算运行时和草稿目录写入六项能力；任一能力、锚点或关键官方来源不可验证时只能交付计划 / 缺口，不称正式完成。
 
 正式研究使用 `standard` 档：主研究、隔离的对抗审查、隔离的来源审计和综合四个 pass 缺一不可；专项审计使用 `audit` 档并至少安排两个相互独立的对抗审查。各 pass 只提交主张、证据、反证和置信度，由综合 pass 裁决冲突，不让多个角色分别生成整份报告。
 
@@ -95,7 +95,7 @@ python3 scripts/freeze_research.py <package> \
 
 新 manifest 固定为 v2，保留既有 `research_protocol` 兼容块，并新增 `integrity_profile: execution-bound-v1` 与当前 `execution_integrity`；验证报告与 manifest 同时锁定精确 `company_slug`，并记录验证器、工具链和协议指纹。Logo 元数据随 `company.json` 被锁定，但包外 Logo 字节要到授权归档规划时才按 observation、hash、安全门和固定渲染运行时验证。风险加权来源审计必须重新打开公司身份、估值输入、起始现金流、DCF 假设、适用的监管资本及全部关键论断来源，并按确定性种子抽检普通主张。警告默认阻断；只有完整度说明逐项解释原因、影响和待补证据时才能 `--allow-warnings`。该通用 warning 确认只允许冻结研究，不构成新公司无 Logo 的 GitHub 交付授权。只有真实人工审核后才使用 `--human-reviewed`。冻结只表示不可变，不等于投资建议、网站已具备 Logo 或网站已更新。
 
-Schema 1.x → 2.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建分类、行业指标与新增结构字段，在新目录按 2.0 完整验证后以 `full` 模式冻结。不得把旧包作为当前 2.0 `incremental` 的前序包，也不得仅改 `schema_version`。
+旧 Schema → 当前锁定 Schema 2.1.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建当前协议要求的结构字段，在新目录按 2.1.0 完整验证后以 `full` 模式冻结。Schema 1.x 与 2.0.0 包都不得直接作为当前 2.1.0 `incremental` 的前序包，也不得仅改 `schema_version`。
 
 ## 8. 增量与下游
 

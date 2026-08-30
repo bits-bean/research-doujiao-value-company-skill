@@ -375,7 +375,7 @@ def verify_previous_manifest(
             except (TypeError, ValueError):
                 errors.append(f"previous manifest research {key} must be a valid ISO date")
         if previous_meta.get("schema_version") != trusted_schema.get("schema_version"):
-            errors.append("previous company.json schema_version does not match the trusted lock; rebuild it as a new full Schema 2.0 baseline before incremental updates")
+            errors.append("previous company.json schema_version does not match the trusted lock; rebuild it as a new full package under the current locked Schema before incremental updates")
 
     validation_report_path = path.parent / "validation-report.json"
     if validation_report_path.is_symlink() or not validation_report_path.is_file():

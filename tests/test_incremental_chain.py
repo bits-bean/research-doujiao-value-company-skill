@@ -98,6 +98,23 @@ class IncrementalChainTests(unittest.TestCase):
             _, errors = verify_previous_manifest(manifest_path, schema_path, trusted_lock, "test-company")
             self.assertTrue(any("audit-only" in item for item in errors), errors)
 
+    def test_schema_2_0_predecessor_cannot_start_schema_2_1_incremental(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path, schema_path, trusted_lock, manifest = self.make_predecessor(Path(temp_dir))
+            company_path = manifest_path.parent / "company.json"
+            company = load_json(company_path)
+            company["meta"]["schema_version"] = "2.0.0"
+            write_json(company_path, company)
+            company_entry = next(item for item in manifest["files"] if item["path"] == "company.json")
+            company_entry["sha256"] = file_sha256(company_path)
+            company_entry["size_bytes"] = company_path.stat().st_size
+            manifest["specification"]["schema_version"] = "2.0.0"
+            self.write_manifest(manifest_path, manifest)
+
+            _, errors = verify_previous_manifest(manifest_path, schema_path, trusted_lock, "test-company")
+            self.assertTrue(any("schema_version" in item for item in errors), errors)
+            self.assertTrue(any("new full package" in item for item in errors), errors)
+
     def test_logo_metadata_must_be_complete_or_use_exact_empty_sentinel(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, schema_path, _ = make_valid_unfrozen_package(Path(temp_dir))
