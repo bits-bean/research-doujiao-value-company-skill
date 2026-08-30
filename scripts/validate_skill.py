@@ -12,6 +12,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from validate_research_package import extract_schema_version
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME = "research-doujiao-value-company"
@@ -431,6 +433,16 @@ def main() -> int:
         if schema.get("size_bytes") not in {len(item) for item in schema_variants}:
             fail("bundled company Schema size differs from company_schema lock")
             errors += 1
+        try:
+            bundled_schema_document = json.loads(bundled_schema.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            fail("bundled company Schema is not valid UTF-8 JSON")
+            errors += 1
+        else:
+            current_schema_version = extract_schema_version(bundled_schema_document)
+            if current_schema_version is None or schema.get("schema_version") != current_schema_version:
+                fail("bundled company Schema current version differs from company_schema lock")
+                errors += 1
     except (OSError, ValueError, AttributeError) as exc:
         fail(f"invalid trusted specification lock: {exc}")
         errors += 1

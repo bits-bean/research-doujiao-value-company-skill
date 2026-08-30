@@ -27,7 +27,7 @@ GitHub 写入必须由用户在本次任务中明确授权。“研究某公司�
 
 全部 observation 的 `repository`、`branch` 和 `base_head` 必须一致。任何写入使用 `--confirm-write-authorization`；同一 `data_as_of` 的修订还需 `--confirm-same-date-revision`；直接 `main` 另需 `--confirm-direct-main-authorization`；替换远端不同 Logo 字节另需 `--confirm-identity-asset-replacement`；把远端既有 Logo 引用改为空哨兵另需 `--confirm-identity-asset-clear`；首次归档仍缺 Logo 的新公司另需 `--confirm-new-company-without-logo`。只有最终计划 `ready_for_write: true` 才能执行。
 
-远端 canonical 为 Schema 1.x、冻结包为 2.0 时，另须 `--confirm-schema-migration`。只允许 1.x → 2.0 升级，且公司法定身份、ticker、交易所、数据日和估值日仍通过全部门禁；同一数据日还必须同时使用 `--confirm-same-date-revision`。禁止 Schema 降级、2.x 横向换版或仅改版本号。
+远端 canonical 使用较旧 Schema、冻结包使用当前锁定 Schema 2.1.0 时，另须 `--confirm-schema-migration`。只允许已知旧版本 1.x 或精确 2.0.0 单调升级到当前 2.1.0；公司法定身份、ticker、交易所、数据日和估值日仍须通过全部门禁，同一数据日还必须同时使用 `--confirm-same-date-revision`。禁止其他旧版本、Schema 降级、跳到非当前锁定版本或仅改版本号。
 
 ## 受管路径与替换语义
 

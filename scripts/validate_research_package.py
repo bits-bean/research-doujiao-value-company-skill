@@ -38,7 +38,7 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
-VALIDATOR_VERSION = "research-doujiao-value-company/4.2"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.3"
 INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
@@ -779,9 +779,34 @@ def validate_schema(instance: Any, schema: dict[str, Any], root: dict[str, Any],
 
 def extract_schema_version(schema: dict[str, Any]) -> Any:
     try:
-        return schema["$defs"]["meta"]["properties"]["schema_version"].get("const")
+        definition = schema["$defs"]["meta"]["properties"]["schema_version"]
     except (KeyError, TypeError):
         return None
+    if not isinstance(definition, dict):
+        return None
+    has_const = "const" in definition
+    has_enum = "enum" in definition
+    const = definition.get("const")
+    default = definition.get("default")
+    allowed = definition.get("enum")
+    if has_const:
+        if not isinstance(const, str) or not const or has_enum:
+            return None
+        if "default" in definition and default != const:
+            return None
+        return const
+    if (
+        has_enum
+        and isinstance(default, str)
+        and default
+        and isinstance(allowed, list)
+        and bool(allowed)
+        and all(isinstance(item, str) and item for item in allowed)
+        and len(allowed) == len(set(allowed))
+        and default in allowed
+    ):
+        return default
+    return None
 
 
 def collect_source_ids(value: Any, path: str = "$") -> list[tuple[str, Any]]:
@@ -4794,6 +4819,20 @@ def load_trusted_spec_lock(findings: list[Finding]) -> dict[str, Any] | None:
             add(findings, "error", "trusted-company-schema-blob", BUNDLED_SCHEMA_PATH, "bundled Schema Git blob differs from the authoritative system lock")
         if company_schema["size_bytes"] not in size_candidates:
             add(findings, "error", "trusted-company-schema-size", BUNDLED_SCHEMA_PATH, "bundled Schema size differs beyond one transport-added final LF")
+        try:
+            bundled_schema = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            add(findings, "error", "trusted-company-schema-json", BUNDLED_SCHEMA_PATH, "bundled Schema must be valid UTF-8 JSON")
+        else:
+            active_version = extract_schema_version(bundled_schema)
+            if active_version is None or active_version != company_schema["schema_version"]:
+                add(
+                    findings,
+                    "error",
+                    "trusted-company-schema-version",
+                    BUNDLED_SCHEMA_PATH,
+                    "bundled Schema active/default version must match the trusted company_schema lock",
+                )
 
     if any(item.severity == "error" and item.code.startswith("trusted-") for item in findings):
         return None
@@ -5075,6 +5114,32 @@ def validate_research_package(root: Path, schema_path: Path, mode: str, company_
     trusted = load_trusted_spec_lock(findings)
     if any(item.severity == "error" for item in findings):
         return findings
+    if trusted is not None and mode != "audit":
+        trusted_schema = trusted["company_schema"]
+        if trusted_schema["sha256"] not in schema_sha256_candidates(schema_path):
+            add(
+                findings,
+                "error",
+                "schema-lock-sha256",
+                str(schema_path),
+                "supplied Schema bytes do not match the current trusted company_schema lock",
+            )
+        if trusted_schema["blob_sha1"] not in git_blob_sha1_candidates(schema_path):
+            add(
+                findings,
+                "error",
+                "schema-lock-blob",
+                str(schema_path),
+                "supplied Schema Git blob does not match the current trusted company_schema lock",
+            )
+        if extract_schema_version(schema) != trusted_schema["schema_version"]:
+            add(
+                findings,
+                "error",
+                "schema-lock-version",
+                str(schema_path),
+                "supplied Schema active/default version does not match the current trusted company_schema lock",
+            )
     documents: dict[str, Any] = {}
     for name in ("company.json", "evidence-ledger.json", "calculation-ledger.json"):
         try:

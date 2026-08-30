@@ -37,9 +37,11 @@
 
 ### 审查旧研究包
 
-读取研究包自身的 manifest 与冻结文件。若 manifest 为 `1.0`，只能使用 `audit` 模式诊断，不得作为新增量研究的前序版本，不得重新冻结或 GitHub 归档。若要继续生产，按当前研究协议和 Schema 迁移为新的 `2.0` 研究包。
+读取研究包自身的 manifest 与冻结文件。若 manifest 为 `1.0`，只能使用 `audit` 模式诊断，不得作为新增量研究的前序版本，不得重新冻结或 GitHub 归档。若要继续生产，按当前研究协议和当前锁定 Schema 重建新包；`company.json.meta.schema_version` 写当前 `2.1.0`，而 `manifest_version` 仍保持 `2.0`。
 
-若 manifest 为 v2 但 `company.json.meta.schema_version` 属于 1.x，同样只能按旧锁审计；它不能作为当前 Schema 2.0 incremental 的前序包。迁移时回到原始证据，重建分类、行业指标与新增结构字段，在新目录运行当前 `full` 门禁后冻结，不能把旧自由文本机械改形或只改版本号。
+若 manifest 为 v2 但 `company.json.meta.schema_version` 与当前 Skill 锁定版本不同，同样只能按旧锁审计；Schema 1.x 与 2.0.0 包都不能作为当前 Schema 2.1.0 incremental 的前序包。迁移时回到原始证据，重建当前协议要求的结构字段，在新目录运行当前 `full` 门禁后冻结，不能机械复制旧自由文本或只改版本号。
+
+兼容研究协议文档中保留的“Schema 1.x → 2.0”文字记录历史迁移边界，不决定当前数据协议版本。任何新建、迁移、增量或归档都以 `trusted-spec-lock.json.company_schema` 的当前版本为准；当前锁定版本为 2.1.0。
 
 历史 v2 manifest 若只有兼容 `research_protocol`、没有 `integrity_profile: execution-bound-v1` 与 `execution_integrity`，可用 `audit` 模式诊断，但不能作为当前正式冻结或增量前序包。不要原地补写完整性声明。
 
@@ -55,7 +57,7 @@
 
 - `research_protocol`：保留现有 v2 兼容元组，记录 Skill 权威名、源码仓库、ref、历史发行 commit、`protocol_version`、三份兼容文档的 SHA-256/大小与聚合摘要；
 - `execution_integrity`：以 `execution-bound-v1` profile 记录当前规范与工具链的逐文件 SHA-256/大小、规范摘要、工具链摘要和聚合摘要，并明确源码绑定是否已从外部仓库验证；
-- `company_schema`：记录 `doujiao-value-system` 仓库、ref、Schema commit、路径、Git blob SHA-1、SHA-256、大小和 `schema_version`。
+- `company_schema`：记录 `doujiao-value-system` 仓库、ref、Schema commit、路径、Git blob SHA-1、SHA-256、大小和当前活动/default `schema_version`；它不是 enum 兼容版本列表。
 
 `research_protocol.digest_sha256` 的算法固定为：按 `path` 排序 `documents` 数组，对该数组执行
 `json.dumps(documents, ensure_ascii=False, sort_keys=True, separators=(',', ':'))`，再对 UTF-8 字节计算 SHA-256。

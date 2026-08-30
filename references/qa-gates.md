@@ -35,6 +35,7 @@
 - 财务行不能只是期间齐全而数值全空；核心收入、净利润、股数及行业关键指标必须具有实质覆盖。
 - 财年变更、拆股、并购、重述、币种、正负号已统一；金额为报告币种实际数值、股数为实际股数，未使用千、百万或十亿缩放值。
 - FCF、Owner Earnings、ROIC、股份、回购、净债务、市值和 EV 已复核。
+- Schema 2.1.0 下已区分总净利润、归属于普通股股东的利润与公司报告的稀释 EPS；官方未披露时使用 `null` 并说明缺口，没有用总净利润除以股数伪造稀释 EPS。
 - `null`、`[]` 和真实 0 没有混用。
 - 桑基完整通过 `income-statement-sankey.md` 的披露清单、动态利润层级、计算值来源和逐层勾稽门禁；不得遗漏或合并年报单列项目，不能用扁平节点通过总额对账。披露不足时不编造，明确降级并记录缺口。
 - 银行、保险、REIT、周期和软件等行业没有被错误套用普通模板。
@@ -81,11 +82,12 @@
 ## 6. Schema 与语义
 
 - 使用当前 Skill `company_schema` 锁定的 Draft 2020-12 Schema 只读副本验证。
-- `schema_version` 与 Schema const 一致，`financial_unit: unit`、`share_unit: share`，比例使用 decimal。
+- `schema_version` 与 `trusted-spec-lock.json.company_schema.schema_version` 及 Schema 的当前默认版本一致，`financial_unit: unit`、`share_unit: share`，比例使用 decimal。
 - `calculation-ledger.json` 声明 `numeric_convention: base_units`，所有金额与股数使用实际原始数值，且每条计算不存在 `unit` 字段。
 - `evidence-ledger.json` 声明 `ledger_version: 2.0`，并完整包含 `run / researchability / business_driver_map / management_decision_ledger / thesis / valuation_review / source_audit / claims`；新增执行状态没有写入或扩展 `company.json` Schema。
 - 所有 required 字段存在，无额外字段，格式正确。
 - `source_ids` 引用完整，财务期间不重复并按时间排列。
+- `net_income`、`net_income_attributable_to_common` 与 `diluted_eps` 分别保存总净利润、归属于普通股股东的利润和公司报告的稀释 EPS；后二者未披露时为 `null`，不得由总净利润和股数推算或互相覆盖。当前 Schema 的 Sankey 净利润节点仍只与 `financials[].net_income` 勾稽，不因新增归母字段而换口径。
 - Schema 验证器遇到尚未实现的新约束关键字时失败关闭，不得静默忽略。
 - 护城河与管理层评分在方法论和 Schema 中统一为 0—5。
 - verdict 使用方法论允许的精确状态。
@@ -120,7 +122,7 @@
 - `company_logo` 四元组自洽：非空时路径、公开来源 URL、准确 alt、`is_official:true` 成套存在；空缺时四项为 `null/null/null/false`。Logo 文件留在 manifest 外，冻结目录中没有任何素材文件。
 - `validation-report.json` 与 manifest 锁定同一精确 `company_slug`；研究包 Markdown / JSON 不包含 Markdown 图片、除无属性 `<br>` 外的原始 HTML 或 `data:` 图片 / 音视频媒体。
 - 本 Skill 未调用图表渲染器、网站 API 或内容 Skill，未选择渠道比例、背景和布局，也未生成网站 / 社媒图片或发布内容。
-- Schema 1.x → 2.0 迁移在新目录从原始证据重建并以 `full` 冻结；旧包只审计且不能成为 2.0 incremental 前序。同日远端替换同时需要 Schema 迁移与同日修订确认。缺少 `execution_integrity` 的历史 v2 同样只审计，不得原地补锁或作为当前 incremental 前序。
+- 旧 Schema → 当前锁定 Schema 2.1.0 的迁移在新目录从原始证据重建并以 `full` 冻结；Schema 1.x 与 2.0.0 包只按各自旧锁审计，不能成为 2.1.0 incremental 前序。同日远端替换同时需要 Schema 迁移与同日修订确认。缺少 `execution_integrity` 的历史 v2 同样只审计，不得原地补锁或作为当前 incremental 前序。
 
 ## 阻断项
 

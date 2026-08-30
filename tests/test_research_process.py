@@ -34,7 +34,7 @@ def _fingerprint() -> dict[str, str]:
     return {
         "research_protocol_digest_sha256": "1" * 64,
         "execution_bundle_digest_sha256": "2" * 64,
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "schema_sha256": "3" * 64,
         "validator_sha256": "4" * 64,
     }

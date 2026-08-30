@@ -39,6 +39,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "gross_profit": gross_profit,
                 "operating_profit": operating_profit,
                 "net_income": net_income,
+                "net_income_attributable_to_common": net_income - 500_000,
                 "operating_cash_flow": operating_cash_flow,
                 "capex_total": capex,
                 "free_cash_flow": operating_cash_flow - capex,
@@ -52,11 +53,15 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "roe": 0.18 + offset * 0.004,
                 "incremental_roic": 0.16 + offset * 0.004,
                 "diluted_shares": (109 - offset) * M,
+                "diluted_eps": 0.16 + offset * 0.02,
                 "is_estimate": False,
                 "source_ids": ["SRC-FY"],
             }
         )
-    for period, period_type, revenue_millions in (("2026Q1", "Q1", 52), ("TTM2026", "TTM", 202)):
+    for period, period_type, revenue_millions, reported_diluted_eps in (
+        ("2026Q1", "Q1", 52, 0.10),
+        ("TTM2026", "TTM", 202, 0.37),
+    ):
         revenue = revenue_millions * M
         financials.append(
             {
@@ -66,6 +71,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "gross_profit": revenue * 0.6,
                 "operating_profit": revenue * 0.24,
                 "net_income": revenue * 0.18,
+                "net_income_attributable_to_common": revenue * 0.18 - 500_000,
                 "operating_cash_flow": revenue * 0.28,
                 "capex_total": revenue * 0.08,
                 "free_cash_flow": revenue * 0.2,
@@ -79,6 +85,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "roe": 0.22,
                 "incremental_roic": 0.20,
                 "diluted_shares": 100 * M,
+                "diluted_eps": reported_diluted_eps,
                 "is_estimate": False,
                 "source_ids": ["SRC-Q1"],
             }
@@ -224,7 +231,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "accounting_standard": "US GAAP",
             "display_language": "zh-CN",
             "source_version": "2026Q1",
-            "schema_version": "2.0.0",
+            "schema_version": "2.1.0",
             "theme": "light",
             "sankey_style": "app-economy-inspired-light",
         },

@@ -323,9 +323,9 @@
         },
         "schema_version": {
           "type": "string",
-          "const": "2.0.0",
-          "default": "2.0.0",
-          "description": "company.json 数据协议版本。"
+          "enum": ["2.0.0", "2.1.0"],
+          "default": "2.1.0",
+          "description": "company.json 数据协议版本。2.1.0 新增报告口径的普通股股东利润与稀释 EPS；2.0.0 仅为向后兼容既有冻结包。"
         },
         "theme": {
           "type": "string",
@@ -534,6 +534,10 @@
         "net_income": {
           "$ref": "#/$defs/nullableNumber"
         },
+        "net_income_attributable_to_common": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "归属于普通股股东的利润，使用 report_currency 的实际金额；与包含优先股股息等差异的总净利润 net_income 分开保存。"
+        },
         "operating_cash_flow": {
           "$ref": "#/$defs/nullableNumber"
         },
@@ -593,6 +597,10 @@
         },
         "diluted_shares": {
           "$ref": "#/$defs/nullableNumber"
+        },
+        "diluted_eps": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "公司报告的稀释后每股收益，单位为 report_currency / share；不得用总净利润 net_income 除以稀释股数推导。"
         },
         "dividends": {
           "$ref": "#/$defs/nullableNumber"

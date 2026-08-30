@@ -41,6 +41,7 @@ from validate_research_package import (  # noqa: E402
     validate_durability,
     validate_manifest,
     validate_report,
+    validate_research_package,
     validate_research_modules,
     validate_sankey,
     validate_schema,
@@ -78,6 +79,69 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def test_schema_version_extraction_supports_compatibility_enum(self) -> None:
+        const_schema = {
+            "$defs": {
+                "meta": {
+                    "properties": {
+                        "schema_version": {"const": "2.0.0", "default": "2.0.0"}
+                    }
+                }
+            }
+        }
+        enum_schema = {
+            "$defs": {
+                "meta": {
+                    "properties": {
+                        "schema_version": {"enum": ["2.0.0", "2.1.0"], "default": "2.1.0"}
+                    }
+                }
+            }
+        }
+        self.assertEqual(extract_schema_version(const_schema), "2.0.0")
+        self.assertEqual(extract_schema_version(enum_schema), "2.1.0")
+        invalid_definitions = (
+            {"const": "2.0.0", "default": "2.1.0"},
+            {"const": "2.0.0", "enum": ["2.0.0"]},
+            {"enum": ["2.0.0", "2.1.0"]},
+            {"enum": ["2.0.0", "2.1.0"], "default": "3.0.0"},
+            {"enum": ["2.0.0", "2.0.0"], "default": "2.0.0"},
+            {"enum": ["2.0.0", 2.1], "default": "2.0.0"},
+        )
+        for definition in invalid_definitions:
+            with self.subTest(definition=definition):
+                schema = {"$defs": {"meta": {"properties": {"schema_version": definition}}}}
+                self.assertIsNone(extract_schema_version(schema))
+
+    def test_full_package_rejects_compatible_but_inactive_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, schema_path, company = make_valid_unfrozen_package(Path(temp_dir))
+            company["meta"]["schema_version"] = "2.0.0"
+            write_json(package / "company.json", company)
+            findings = validate_research_package(package, schema_path, "full", "test-company")
+        self.assertIn("schema-version", {item.code for item in findings})
+
+    def test_full_package_rejects_unlocked_schema_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, schema_path, _ = make_valid_unfrozen_package(Path(temp_dir))
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            schema["$comment"] = "semantically harmless but not the locked Schema blob"
+            write_json(schema_path, schema)
+            findings = validate_research_package(package, schema_path, "full", "test-company")
+        codes = {item.code for item in findings}
+        self.assertIn("schema-lock-sha256", codes)
+        self.assertIn("schema-lock-blob", codes)
+
+    def test_schema_2_1_reported_income_and_eps_fields_remain_optional(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, schema_path, company = make_valid_unfrozen_package(Path(temp_dir))
+            for period in company["financials"]:
+                period.pop("net_income_attributable_to_common", None)
+                period.pop("diluted_eps", None)
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            findings = validate_schema(company, schema, schema)
+        self.assertEqual(findings, [])
+
     def test_schema_2_classification_routing_and_industry_metric_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))
@@ -760,6 +824,18 @@ class SemanticGateTests(unittest.TestCase):
                 loaded = load_trusted_spec_lock(findings)
         self.assertIsNone(loaded)
         self.assertIn("trusted-execution-artifact-mismatch", {item.code for item in findings})
+
+    def test_trusted_lock_version_must_match_schema_active_default(self) -> None:
+        lock = json.loads((ROOT / "references/trusted-spec-lock.json").read_text(encoding="utf-8"))
+        lock["company_schema"]["schema_version"] = "9.9.9"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock_path = Path(temp_dir) / "trusted-spec-lock.json"
+            write_json(lock_path, lock)
+            findings: list[Finding] = []
+            with patch("validate_research_package.TRUSTED_SPEC_LOCK_PATH", lock_path):
+                loaded = load_trusted_spec_lock(findings)
+        self.assertIsNone(loaded)
+        self.assertIn("trusted-company-schema-version", {item.code for item in findings})
 
     def test_schema_sha256_allows_only_one_final_lf_transport_variant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

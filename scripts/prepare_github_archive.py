@@ -35,6 +35,7 @@ TARGET_BRANCH = "main"
 SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SHA1_PATTERN = re.compile(r"[0-9a-f]{40}")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+SCHEMA_VERSION_PATTERN = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 IDENTITY_FIELDS = ("company_name_cn", "company_name_en", "ticker", "exchange")
 CANONICAL_IDENTITY_FIELDS = IDENTITY_FIELDS + ("schema_version",)
 COMPANY_PACKAGE_STATE_KEYS = {"repository", "branch", "base_head", "root", "exists", "files"}
@@ -133,6 +134,26 @@ def _meta(company: dict[str, Any], label: str) -> dict[str, Any]:
     return meta
 
 
+def _schema_version_tuple(value: Any) -> tuple[int, int, int] | None:
+    if not isinstance(value, str):
+        return None
+    match = SCHEMA_VERSION_PATTERN.fullmatch(value)
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def _current_locked_schema_version() -> str:
+    lock = _read_object(TRUSTED_LOCK_PATH, "trusted specification lock")
+    company_schema = lock.get("company_schema")
+    if not isinstance(company_schema, dict):
+        raise ArchivePlanError("trusted specification lock lacks company_schema")
+    version = company_schema.get("schema_version")
+    if _schema_version_tuple(version) is None:
+        raise ArchivePlanError("trusted specification lock has an invalid company Schema version")
+    return version
+
+
 def _iso_date(value: Any, label: str) -> date:
     try:
         return date.fromisoformat(value)
@@ -147,6 +168,7 @@ def canonical_action(
     canonical_absent: bool,
     confirm_same_date_revision: bool,
     confirm_schema_migration: bool = False,
+    locked_schema_version: str | None = None,
 ) -> str:
     """Return create/update/noop after identity and monotonicity checks."""
     if existing_company_path is not None and canonical_absent:
@@ -173,13 +195,25 @@ def canonical_action(
     existing_schema = existing_meta.get("schema_version")
     schema_migration = new_schema != existing_schema
     if schema_migration:
+        existing_version = _schema_version_tuple(existing_schema)
+        new_version = _schema_version_tuple(new_schema)
+        current_schema = locked_schema_version or _current_locked_schema_version()
+        current_version = _schema_version_tuple(current_schema)
+        supported_legacy = (
+            existing_version is not None
+            and (existing_version[0] == 1 or existing_version == (2, 0, 0))
+        )
         allowed = (
-            isinstance(existing_schema, str)
-            and existing_schema.startswith("1.")
-            and new_schema == "2.0.0"
+            supported_legacy
+            and current_version is not None
+            and new_version == current_version
+            and existing_version < current_version
         )
         if not allowed:
-            raise ArchivePlanError("canonical company.json only permits a 1.x to 2.0.0 Schema migration")
+            raise ArchivePlanError(
+                "canonical company.json only permits a supported legacy Schema upgrade "
+                "to the current locked Schema version"
+            )
         if not confirm_schema_migration:
             raise ArchivePlanError("canonical Schema migration requires explicit confirmation")
 
@@ -1737,6 +1771,7 @@ def canonical_preflight_action(
     confirm_schema_migration: bool,
     remote_state: dict[str, Any] | None,
     expected_base_head: str | None,
+    locked_schema_version: str,
 ) -> tuple[str, str | None, bool | None]:
     if remote_state is None:
         return "remote-preflight-required", None, None
@@ -1779,6 +1814,7 @@ def canonical_preflight_action(
         canonical_absent=False,
         confirm_same_date_revision=confirm_same_date_revision,
         confirm_schema_migration=confirm_schema_migration,
+        locked_schema_version=locked_schema_version,
     )
     return action, base_head, True
 
@@ -1819,6 +1855,12 @@ def build_archive_plan(
     manifest_path = _safe_regular_file(root / "research-manifest.json", "research-manifest.json")
     if trusted_lock is None:
         trusted_lock = _read_object(TRUSTED_LOCK_PATH, "trusted specification lock")
+    company_schema_lock = trusted_lock.get("company_schema")
+    if not isinstance(company_schema_lock, dict):
+        raise ArchivePlanError("trusted specification lock lacks company_schema")
+    locked_schema_version = company_schema_lock.get("schema_version")
+    if not isinstance(locked_schema_version, str) or not locked_schema_version.strip():
+        raise ArchivePlanError("trusted specification lock has an invalid company Schema version")
     manifest, errors = verify_previous_manifest(manifest_path, schema_path, trusted_lock, company_slug)
     if manifest is None or errors:
         detail = "; ".join(errors) if errors else "manifest could not be verified"
@@ -1888,6 +1930,7 @@ def build_archive_plan(
         confirm_schema_migration=confirm_schema_migration,
         remote_state=remote_canonical_state,
         expected_base_head=base_head,
+        locked_schema_version=locked_schema_version,
     )
     if (
         remote_company_state is not None
@@ -2140,7 +2183,7 @@ def main() -> int:
     parser.add_argument(
         "--confirm-schema-migration",
         action="store_true",
-        help="Allow an accepted Schema 1.x package to be replaced by the fully rebuilt Schema 2.0.0 package",
+        help="Allow an accepted older-Schema package to be replaced by a fully rebuilt package under the current locked Schema",
     )
     parser.add_argument(
         "--confirm-identity-asset-replacement",

@@ -6,7 +6,7 @@
 - [必需文件](#必需文件)
 - [执行与审计记录](#evidence-ledgerjson)
 - [中文展示单位契约](#中文展示单位契约)
-- [Schema 2.0 迁移](#schema-20-迁移)
+- [Schema 迁移](#schema-迁移)
 - [冻结语义](#冻结语义)
 - [下游交接](#下游交接)
 - [视觉素材边界](#视觉素材边界)
@@ -54,7 +54,9 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 严格通过锁定 commit 的 `schemas/company.schema.json`。不得加入研究包状态、冻结哈希、制作说明或平台内容；这些属于 sidecar 文件。
 
-Schema 2.0 的 `classification` 与 `industry_metrics` 必须完整执行 [classification-and-chart-routing.md](classification-and-chart-routing.md)。分类来自官方业务与监管证据；宽 sector 和行业 slug 仅用于标签与检索，只有 `accounting_profile` 和 `returns_profile` 控制会计、回报和下游图表路由。行业指标按 `period + code` 唯一，并保留 `value_type` 与来源。银行与支付信贷的主 ROE / ROTCE 必须是长期序列；资本约束可用最新 CET1 / 资本充足率配合同期管理层目标区间或监管最低要求作当前仪表；第三板块必须在每股权益长期序列和至少三个完整财年的回购对股数影响中二选一。当前资本截面不能冒充长期趋势，须在完整度说明中标明限制。
+当前 Schema 2.1.0 允许读取历史 2.0.0 包，但新研究固定写 `meta.schema_version: 2.1.0`。财务期在官方披露可得时分别保存总净利润、归属于普通股股东的利润和公司报告的稀释 EPS；缺失使用 `null`。不得用 `net_income ÷ diluted_shares` 生成 `diluted_eps`，也不得把归母口径与总净利润无声混用。
+
+Schema 2.x 的 `classification` 与 `industry_metrics` 必须完整执行 [classification-and-chart-routing.md](classification-and-chart-routing.md)。分类来自官方业务与监管证据；宽 sector 和行业 slug 仅用于标签与检索，只有 `accounting_profile` 和 `returns_profile` 控制会计、回报和下游图表路由。行业指标按 `period + code` 唯一，并保留 `value_type` 与来源。银行与支付信贷的主 ROE / ROTCE 必须是长期序列；资本约束可用最新 CET1 / 资本充足率配合同期管理层目标区间或监管最低要求作当前仪表；第三板块必须在每股权益长期序列和至少三个完整财年的回购对股数影响中二选一。当前资本截面不能冒充长期趋势，须在完整度说明中标明限制。
 
 `durability` 必须以至少二十年为期限，分别记录需求持久性、适应能力和外部冲击的标准化状态、判断、证据、破坏条件及来源，并给出总体状态与结论。长期生存不能由护城河分数、估值终值或一句叙事反推。
 
@@ -261,12 +263,12 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 历史冻结包保持不可变。旧包若由其 manifest 锁定的旧 Schema 声明 `million`、`million_shares` 等缩放单位，审计时必须按旧锁解释；创建新版研究时再把金额和股数机械换算为实际原始数值，重新验证并冻结，禁止原地修改或把旧值直接当作新口径。
 
-## Schema 2.0 迁移
+## Schema 迁移
 
-- Schema 1.x 冻结包保持不可变，只按其原 manifest 和旧 Schema 审计；不得在旧目录补字段或改版本号。
+- 旧 Schema 冻结包保持不可变，只按其原 manifest 和旧 Schema 审计；不得在旧目录补字段或改版本号。
 - 新建迁移目录，从原始来源重新验证分类、行业指标、二十年长期生存三维判断、承诺结果与下一验证、资本配置结果、风险因果链和长期跟踪方法；不得把旧自由文本机械塞入新字段，也不得从网站展示、护城河分数或估值字段反推公司类型与长期生存结论。
-- 迁移包必须通过当前 2.0 Schema 的 `full` 验证并作为新的完整基线冻结。Schema 1.x manifest 不能成为 2.0 `incremental` 前序；后续增量从这个 2.0 基线开始。
-- 数据日和估值日不得因迁移回退。同日迁移属于结构化重建，必须经过人工接受；归档时同时显式确认 Schema 迁移和同日修订。
+- 迁移包必须通过当前锁定 Schema 2.1.0 的 `full` 验证并作为新的完整基线冻结。Schema 1.x 与 2.0.0 manifest 都不能成为 2.1.0 `incremental` 前序；后续增量从这个 2.1.0 基线开始。
+- 数据日和估值日不得因迁移回退。只允许从语义版本更低的 Schema 升级到当前锁定版本，禁止降级；同日迁移属于结构化重建，必须经过人工接受，归档时同时显式确认 Schema 迁移和同日修订。
 - 远端 `companies/<slug>/` 仍使用整包替换；只替换受管研究文件，保留 `images/` 和其他非研究资产。公司 Logo 由独立单文件门禁决定保留、创建或在另获明确授权后替换。
 
 ## 冻结语义
@@ -328,4 +330,4 @@ GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再�
 
 归档器只管理冻结研究文件与上述单一 Logo 例外；`images/`、图片 manifest、产品图、网站截图、社媒成品、背景和渠道模板一律不允许作为附加写入。远端已有其他非研究资产不参与 `noop` 比较或删除计划。
 
-最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份或证券不一致拒绝；Schema 版本不一致默认拒绝，只有显式确认的 1.x → 2.0 迁移可以继续。
+最终写入必须在同一最新 `main` SHA 下验证当前公司目录、slug registry 的正向 slug→身份和反向身份→slug 一一绑定，以及目录内 `company.json` 的 canonical 存在/不存在状态；存在时核对文件 hash、大小和身份。缺 observation、wrong slug、身份冲突或 stale head 均不得 `ready_for_write`。当前正式数据的 `data_as_of` 与 `valuation_date` 只允许前进；同一数据日但不同内容默认拒绝，只有人工接受且用户明确授权的修订才允许。公司身份或证券不一致拒绝；Schema 版本不一致默认拒绝，只有显式确认、从较旧版本升级到当前锁定版本的完整迁移可以继续。
