@@ -143,6 +143,7 @@ class IncrementalChainTests(unittest.TestCase):
                 "../../evil.svg",
                 "companies/other-company/assets/logo.svg",
                 "https://evil.example/logo.svg",
+                "companies/test-company/assets/logo.jpg",
                 "companies/test-company/logo-primary.exe",
             ):
                 with self.subTest(asset_path=asset_path):
@@ -155,6 +156,16 @@ class IncrementalChainTests(unittest.TestCase):
                     write_json(package / "company.json", company)
                     findings = validate_research_package(package, schema_path, "full", "test-company")
                     self.assertIn("company-logo-path", {item.code for item in findings})
+
+            company["brand_identity"]["company_logo"] = {
+                "asset_path": "companies/test-company/assets/logo.png",
+                "source_url": "https://example.com/logo.png",
+                "alt": "Test Company official logo",
+                "is_official": True,
+            }
+            write_json(package / "company.json", company)
+            findings = validate_research_package(package, schema_path, "full", "test-company")
+            self.assertNotIn("company-logo-path", {item.code for item in findings})
 
             company["brand_identity"]["company_logo"] = {
                 "asset_path": "companies/test-company/assets/logo.svg",

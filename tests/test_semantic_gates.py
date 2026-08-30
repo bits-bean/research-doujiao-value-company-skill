@@ -627,6 +627,28 @@ class SemanticGateTests(unittest.TestCase):
         findings = []
         validate_chinese_display_units(
             "这是一份面向中国投资者的正式研究报告。" * 12
+            + "官方披露标题写作 Revenue Increases 30% to $12.1 Billion；资本余量为40bp。",
+            findings,
+        )
+        self.assertIn(
+            "report-display-units-not-localized",
+            {item.code for item in findings},
+        )
+
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "来源见[原文链接](https://example.com/pay-138-million/default.aspx)，资本余量为40个基点。",
+            findings,
+        )
+        self.assertNotIn(
+            "report-display-units-not-localized",
+            {item.code for item in findings},
+        )
+
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
             + "估值基准日股东可分配现金为86.664亿美元，稀释后股数为6.79亿股。",
             findings,
         )
@@ -647,6 +669,22 @@ class SemanticGateTests(unittest.TestCase):
         validate_chinese_display_units(
             "这是一份面向中国投资者的正式研究报告。" * 12
             + "估值基准日现金总额为1,868亿元，稀释后股数为91.53亿股，基准日每股现金为20.41元/股。",
+            findings,
+        )
+        self.assertNotIn("report-display-unit-missing", {item.code for item in findings})
+
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "管理层给出EPS为9.25至9.65美元，回购均价312.87美元；现价333.20美元。",
+            findings,
+        )
+        self.assertIn("report-display-unit-missing", {item.code for item in findings})
+
+        findings = []
+        validate_chinese_display_units(
+            "这是一份面向中国投资者的正式研究报告。" * 12
+            + "管理层给出EPS为9.25至9.65美元/股，回购均价312.87美元/股；现价333.20美元/股。",
             findings,
         )
         self.assertNotIn("report-display-unit-missing", {item.code for item in findings})

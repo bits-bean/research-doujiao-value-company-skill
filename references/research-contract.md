@@ -303,8 +303,8 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 公司 Logo 是研究 Skill 唯一管理的视觉素材，完整执行 [identity-assets.md](identity-assets.md)。它不是研究事实文件，不写入冻结 manifest；但 `company.json.brand_identity.company_logo` 必须与实际沿用或新增文件一致：
 
 - 先检查并复用同一公司目录内的现有 canonical Logo；增量研究不得静默清空或改写有效 Logo 元数据。
-- 新 canonical Logo 固定为 `companies/<slug>/assets/logo.svg`，只从公司官网、IR 或官方品牌中心取得，不生成、不重绘、不使用近似图。
-- `asset_path`、公开 `source_url`、准确 `alt` 与 `is_official:true` 必须成套存在；新增 SVG 还须通过文件大小、脚本、事件处理器、远程引用和敏感内容门禁。
+- 新 canonical Logo 固定为 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一），只从公司官网、IR 或官方品牌中心取得官方原始文件；扩展名必须与实际字节格式一致，不得转换、包裹、清洗、生成、描摹、重绘或使用近似图。
+- `asset_path`、公开 `source_url`、准确 `alt` 与 `is_official:true` 必须成套存在；新增 SVG 须通过文件大小、脚本、事件处理器、远程引用、敏感内容与锁定渲染探针门禁，新增 PNG 须通过签名、chunk / CRC、IHDR / IDAT / IEND、解压、像素行与非透明像素门禁。
 - 找不到可验证的官方 Logo 时，四元组使用精确空哨兵：`asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 说明网站将使用 ticker 回退；这不改变投资研究结论。
 - 远端既有 Logo 引用不得静默清空；只有完整记录官方来源尝试、网站影响与待补条件，并另获清除引用授权后才可改为空哨兵。此操作不删除旧文件。远端旧记录本来缺失而新包同样为空时不是清除。
 
@@ -326,7 +326,7 @@ companies/<company-slug>/
 └── research-manifest.json
 ```
 
-GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再向 `research/` 写入副本。本地冻结目录可继续保存不可变审计快照；远端公司目录中的受管研究文件使用整包替换，Git 历史负责记录版本。远端非研究资产必须原样保留；唯一附加写入例外是本次按 `identity-assets.md` 显式暂存并验证的 `companies/<slug>/assets/logo.svg`。不得加入发布回执、制作记录或其他未冻结文件。`companies/<company-slug>/company.json` 是唯一正式副本。
+GitHub 路径不得增加日期、`-vN` 或其他版本子目录，也不得再向 `research/` 写入副本。本地冻结目录可继续保存不可变审计快照；远端公司目录中的受管研究文件使用整包替换，Git 历史负责记录版本。远端非研究资产必须原样保留；唯一附加写入例外是本次按 `identity-assets.md` 显式暂存并验证的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）。不得加入发布回执、制作记录或其他未冻结文件。`companies/<company-slug>/company.json` 是唯一正式副本。
 
 归档器只管理冻结研究文件与上述单一 Logo 例外；`images/`、图片 manifest、产品图、网站截图、社媒成品、背景和渠道模板一律不允许作为附加写入。远端已有其他非研究资产不参与 `noop` 比较或删除计划。
 

@@ -20,6 +20,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from prepare_github_archive import (  # noqa: E402
     ArchivePlanError,
+    TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION,
+    TRUSTED_DESKTOP_RUNTIME_NODE,
+    TRUSTED_DESKTOP_RUNTIME_NODE_MODULES,
+    TRUSTED_DESKTOP_RUNTIME_ROOT,
     TRUSTED_RUNTIME_BUNDLE_VERSION,
     _public_http_url,
     _validate_observed_logo,
@@ -1078,11 +1082,50 @@ class GithubDeliveryTests(unittest.TestCase):
                 ),
             )
             self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["plan_version"], "9.2")
+            self.assertEqual(ready["plan_version"], "9.3")
             self.assertEqual(ready["identity_assets"]["remote_action"], "create")
             self.assertEqual(ready["identity_assets"]["logo_guard"], "staged")
             self.assertEqual([item["target_path"] for item in ready["identity_assets"]["files"]], [target])
             self.assertEqual(ready["identity_assets"]["delete_paths"], [])
+
+    def test_verified_png_logo_is_planned_without_rewriting_original_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            target = "companies/test-company/assets/logo.png"
+            self.set_company_logo(package, target)
+            assets = root / "identity-assets"
+            assets.mkdir()
+            logo = assets / "logo.png"
+            self.write_png(logo)
+            original_bytes = logo.read_bytes()
+            original_sha256 = file_sha256(logo)
+
+            ready = self.plan(
+                package,
+                schema,
+                lock,
+                write_authorized=True,
+                remote_company_state=self.company_state(),
+                remote_slug_registry_state=self.registry_state(),
+                remote_canonical_state=self.canonical_absent_state(),
+                identity_assets_root=assets,
+                remote_identity_assets_state=self.identity_asset_state(
+                    [{"path": target, "exists": False, "source_path": None, "sha256": None, "size_bytes": None}]
+                ),
+            )
+
+            self.assertTrue(ready["ready_for_write"])
+            self.assertEqual(ready["identity_assets"]["remote_action"], "create")
+            self.assertEqual(ready["identity_assets"]["logo_guard"], "staged")
+            self.assertEqual(len(ready["identity_assets"]["files"]), 1)
+            planned = ready["identity_assets"]["files"][0]
+            self.assertEqual(planned["target_path"], target)
+            self.assertEqual(planned["source_path"], str(logo.resolve()))
+            self.assertEqual(planned["sha256"], original_sha256)
+            self.assertEqual(planned["size_bytes"], len(original_bytes))
+            self.assertEqual(Path(planned["source_path"]).read_bytes(), original_bytes)
+            self.assertEqual(logo.read_bytes(), original_bytes)
 
     def test_verified_logo_accepts_safe_inline_class_stylesheet(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1494,7 +1537,12 @@ class GithubDeliveryTests(unittest.TestCase):
             accepted = self.plan(package, schema, lock, identity_assets_root=assets)
             self.assertEqual(accepted["identity_assets"]["remote_action"], "remote-preflight-required")
             (assets / "product.png").write_bytes(b"not allowed")
-            with self.assertRaisesRegex(ArchivePlanError, "exactly one logo.svg"):
+            with self.assertRaisesRegex(ArchivePlanError, r"exactly one logo\.svg"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+            (assets / "product.png").unlink()
+            self.write_png(assets / "logo.png")
+            with self.assertRaisesRegex(ArchivePlanError, r"exactly one logo\.svg"):
                 self.plan(package, schema, lock, identity_assets_root=assets)
 
     def test_svg_renderer_fails_closed_without_trusted_runtime(self) -> None:
@@ -1508,8 +1556,36 @@ class GithubDeliveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ArchivePlanError, "trusted SVG raster runtime is unavailable"):
                     _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
+    def test_svg_renderer_accepts_locked_desktop_runtime(self) -> None:
+        required = (
+            TRUSTED_DESKTOP_RUNTIME_ROOT,
+            TRUSTED_DESKTOP_RUNTIME_NODE,
+            TRUSTED_DESKTOP_RUNTIME_NODE_MODULES,
+        )
+        if not all(path.exists() for path in required):
+            self.skipTest("locked desktop SVG runtime is unavailable")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logo = Path(temp_dir) / "logo.svg"
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+                '<path fill="#006fcf" d="M0 0h16v16H0z"/>'
+                '</svg>\n',
+                encoding="utf-8",
+            )
+            runtime_env = {
+                "CODEX_PRIMARY_RUNTIME_ROOT": str(TRUSTED_DESKTOP_RUNTIME_ROOT),
+                "CODEX_PRIMARY_RUNTIME_NODE": str(TRUSTED_DESKTOP_RUNTIME_NODE),
+                "CODEX_PRIMARY_RUNTIME_NODE_MODULES": str(TRUSTED_DESKTOP_RUNTIME_NODE_MODULES),
+                "CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION": TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION,
+            }
+            with patch.dict(os.environ, runtime_env, clear=True):
+                _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
+
     def test_svg_renderer_does_not_inherit_node_preload_options(self) -> None:
-        if os.environ.get("CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION") != TRUSTED_RUNTIME_BUNDLE_VERSION:
+        if os.environ.get("CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION") not in {
+            TRUSTED_RUNTIME_BUNDLE_VERSION,
+            TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION,
+        }:
             self.skipTest("locked SVG runtime is unavailable, so the NODE_OPTIONS path cannot be exercised")
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1577,7 +1653,10 @@ class GithubDeliveryTests(unittest.TestCase):
                 },
                 clear=False,
             ):
-                with self.assertRaisesRegex(ArchivePlanError, "locked platform release"):
+                with self.assertRaisesRegex(
+                    ArchivePlanError,
+                    "cannot traverse symbolic links|locked platform release",
+                ):
                     _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
     def test_cli_output_cannot_overwrite_observed_logo_source_bytes(self) -> None:

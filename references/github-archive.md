@@ -14,7 +14,7 @@ GitHub 写入必须由用户在本次任务中明确授权。“研究某公司�
 4. 通过 GitHub 连接器取得权限和最新 `main` SHA，确认冻结清单锁定的 Schema commit 是其祖先，且 `main:schemas/company.schema.json` 仍为锁定 blob。
 5. 在同一最新 `main` SHA 下取得当前公司目录、slug / identity registry 与目录内正式 `company.json` 三项 observation。slug 不存在时还要反向确认同一公司身份未绑定其他 slug。
 6. 先运行确定性敏感字符串扫描，再语义复核非公开个人信息、资料保密性和再分发权；任一层失败都阻断提交。
-7. 完整读取 `identity-assets.md`。`company.json` 声明非空 Logo 时，取得同一 `main` SHA 的精确远端素材 observation，并把每个 `exists:true` 的文件下载到临时 `source_path` 校验实际字节；沿用时验证内容可渲染，新增或替换时再把唯一的 `logo.svg` 放在冻结包外并核对来源与 SHA-256。路径 / 元数据切换时 observation 同时覆盖旧路径和新路径，且需要明确替换授权。新包使用精确空哨兵、远端 canonical 却声明旧 Logo 时，同样观察所有安全旧路径并要求独立清除引用授权。除这一单文件例外外，计划中出现任何 `assets/`、`images/`、产品图、图片 manifest、网站截图、社媒成品、背景或渠道模板都阻断提交。
+7. 完整读取 `identity-assets.md`。`company.json` 声明非空 Logo 时，取得同一 `main` SHA 的精确远端素材 observation，并把每个 `exists:true` 的文件下载到临时 `source_path` 校验实际字节；沿用时验证内容可渲染，新增或替换时再把唯一的 `logo.svg` 或 `logo.png` 放在冻结包外并核对来源与 SHA-256。扩展名必须与官方原始字节格式一致，不得转换、包裹、清洗、描摹或重绘。路径 / 元数据切换时 observation 同时覆盖旧路径和新路径，且需要明确替换授权。新包使用精确空哨兵、远端 canonical 却声明旧 Logo 时，同样观察所有安全旧路径并要求独立清除引用授权。除这一单文件例外外，计划中出现任何 `assets/`、`images/`、产品图、图片 manifest、网站截图、社媒成品、背景或渠道模板都阻断提交。
 8. 若 canonical observation 证明该公司尚不存在，而新包使用 Logo 空哨兵，默认停止。只有用户明确说“允许无 Logo 提交”或语义完全等价的话，才可使用 `--confirm-new-company-without-logo`；普通写入授权、人工接受或 warning 确认均不能推导该参数。
 9. 任一预检不可访问、陈旧或含糊时停止，不得用本地缓存、旧聊天或其他来源猜测远端状态。
 
@@ -52,7 +52,7 @@ companies/<company-slug>/research-manifest.json
 - 受管文件集合及内容完全相同：幂等 `noop`。
 - 任一受管文件缺失或变化：以冻结包完整受管文件集更新；旧的多余受管研究文件列入 `delete_paths`。
 - 所有非研究文件与子目录都不参与研究包比较，不得进入研究包的 `files` 或 `delete_paths`，必须原样保留。
-- 唯一例外是显式暂存的 `companies/<slug>/assets/logo.svg`：路径必须与 `company.json` 完全一致，由独立 observation 和 SHA-256 门禁决定 `create`、`noop` 或经明确授权的 `update`；从不删除 Logo。
+- 唯一例外是显式暂存的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）：路径必须与 `company.json` 完全一致，字节必须保持官方原始格式，由独立 observation 和 SHA-256 门禁决定 `create`、`noop` 或经明确授权的 `update`；从不转换或删除 Logo。
 - 新公司若声明非空 Logo 路径而没有暂存已验证文件，停止。更新现有公司时，非暂存 Logo 的路径与元数据必须与远端 canonical `company.json` 一致；不得静默清空、换路径或制造悬空引用。
 - 已确认没有可验证官方 Logo 时，只有新四元组为精确空哨兵、完整度说明列明官方来源尝试 / 网站 ticker 回退影响 / 待补条件、远端安全旧路径均有精确 observation，且另获清除引用授权，才允许 `clear-reference`。它只取消 `company.json` 引用并保留旧文件；远端本来没有 Logo 记录且新包仍为空时不需要该授权。
 - 远端本来不存在的新公司若仍为空哨兵，不属于 `clear-reference`，但首次归档默认阻断。只有独立的无 Logo 交付授权才能得到 `missing-explicitly-authorized`；通用 warning 或写入授权不能复用，且该状态必须写入计划和 PR 说明。
@@ -68,14 +68,15 @@ companies/<company-slug>/research-manifest.json
 
 ```text
 companies/<company-slug>/<直接研究包文件>
-companies/<company-slug>/assets/logo.svg    # 仅本次显式暂存并验证时
+companies/<company-slug>/assets/logo.svg    # 与下一行二选一，仅本次显式暂存并验证时
+companies/<company-slug>/assets/logo.png
 ```
 
 禁止修改 Schema、其他公司或其他路径，禁止包含 Logo 之外的任何素材，禁止使用逐文件 contents 更新直接写 `main`。
 
 ## 远端复核与回执
 
-写入后必须按返回的 commit SHA 重新读取并核对当前公司目录的受管文件集合、每个研究文件的完整内容或 SHA-256、正式 `company.json` 的身份与日期单调性，以及分支、PR 或合并状态。新公司未获无 Logo 交付授权时，最终 diff 必须实际包含计划中的 `assets/logo.svg`；不能只看 `company.json` 元数据或 PR 文案。如写入 Logo，还要核对文件 SHA-256、四个 Logo 字段和实际路径；如清除引用，还要核对精确空哨兵且旧文件未被删除；如明确接受新公司无 Logo，则复核计划回执和 PR 都清楚披露 ticker 回退。最终 diff 只能包含受管研究文件与计划中的可选 Logo。只有全部一致才报告成功；不要把回执写入冻结目录。
+写入后必须按返回的 commit SHA 重新读取并核对当前公司目录的受管文件集合、每个研究文件的完整内容或 SHA-256、正式 `company.json` 的身份与日期单调性，以及分支、PR 或合并状态。新公司未获无 Logo 交付授权时，最终 diff 必须实际包含计划中的 `assets/logo.svg` 或 `assets/logo.png`；不能只看 `company.json` 元数据或 PR 文案。如写入 Logo，还要核对文件 SHA-256、四个 Logo 字段和实际路径；如清除引用，还要核对精确空哨兵且旧文件未被删除；如明确接受新公司无 Logo，则复核计划回执和 PR 都清楚披露 ticker 回退。最终 diff 只能包含受管研究文件与计划中的可选 Logo。只有全部一致才报告成功；不要把回执写入冻结目录。
 
 ## 失败与恢复
 

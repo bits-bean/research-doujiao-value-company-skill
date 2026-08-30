@@ -38,7 +38,7 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
-VALIDATOR_VERSION = "research-doujiao-value-company/4.3"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.4"
 INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
@@ -299,6 +299,11 @@ COMMON_INDUSTRY_METRIC_TYPES = {
 
 NONLOCALIZED_CHINESE_UNIT_PATTERNS = (
     re.compile(
+        r"(?:[$€£¥]\s*)?[-+]?\d[\d,]*(?:\.\d+)?\s*"
+        r"(?:thousand|million|billion|trillion)\b",
+        re.I,
+    ),
+    re.compile(
         r"\b(?:USD|CNY|RMB|HKD|EUR|GBP|JPY|US\$)\s*"
         r"(?:thousand|million|billion|trillion)\b",
         re.I,
@@ -309,12 +314,22 @@ NONLOCALIZED_CHINESE_UNIT_PATTERNS = (
         re.I,
     ),
     re.compile(r"百万\s*(?:美元|港元|人民币|欧元|英镑|日元|元|股)"),
+    re.compile(r"十亿\s*(?:美元|港元|人民币|欧元|英镑|日元|元|股)"),
+    re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?\s*bp\b", re.I),
     re.compile(
         r"(?:单位|口径)\s*[:：]?\s*(?:USD|CNY|RMB|HKD|EUR|GBP|JPY|US\$)?\s*"
         r"(?:thousand|million|billion|trillion)\b",
         re.I,
     ),
     re.compile(r"(?:单位|口径)\s*[:：]?\s*百万(?:美元|港元|人民币|欧元|英镑|日元|元|股)?"),
+)
+
+NONLOCALIZED_PER_SHARE_PATTERN = re.compile(
+    r"(?:EPS|每股收益|股价|现价|每股价值|回购均价|回购价|均价|基准(?:内在)?价值)"
+    r"[^|\n]{0,32}?[-+]?\d[\d,]*(?:\.\d+)?"
+    r"(?:\s*(?:至|到|—|–|-)\s*[-+]?\d[\d,]*(?:\.\d+)?)?"
+    r"\s*(?:人民币元|美元|港元|欧元|英镑|日元|元)(?!\s*/\s*股)",
+    re.I,
 )
 
 
@@ -1505,17 +1520,20 @@ def validate_company_logo(
             "research-completeness.md",
             "official Logo metadata conflicts with an unresolved visible Logo-missing disclosure",
         )
-    canonical = f"companies/{company_slug}/assets/logo.svg"
+    canonical = {
+        f"companies/{company_slug}/assets/logo.svg",
+        f"companies/{company_slug}/assets/logo.png",
+    }
     legacy_pattern = rf"companies/{re.escape(company_slug)}/logo-primary\.(?:{LEGACY_LOGO_EXTENSIONS})"
     if asset_path != asset_path.strip() or "\\" in asset_path or (
-        asset_path != canonical and re.fullmatch(legacy_pattern, asset_path) is None
+        asset_path not in canonical and re.fullmatch(legacy_pattern, asset_path) is None
     ):
         add(
             findings,
             "error",
             "company-logo-path",
             f"{path_label}.asset_path",
-            "must exactly match the requested company slug's canonical assets/logo.svg or a supported logo-primary.* legacy path",
+            "must exactly match the requested company slug's canonical assets/logo.svg or assets/logo.png, or a supported logo-primary.* legacy path",
         )
 
     if not stable_public_http_url(source_url):
@@ -3650,11 +3668,12 @@ def validate_chinese_display_units(report: str, findings: list[Finding], path: s
     cjk_count = len(re.findall(r"[\u3400-\u9fff]", report))
     if cjk_count < 10:
         return
+    visible_report = visible_markdown_disclosure_text(report)
     matches = sorted(
         {
             match.group(0).strip()
             for pattern in NONLOCALIZED_CHINESE_UNIT_PATTERNS
-            for match in pattern.finditer(report)
+            for match in pattern.finditer(visible_report)
         }
     )
     if matches:
@@ -3721,6 +3740,10 @@ def validate_chinese_display_units(report: str, findings: list[Finding], path: s
             tail = prose[match.start("number"):match.end("number") + 14]
             if not display_unit_present(tail, kind):
                 prose_violations.add(f"{match.group('label')}={match.group('number')}")
+    prose_violations.update(
+        match.group(0).strip()
+        for match in NONLOCALIZED_PER_SHARE_PATTERN.finditer(visible_report)
+    )
     if prose_violations:
         add(
             findings,
