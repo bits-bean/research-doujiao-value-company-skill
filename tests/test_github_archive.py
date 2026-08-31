@@ -25,6 +25,7 @@ from prepare_github_archive import (  # noqa: E402
     TRUSTED_DESKTOP_RUNTIME_NODE_MODULES,
     TRUSTED_DESKTOP_RUNTIME_ROOT,
     TRUSTED_RUNTIME_BUNDLE_VERSION,
+    _decode_png,
     _public_http_url,
     _validate_observed_logo,
     main as archive_main,
@@ -301,6 +302,121 @@ class GithubDeliveryTests(unittest.TestCase):
             + cls.png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
             + cls.png_chunk(b"IEND", b"")
         )
+
+    @classmethod
+    def write_rgba_png(
+        cls,
+        path: Path,
+        width: int,
+        height: int,
+        rows: list[list[tuple[int, int, int, int]]],
+    ) -> None:
+        if len(rows) != height or any(len(row) != width for row in rows):
+            raise ValueError("RGBA fixture rows must match the declared dimensions")
+        ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+        decoded = b"".join(
+            b"\x00" + bytes(channel for pixel in row for channel in pixel)
+            for row in rows
+        )
+        path.write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            + cls.png_chunk(b"IHDR", ihdr)
+            + cls.png_chunk(b"IDAT", zlib.compress(decoded))
+            + cls.png_chunk(b"IEND", b"")
+        )
+
+    def write_center_crop_assets(
+        self,
+        assets: Path,
+        *,
+        width: int = 4,
+        height: int = 2,
+    ) -> tuple[dict, list[list[tuple[int, int, int, int]]], list[list[tuple[int, int, int, int]]]]:
+        assets.mkdir()
+        original_rows = [
+            [
+                ((x + 1) * 20, (y + 1) * 30, (x + y + 1) * 10, 255)
+                for x in range(width)
+            ]
+            for y in range(height)
+        ]
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        output_rows = [row[left : left + side] for row in original_rows[top : top + side]]
+        original = assets / "logo-original.png"
+        output = assets / "logo.png"
+        self.write_rgba_png(original, width, height, original_rows)
+        self.write_rgba_png(output, side, side, output_rows)
+        provenance = {
+            "version": "1.0",
+            "company_slug": "test-company",
+            "operation": "center-square-crop-v1",
+            "source": {
+                "file": "logo-original.png",
+                "page_url": "https://example.com/brand",
+                "asset_url": "https://example.com/logo-original.png",
+                "sha256": file_sha256(original),
+                "size_bytes": original.stat().st_size,
+                "width": width,
+                "height": height,
+            },
+            "selection": {
+                "square_official_candidate_found": False,
+                "search_surfaces": [
+                    {
+                        "surface": surface,
+                        "status": "checked",
+                        "urls": [
+                            "https://example.com/brand"
+                            if surface == "brand-media"
+                            else f"https://example.com/{surface}"
+                        ],
+                        "note": "checked official source",
+                    }
+                    for surface in (
+                        "official-site-runtime-assets",
+                        "investor-relations",
+                        "brand-media",
+                        "official-product-support",
+                    )
+                ],
+                "candidates": [
+                    {
+                        "asset_url": "https://example.com/logo-original.png",
+                        "source_page_url": "https://example.com/brand",
+                        "format": "png",
+                        "width": width,
+                        "height": height,
+                        "gate_status": "pass",
+                        "identity_verified": True,
+                        "is_official": True,
+                        "officiality_evidence": "official brand page identifies the company Logo",
+                        "decision": "selected-crop-source",
+                        "reason": "official non-square source selected after square search",
+                    }
+                ],
+            },
+            "crop": {
+                "left": left,
+                "top": top,
+                "width": side,
+                "height": side,
+                "resampled": False,
+                "padded": False,
+                "stretched": False,
+                "redrawn": False,
+            },
+            "output": {
+                "file": "logo.png",
+                "sha256": file_sha256(output),
+                "size_bytes": output.stat().st_size,
+                "width": side,
+                "height": side,
+            },
+        }
+        write_json(assets / "logo-provenance.json", provenance)
+        return provenance, original_rows, output_rows
 
     @staticmethod
     def set_company_logo(package: Path, asset_path: str | None) -> None:
@@ -1066,7 +1182,7 @@ class GithubDeliveryTests(unittest.TestCase):
             assets = root / "identity-assets"
             assets.mkdir()
             logo = assets / "logo.svg"
-            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>\n', encoding="utf-8")
+            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>\n', encoding="utf-8")
             target = "companies/test-company/assets/logo.svg"
             ready = self.plan(
                 package,
@@ -1082,7 +1198,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 ),
             )
             self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["plan_version"], "9.3")
+            self.assertEqual(ready["plan_version"], "9.4")
             self.assertEqual(ready["identity_assets"]["remote_action"], "create")
             self.assertEqual(ready["identity_assets"]["logo_guard"], "staged")
             self.assertEqual([item["target_path"] for item in ready["identity_assets"]["files"]], [target])
@@ -1127,6 +1243,377 @@ class GithubDeliveryTests(unittest.TestCase):
             self.assertEqual(Path(planned["source_path"]).read_bytes(), original_bytes)
             self.assertEqual(logo.read_bytes(), original_bytes)
 
+    def test_verified_png_center_crop_is_planned_with_external_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            target = "companies/test-company/assets/logo.png"
+            self.set_company_logo(package, target)
+            assets = root / "identity-assets"
+            provenance, _original_rows, _output_rows = self.write_center_crop_assets(assets)
+
+            ready = self.plan(
+                package,
+                schema,
+                lock,
+                write_authorized=True,
+                remote_company_state=self.company_state(),
+                remote_slug_registry_state=self.registry_state(),
+                remote_canonical_state=self.canonical_absent_state(),
+                identity_assets_root=assets,
+                remote_identity_assets_state=self.identity_asset_state(
+                    [{"path": target, "exists": False, "source_path": None, "sha256": None, "size_bytes": None}]
+                ),
+            )
+
+            self.assertTrue(ready["ready_for_write"])
+            self.assertEqual(ready["plan_version"], "9.4")
+            self.assertEqual(ready["identity_assets"]["preparation"], "verified-center-square-crop")
+            self.assertTrue(ready["identity_assets"]["official_source_derived"])
+            self.assertEqual(
+                [item["target_path"] for item in ready["identity_assets"]["files"]],
+                [target],
+            )
+            crop_record = ready["identity_assets"]["crop_provenance"]
+            self.assertEqual(crop_record["record"], provenance)
+            self.assertTrue(crop_record["verification"]["pixel_exact_center_crop"])
+            self.assertEqual(crop_record["original_source_path"], str((assets / "logo-original.png").resolve()))
+            self.assertNotIn("logo-original.png", [Path(item["target_path"]).name for item in ready["identity_assets"]["files"]])
+            self.assertNotIn("logo-provenance.json", [Path(item["target_path"]).name for item in ready["identity_assets"]["files"]])
+
+    def test_non_square_direct_png_requires_verified_crop_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            assets.mkdir()
+            rows = [[(20 * (x + 1), 30 * (y + 1), 10, 255) for x in range(4)] for y in range(2)]
+            self.write_rgba_png(assets / "logo.png", 4, 2, rows)
+            with self.assertRaisesRegex(ArchivePlanError, "official square original or a verified deterministic"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_uses_floor_offset_for_odd_difference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            provenance, _original_rows, _output_rows = self.write_center_crop_assets(
+                assets,
+                width=5,
+                height=2,
+            )
+            plan = self.plan(package, schema, lock, identity_assets_root=assets)
+            self.assertEqual(provenance["crop"], {
+                "left": 1,
+                "top": 0,
+                "width": 2,
+                "height": 2,
+                "resampled": False,
+                "padded": False,
+                "stretched": False,
+                "redrawn": False,
+            })
+            self.assertTrue(plan["identity_assets"]["crop_provenance"]["verification"]["pixel_exact_center_crop"])
+
+    def test_center_crop_proves_non_byte_aligned_one_bit_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            provenance, _original_rows, _output_rows = self.write_center_crop_assets(
+                assets,
+                width=5,
+                height=3,
+            )
+
+            source_bits = (
+                (1, 0, 1, 0, 1),
+                (0, 1, 1, 0, 0),
+                (1, 1, 0, 1, 0),
+            )
+            output_bits = tuple(tuple(row[1:4]) for row in source_bits)
+
+            def write_one_bit_png(path: Path, rows: tuple[tuple[int, ...], ...]) -> None:
+                width = len(rows[0])
+                height = len(rows)
+                decoded = bytearray()
+                for row in rows:
+                    packed = sum(bit << (7 - index) for index, bit in enumerate(row))
+                    decoded.extend((0, packed))
+                path.write_bytes(
+                    b"\x89PNG\r\n\x1a\n"
+                    + self.png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 1, 0, 0, 0, 0))
+                    + self.png_chunk(b"IDAT", zlib.compress(bytes(decoded)))
+                    + self.png_chunk(b"IEND", b"")
+                )
+
+            original = assets / "logo-original.png"
+            output = assets / "logo.png"
+            write_one_bit_png(original, source_bits)
+            write_one_bit_png(output, output_bits)
+            for path, record_key in ((original, "source"), (output, "output")):
+                provenance[record_key]["sha256"] = file_sha256(path)
+                provenance[record_key]["size_bytes"] = path.stat().st_size
+            write_json(assets / "logo-provenance.json", provenance)
+            plan = self.plan(package, schema, lock, identity_assets_root=assets)
+            self.assertTrue(plan["identity_assets"]["crop_provenance"]["verification"]["pixel_exact_center_crop"])
+
+            changed = list(map(list, output_bits))
+            changed[-1][-1] ^= 1
+            write_one_bit_png(output, tuple(tuple(row) for row in changed))
+            provenance["output"]["sha256"] = file_sha256(output)
+            provenance["output"]["size_bytes"] = output.stat().st_size
+            write_json(assets / "logo-provenance.json", provenance)
+            with self.assertRaisesRegex(ArchivePlanError, "pixels are not the exact deterministic center crop"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_rejects_changed_pixels_even_when_output_hash_matches_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            provenance, _original_rows, output_rows = self.write_center_crop_assets(assets)
+            changed_rows = copy.deepcopy(output_rows)
+            changed_rows[0][0] = (255, 0, 0, 255)
+            self.write_rgba_png(assets / "logo.png", 2, 2, changed_rows)
+            provenance["output"]["sha256"] = file_sha256(assets / "logo.png")
+            provenance["output"]["size_bytes"] = (assets / "logo.png").stat().st_size
+            write_json(assets / "logo-provenance.json", provenance)
+            with self.assertRaisesRegex(ArchivePlanError, "pixels are not the exact deterministic center crop"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_rejects_changed_pixel_after_first_visible_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            provenance, _original_rows, output_rows = self.write_center_crop_assets(assets)
+            changed_rows = copy.deepcopy(output_rows)
+            changed_rows[-1][-1] = (255, 0, 0, 255)
+            self.write_rgba_png(assets / "logo.png", 2, 2, changed_rows)
+            provenance["output"]["sha256"] = file_sha256(assets / "logo.png")
+            provenance["output"]["size_bytes"] = (assets / "logo.png").stat().st_size
+            write_json(assets / "logo-provenance.json", provenance)
+            with self.assertRaisesRegex(ArchivePlanError, "pixels are not the exact deterministic center crop"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_rejects_unknown_unsafe_to_copy_png_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            provenance, _original_rows, _output_rows = self.write_center_crop_assets(assets)
+            for filename, record_key in (("logo-original.png", "source"), ("logo.png", "output")):
+                path = assets / filename
+                data = path.read_bytes()
+                idat_type_offset = data.index(b"IDAT")
+                idat_chunk_offset = idat_type_offset - 4
+                path.write_bytes(
+                    data[:idat_chunk_offset]
+                    + self.png_chunk(b"aaAA", b"opaque-copy-semantics")
+                    + data[idat_chunk_offset:]
+                )
+                provenance[record_key]["sha256"] = file_sha256(path)
+                provenance[record_key]["size_bytes"] = path.stat().st_size
+            write_json(assets / "logo-provenance.json", provenance)
+            with self.assertRaisesRegex(ArchivePlanError, "unsafe to copy after cropping"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_rejects_false_box_or_transform_claims(self) -> None:
+        mutations = {
+            "wrong crop box": lambda record: record["crop"].__setitem__("left", 0),
+            "resampled": lambda record: record["crop"].__setitem__("resampled", True),
+            "numeric false": lambda record: record["crop"].__setitem__("padded", 0),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                package, schema, lock = self.make_package(root)
+                self.set_company_logo(package, "companies/test-company/assets/logo.png")
+                assets = root / "identity-assets"
+                provenance, _original_rows, _output_rows = self.write_center_crop_assets(assets)
+                mutate(provenance)
+                write_json(assets / "logo-provenance.json", provenance)
+                with self.assertRaisesRegex(ArchivePlanError, "exact deterministic center-square crop"):
+                    self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_rejects_verified_square_candidate_or_incomplete_search(self) -> None:
+        mutations = {
+            "square candidate": lambda record: record["selection"]["candidates"].append(
+                {
+                    "asset_url": "https://example.com/square-logo.png",
+                    "source_page_url": "https://example.com/brand",
+                    "format": "png",
+                    "width": 64,
+                    "height": 64,
+                    "gate_status": "pass",
+                    "identity_verified": True,
+                    "is_official": True,
+                    "officiality_evidence": "official brand page identifies the company Logo",
+                    "decision": "rejected",
+                    "reason": "would have been usable",
+                }
+            ),
+            "missing surface": lambda record: record["selection"]["search_surfaces"].pop(),
+            "unbound source page": lambda record: record["selection"]["search_surfaces"][2].__setitem__(
+                "urls", ["https://example.com/unrelated-brand-page"]
+            ),
+            "selected source mismatch": lambda record: record["source"].__setitem__(
+                "asset_url", "https://example.com/different-original.png"
+            ),
+            "unverified selected candidate": lambda record: record["selection"]["candidates"][0].__setitem__(
+                "identity_verified", False
+            ),
+            "unsupported passing format": lambda record: record["selection"]["candidates"][0].__setitem__(
+                "format", "other"
+            ),
+            "duplicate candidate": lambda record: record["selection"]["candidates"].append(
+                copy.deepcopy(record["selection"]["candidates"][0])
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                package, schema, lock = self.make_package(root)
+                self.set_company_logo(package, "companies/test-company/assets/logo.png")
+                assets = root / "identity-assets"
+                provenance, _original_rows, _output_rows = self.write_center_crop_assets(assets)
+                mutate(provenance)
+                write_json(assets / "logo-provenance.json", provenance)
+                with self.assertRaises(ArchivePlanError):
+                    self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_center_crop_rejects_already_square_source_and_file_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            self.write_center_crop_assets(assets, width=2, height=2)
+            with self.assertRaisesRegex(ArchivePlanError, "already-square official PNG"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.png")
+            assets = root / "identity-assets"
+            provenance, _original_rows, _output_rows = self.write_center_crop_assets(assets)
+            (assets / "logo.png").unlink()
+            os.link(assets / "logo-original.png", assets / "logo.png")
+            provenance["output"]["sha256"] = file_sha256(assets / "logo.png")
+            provenance["output"]["size_bytes"] = (assets / "logo.png").stat().st_size
+            provenance["output"]["width"] = 4
+            write_json(assets / "logo-provenance.json", provenance)
+            with self.assertRaisesRegex(ArchivePlanError, "must be distinct files"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+    def test_existing_non_square_png_can_be_preserved_without_silent_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            target = "companies/test-company/assets/logo.png"
+            self.set_company_logo(package, target)
+            existing = root / "existing-company.json"
+            existing.write_bytes((package / "company.json").read_bytes())
+            remote_logo = root / "remote-logo.png"
+            rows = [[(20 * (x + 1), 30 * (y + 1), 10, 255) for x in range(4)] for y in range(2)]
+            self.write_rgba_png(remote_logo, 4, 2, rows)
+            plan = self.plan(
+                package,
+                schema,
+                lock,
+                remote_company_state=self.company_state(
+                    exists=True,
+                    files=[{
+                        "path": "company.json",
+                        "sha256": file_sha256(existing),
+                        "size_bytes": existing.stat().st_size,
+                    }],
+                ),
+                remote_slug_registry_state=self.registry_state(slug_exists=True),
+                remote_canonical_state=self.canonical_present_state(existing),
+                remote_identity_assets_state=self.identity_asset_state(
+                    [self.existing_identity_asset(target, remote_logo)]
+                ),
+            )
+            self.assertEqual(plan["identity_assets"]["remote_action"], "preserve")
+            self.assertEqual(plan["identity_assets"]["logo_guard"], "preserve-existing")
+            self.assertEqual(plan["identity_assets"]["preparation"], "not-staged")
+            self.assertFalse(plan["identity_assets"]["official_source_derived"])
+
+    def test_non_square_staged_svg_is_rejected_but_square_original_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.svg")
+            assets = root / "identity-assets"
+            assets.mkdir()
+            logo = assets / "logo.svg"
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><path d="M0 0h2v1z"/></svg>\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "official square original"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path d="M0 0h2v2z"/></svg>\n',
+                encoding="utf-8",
+            )
+            plan = self.plan(package, schema, lock, identity_assets_root=assets)
+            self.assertEqual(plan["identity_assets"]["preparation"], "official-original-square")
+            self.assertIsNone(plan["identity_assets"]["crop_provenance"])
+
+    def test_svg_square_canvas_uses_resolved_outer_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(package, "companies/test-company/assets/logo.svg")
+            assets = root / "identity-assets"
+            assets.mkdir()
+            logo = assets / "logo.svg"
+
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="1in" height="1cm" viewBox="0 0 100 100"><path d="M0 0h100v100z"/></svg>\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "official square original"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" style="width:200px;height:100px" viewBox="0 0 100 100"><path d="M0 0h100v100z"/></svg>\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "canvas dimensions ambiguous"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" style="inline-size:200px;block-size:100px" viewBox="0 0 100 100"><path d="M0 0h100v100z"/></svg>\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "canvas dimensions ambiguous"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 1000 300"><path d="M0 0h1000v300z"/></svg>\n',
+                encoding="utf-8",
+            )
+            plan = self.plan(package, schema, lock, identity_assets_root=assets)
+            self.assertEqual(plan["identity_assets"]["preparation"], "official-original-square")
+
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 100"><path d="M0 0h100v100z"/></svg>\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "context-dependent canvas dimension"):
+                self.plan(package, schema, lock, identity_assets_root=assets)
+
     def test_verified_logo_accepts_safe_inline_class_stylesheet(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             logo = Path(temp_dir) / "logo.svg"
@@ -1149,7 +1636,7 @@ class GithubDeliveryTests(unittest.TestCase):
             assets = root / "identity-assets"
             assets.mkdir()
             logo = assets / "logo.svg"
-            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h2v2z"/></svg>\n', encoding="utf-8")
+            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path d="M0 0h2v2z"/></svg>\n', encoding="utf-8")
             target = "companies/test-company/assets/logo.svg"
             remote_logo = root / "remote-logo.svg"
             remote_logo.write_text(
@@ -1188,7 +1675,7 @@ class GithubDeliveryTests(unittest.TestCase):
             assets = root / "identity-assets"
             assets.mkdir()
             (assets / "logo.svg").write_text(
-                '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h2v2z"/></svg>\n',
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path d="M0 0h2v2z"/></svg>\n',
                 encoding="utf-8",
             )
 
@@ -1258,7 +1745,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 assets = root / "identity-assets"
                 assets.mkdir()
                 (assets / "logo.svg").write_text(
-                    '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h2v2z"/></svg>\n',
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path d="M0 0h2v2z"/></svg>\n',
                     encoding="utf-8",
                 )
                 existing = root / "existing.json"
@@ -1319,7 +1806,7 @@ class GithubDeliveryTests(unittest.TestCase):
             assets.mkdir()
             logo = assets / "logo.svg"
             logo.write_text(
-                '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1z"/></svg>\n',
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>\n',
                 encoding="utf-8",
             )
             kwargs = {
@@ -1449,6 +1936,83 @@ class GithubDeliveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ArchivePlanError, "invalid chunk type"):
                 _validate_observed_logo(invalid_chunk, "companies/test-company/logo-primary.png")
 
+            animated = root / "animated.png"
+            animated.write_bytes(
+                signature
+                + self.png_chunk(b"IHDR", rgba_ihdr)
+                + self.png_chunk(b"acTL", struct.pack(">II", 1, 0))
+                + self.png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
+                + iend
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "animated PNG chunks"):
+                _validate_observed_logo(animated, "companies/test-company/logo-primary.png")
+
+            noncontiguous_after_empty_idat = root / "noncontiguous-after-empty-idat.png"
+            noncontiguous_after_empty_idat.write_bytes(
+                signature
+                + self.png_chunk(b"IHDR", rgba_ihdr)
+                + self.png_chunk(b"IDAT", b"")
+                + self.png_chunk(b"tEXt", b"note\x00value")
+                + self.png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\xff"))
+                + iend
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "IDAT ordering"):
+                _validate_observed_logo(
+                    noncontiguous_after_empty_idat,
+                    "companies/test-company/logo-primary.png",
+                )
+
+            gray_ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+            invalid_transparency_sample = root / "invalid-transparency-sample.png"
+            invalid_transparency_sample.write_bytes(
+                signature
+                + self.png_chunk(b"IHDR", gray_ihdr)
+                + self.png_chunk(b"tRNS", struct.pack(">H", 256))
+                + self.png_chunk(b"IDAT", zlib.compress(b"\x00\xff"))
+                + iend
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "transparency sample is out of range"):
+                _validate_observed_logo(
+                    invalid_transparency_sample,
+                    "companies/test-company/logo-primary.png",
+                )
+
+            truecolor_ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+            palette_after_transparency = root / "palette-after-transparency.png"
+            palette_after_transparency.write_bytes(
+                signature
+                + self.png_chunk(b"IHDR", truecolor_ihdr)
+                + self.png_chunk(b"tRNS", b"\x00\x00\x00\x00\x00\x00")
+                + self.png_chunk(b"PLTE", b"\x00\x00\x00")
+                + self.png_chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00"))
+                + iend
+            )
+            with self.assertRaisesRegex(ArchivePlanError, "invalid PLTE"):
+                _validate_observed_logo(
+                    palette_after_transparency,
+                    "companies/test-company/logo-primary.png",
+                )
+
+    def test_png_decoder_keeps_large_high_compression_rows_packed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logo = Path(temp_dir) / "large-solid.png"
+            width = 1024
+            height = 1024
+            ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+            decoded = (b"\x00" + b"\x20\x80\xff\xff" * width) * height
+            logo.write_bytes(
+                b"\x89PNG\r\n\x1a\n"
+                + self.png_chunk(b"IHDR", ihdr)
+                + self.png_chunk(b"IDAT", zlib.compress(decoded, 9))
+                + self.png_chunk(b"IEND", b"")
+            )
+            self.assertLess(logo.stat().st_size, 512_000)
+            raster = _decode_png(logo)
+            self.assertEqual((raster.width, raster.height), (width, height))
+            self.assertEqual(len(raster.rows), height)
+            self.assertIsInstance(raster.rows[0], bytes)
+            self.assertEqual(len(raster.rows[0]), width * 4)
+
     def test_logo_staging_rejects_active_svg_and_extra_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1531,7 +2095,7 @@ class GithubDeliveryTests(unittest.TestCase):
                         _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
             logo.write_text(
-                '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g"><stop offset="0"/></linearGradient><clipPath id="c"><rect width="1" height="1"/></clipPath></defs><path clip-path="url(#c)" fill="url(#g)" d="M0 0h1v1z"/></svg>\n',
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><defs><linearGradient id="g"><stop offset="0"/></linearGradient><clipPath id="c"><rect width="1" height="1"/></clipPath></defs><path clip-path="url(#c)" fill="url(#g)" d="M0 0h1v1z"/></svg>\n',
                 encoding="utf-8",
             )
             accepted = self.plan(package, schema, lock, identity_assets_root=assets)

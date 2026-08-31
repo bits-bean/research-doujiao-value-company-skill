@@ -49,9 +49,9 @@
 
 本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；验证报告与 manifest 锁定同一精确 `company_slug`。网站所需公司 Logo 另按 [identity-assets.md](identity-assets.md) 验证，并保持在 manifest 外；研究包 Markdown / JSON 不嵌入任何媒体。只有用户另行要求内容生产时才把冻结包作为输入交给 `$produce-doujiao-value-content`。下游继续验证不变的 `research_protocol` 与 Schema 锁，并可忽略不认识但不改变数据语义的 v2 顶层扩展；当前研究侧还必须验证 `integrity_profile` 与 `execution_integrity`，不能因旧下游只读兼容块而省略。
 
-公司 Logo 是唯一视觉素材来源例外：先验证 system 的现有 canonical 文件；缺失或公司重塑品牌时，只从公司官网、Investor Relations 或官方品牌中心取得官方原始 SVG 或 PNG Logo，并按 `identity-assets.md` 校验来源、canonical 路径和对应格式的安全性。不得转换、包裹、清洗、生成、描摹或重绘 Logo。产品、服务、人物、门店、业务场景、封面主视觉、背景及其他素材不属于本 Skill 的来源路由，由 `$produce-doujiao-value-content` 在具体内容任务内自行取得并建立素材台账。
+公司 Logo 是唯一视觉素材来源例外：先验证并保留 system 的现有 canonical 文件，包括仍有效的非正方形 Logo；缺失或已获替换授权时，只从公司官网、Investor Relations、官方品牌 / 媒体资料及适用的官方产品 / 支持页面取得候选，并按 `identity-assets.md` 校验来源、画布尺寸、canonical 路径和安全性。官方原始正方形 SVG / PNG 优先；只有穷尽且记录官方正方形候选后，才可把通过门禁的官方非正方形 PNG 按 `center-square-crop-v1` 中心裁剪为 official-source-derived PNG，并保留官方原件、来源 / 候选台账、裁剪框和输入 / 输出摘要。除该逐像素证明的 PNG 中心裁剪外，不得转换、包裹、清洗、生成、描摹或重绘 Logo。产品、服务、人物、门店、业务场景、封面主视觉、背景及其他素材不属于本 Skill 的来源路由，由 `$produce-doujiao-value-content` 在具体内容任务内自行取得并建立素材台账。
 
-三份兼容研究协议文档中保留的 `assets/logo.svg` 是历史 v2 发行路径表述，不改写其 `research_protocol` 元组。当前 `execution-bound-v1` 的活动规则以 `identity-assets.md` 为准：新 canonical Logo 使用与官方原始字节一致的 `assets/logo.svg` 或 `assets/logo.png`。
+三份兼容研究协议文档中保留的 `assets/logo.svg` 是历史 v2 发行路径表述，不改写其 `research_protocol` 元组。当前 `execution-bound-v1` 的活动规则以 `identity-assets.md` 为准：新 canonical Logo 使用官方原始正方形 `assets/logo.svg` / `assets/logo.png`，或唯一裁剪例外产生、已通过 provenance 与逐像素门禁的 official-source-derived `assets/logo.png`。
 
 ## 兼容锁与完整执行锁
 
