@@ -109,7 +109,7 @@ system 图表层与内容层只接收同一冻结版本的报告、`company.json
 
 - GitHub 当前研究包固定为 `companies/<company-slug>/`，报告、`company.json`、台账、验证结果与 manifest 全部直接放在该目录；不得增加日期、`-vN` 或其他版本子目录，远端版本只由 Git 历史追踪。
 - 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。已有且与 `company.json` 一致的 Logo 原样保留；缺失或明确授权替换的 Logo 按 `identity-assets.md` 验证后与研究文件进入同一原子提交。
-- 新 canonical Logo 固定使用 `companies/<slug>/assets/logo.svg`；已有 `logo-primary.svg` 或 `logo-primary.png` 只作为 legacy 沿用，其他 legacy 格式先迁移并重新验证。最终差异白名单只包含冻结 manifest 声明的直接研究文件、`research-manifest.json`，以及本次显式暂存且通过门禁的这一个 Logo。任何 `images/*`、产品图、图片 manifest、封面、背景或其他素材仍禁止进入研究归档。
+- 新 canonical Logo 固定使用与官方原始字节格式一致的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`；已有 `logo-primary.svg` 或 `logo-primary.png` 只作为 legacy 沿用。不得在 SVG 与 PNG 之间转换、包裹、清洗或重绘。最终差异白名单只包含冻结 manifest 声明的直接研究文件、`research-manifest.json`，以及本次显式暂存且通过门禁的这一个 Logo。任何 `images/*`、产品图、图片 manifest、封面、背景或其他素材仍禁止进入研究归档。
 - 远端已有 Logo 只能精确沿用或经另行授权替换；若已确认没有可验证的官方 Logo，可在完整记录缺口后用独立的“清除旧引用”授权把四元组改为精确空哨兵。清除只更新 `company.json` 引用，不删除旧文件，也不能代替 Logo 替换授权。
 - system 中尚不存在的新公司若仍为 Logo 空哨兵，普通“提交到 GitHub”授权必须停止；只有用户另外明确说“允许无 Logo 提交”或语义完全等价的话，才可使用 `--confirm-new-company-without-logo`。`--allow-warnings`、人工接受或普通写入授权均不得推导该确认。
 - 禁止把任何网站截图、渠道成品、`images/` 生成图、背景、比例模板或平台文案作为研究提交的一部分。

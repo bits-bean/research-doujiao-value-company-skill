@@ -49,7 +49,9 @@
 
 本 Skill 不读取平台规范、图表模板或渠道视觉规范，不调用 system 图表代码 / 接口，不生成网站或社媒图片，也不生产或发布传播内容。研究包冻结后，交付同一版本的报告、`company.json`、证据 / 计算台账、完整度说明和 v2 manifest；验证报告与 manifest 锁定同一精确 `company_slug`。网站所需公司 Logo 另按 [identity-assets.md](identity-assets.md) 验证，并保持在 manifest 外；研究包 Markdown / JSON 不嵌入任何媒体。只有用户另行要求内容生产时才把冻结包作为输入交给 `$produce-doujiao-value-content`。下游继续验证不变的 `research_protocol` 与 Schema 锁，并可忽略不认识但不改变数据语义的 v2 顶层扩展；当前研究侧还必须验证 `integrity_profile` 与 `execution_integrity`，不能因旧下游只读兼容块而省略。
 
-公司 Logo 是唯一视觉素材来源例外：先验证 system 的现有 canonical 文件；缺失或公司重塑品牌时，只从公司官网、Investor Relations 或官方品牌中心取得真实 Logo，并按 `identity-assets.md` 校验来源、路径和 SVG 安全性。不得生成或重绘 Logo。产品、服务、人物、门店、业务场景、封面主视觉、背景及其他素材不属于本 Skill 的来源路由，由 `$produce-doujiao-value-content` 在具体内容任务内自行取得并建立素材台账。
+公司 Logo 是唯一视觉素材来源例外：先验证 system 的现有 canonical 文件；缺失或公司重塑品牌时，只从公司官网、Investor Relations 或官方品牌中心取得官方原始 SVG 或 PNG Logo，并按 `identity-assets.md` 校验来源、canonical 路径和对应格式的安全性。不得转换、包裹、清洗、生成、描摹或重绘 Logo。产品、服务、人物、门店、业务场景、封面主视觉、背景及其他素材不属于本 Skill 的来源路由，由 `$produce-doujiao-value-content` 在具体内容任务内自行取得并建立素材台账。
+
+三份兼容研究协议文档中保留的 `assets/logo.svg` 是历史 v2 发行路径表述，不改写其 `research_protocol` 元组。当前 `execution-bound-v1` 的活动规则以 `identity-assets.md` 为准：新 canonical Logo 使用与官方原始字节一致的 `assets/logo.svg` 或 `assets/logo.png`。
 
 ## 兼容锁与完整执行锁
 

@@ -69,8 +69,29 @@ TRUSTED_RUNTIME_ROOT = Path("/opt/codex/runtimes/codex-primary-runtime")
 TRUSTED_RUNTIME_NODE = TRUSTED_RUNTIME_ROOT / "dependencies/node/bin/node"
 TRUSTED_RUNTIME_NODE_MODULES = TRUSTED_RUNTIME_ROOT / "dependencies/node/node_modules"
 TRUSTED_RUNTIME_NODE_SHA256 = "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12"
+TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION = "26.818.41509"
+TRUSTED_DESKTOP_RUNTIME_ROOT = Path("/Applications/ChatGPT.app/Contents/Resources/cua_node")
+TRUSTED_DESKTOP_RUNTIME_NODE = TRUSTED_DESKTOP_RUNTIME_ROOT / "bin/node"
+TRUSTED_DESKTOP_RUNTIME_NODE_MODULES = TRUSTED_DESKTOP_RUNTIME_ROOT / "lib/node_modules"
+TRUSTED_DESKTOP_RUNTIME_NODE_SHA256 = "94d7ccb9c512a45711fb83fa9c270b36abfb1b3dc187b07ecd3c45eb84d8ccd1"
 TRUSTED_SHARP_ENTRY_SHA256 = "d69f275bc49fcd2a6188b26b35c986d4db32a1b008653fef88adb4598688232a"
 TRUSTED_SHARP_PACKAGE_SHA256 = "0f3a7e7eb4f22978dfde46e6c7c6ecf3b86b43e33c3d366de88b334b4610c3ff"
+TRUSTED_RUNTIME_PROFILES = (
+    {
+        "bundle_version": TRUSTED_RUNTIME_BUNDLE_VERSION,
+        "runtime_root": TRUSTED_RUNTIME_ROOT,
+        "node": TRUSTED_RUNTIME_NODE,
+        "node_modules": TRUSTED_RUNTIME_NODE_MODULES,
+        "node_sha256": TRUSTED_RUNTIME_NODE_SHA256,
+    },
+    {
+        "bundle_version": TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION,
+        "runtime_root": TRUSTED_DESKTOP_RUNTIME_ROOT,
+        "node": TRUSTED_DESKTOP_RUNTIME_NODE,
+        "node_modules": TRUSTED_DESKTOP_RUNTIME_NODE_MODULES,
+        "node_sha256": TRUSTED_DESKTOP_RUNTIME_NODE_SHA256,
+    },
+)
 SENSITIVE_PATTERNS = (
     (
         "private-key",
@@ -287,14 +308,17 @@ def _company_logo_asset_path(company: dict[str, Any], company_slug: str) -> str 
     company_root = f"companies/{company_slug}/"
     if not value.startswith(company_root):
         raise ArchivePlanError("company logo asset_path belongs to a different company")
-    canonical = f"companies/{company_slug}/assets/logo.svg"
+    canonical = {
+        f"companies/{company_slug}/assets/logo.svg",
+        f"companies/{company_slug}/assets/logo.png",
+    }
     legacy = re.fullmatch(
         rf"companies/{re.escape(company_slug)}/logo-primary\.(?:{LEGACY_LOGO_EXTENSIONS})",
         value,
     )
-    if value != canonical and legacy is None:
+    if value not in canonical and legacy is None:
         raise ArchivePlanError(
-            "company logo asset_path must be canonical assets/logo.svg or an existing logo-primary.* legacy path"
+            "company logo asset_path must be canonical assets/logo.svg or assets/logo.png, or an existing logo-primary.* legacy path"
         )
     _public_http_url(logo.get("source_url"), "company_logo.source_url")
     if not _nonblank(logo.get("alt")) or logo.get("is_official") is not True:
@@ -312,9 +336,12 @@ def _untrusted_existing_logo(company: dict[str, Any], company_slug: str) -> tupl
     path = Path(value)
     if path.is_absolute() or ".." in path.parts or value != path.as_posix():
         return None, logo
-    canonical = f"companies/{company_slug}/assets/logo.svg"
+    canonical = {
+        f"companies/{company_slug}/assets/logo.svg",
+        f"companies/{company_slug}/assets/logo.png",
+    }
     legacy = re.fullmatch(rf"companies/{re.escape(company_slug)}/logo-primary\.[A-Za-z0-9]+", value)
-    return (value if value == canonical or legacy is not None else None), logo
+    return (value if value in canonical or legacy is not None else None), logo
 
 
 def _validate_svg(path: Path) -> None:
@@ -1106,7 +1133,11 @@ def _validate_svg_render(path: Path) -> None:
     bundle_version = os.environ.get("CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION")
     if not runtime_root_value or not node_value or not runtime_modules_value or not bundle_version:
         raise ArchivePlanError("trusted SVG raster runtime is unavailable")
-    if bundle_version != TRUSTED_RUNTIME_BUNDLE_VERSION:
+    version_profiles = [
+        profile for profile in TRUSTED_RUNTIME_PROFILES
+        if bundle_version == profile["bundle_version"]
+    ]
+    if not version_profiles:
         raise ArchivePlanError("trusted SVG raster runtime bundle version does not match the locked release")
     runtime_root = Path(runtime_root_value)
     node_path = Path(node_value)
@@ -1135,11 +1166,16 @@ def _validate_svg_render(path: Path) -> None:
     runtime_root = resolved_runtime_root
     node_path = resolved_node_path
     runtime_modules = resolved_runtime_modules
-    if (
-        runtime_root != TRUSTED_RUNTIME_ROOT
-        or node_path != TRUSTED_RUNTIME_NODE
-        or runtime_modules != TRUSTED_RUNTIME_NODE_MODULES
-    ):
+    runtime_profile = next(
+        (
+            profile for profile in version_profiles
+            if runtime_root == profile["runtime_root"]
+            and node_path == profile["node"]
+            and runtime_modules == profile["node_modules"]
+        ),
+        None,
+    )
+    if runtime_profile is None:
         raise ArchivePlanError("trusted SVG raster runtime paths do not match the locked platform release")
     try:
         node_path.relative_to(runtime_root)
@@ -1158,7 +1194,7 @@ def _validate_svg_render(path: Path) -> None:
     except ValueError as exc:
         raise ArchivePlanError("trusted Sharp renderer entry escapes the module root") from exc
     if (
-        file_sha256(node_path) != TRUSTED_RUNTIME_NODE_SHA256
+        file_sha256(node_path) != runtime_profile["node_sha256"]
         or file_sha256(sharp_entry) != TRUSTED_SHARP_ENTRY_SHA256
         or file_sha256(sharp_package) != TRUSTED_SHARP_PACKAGE_SHA256
     ):
@@ -1257,16 +1293,18 @@ const challenge = process.argv[3];
 
 
 def _validate_observed_logo(path: Path, target_path: str) -> None:
+    if path.stat().st_size <= 0 or path.stat().st_size > 512_000:
+        raise ArchivePlanError("company Logo must be nonempty and no larger than 512,000 bytes")
     suffix = Path(target_path).suffix.lower()
     if suffix == ".svg":
         _validate_svg(path)
         scan_sensitive_material([path])
         return
     if suffix != ".png":
-        raise ArchivePlanError("observed legacy company Logo must be SVG or PNG")
+        raise ArchivePlanError("observed company Logo must be SVG or PNG")
     data = path.read_bytes()
     if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise ArchivePlanError("observed legacy company Logo is not a PNG")
+        raise ArchivePlanError("observed company Logo is not a PNG")
     position = 8
     seen_ihdr = False
     seen_idat = False
@@ -1287,23 +1325,23 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
         chunk_type = data[position + 4 : position + 8]
         chunk_end = position + 12 + length
         if length > 512_000 or chunk_end > len(data):
-            raise ArchivePlanError("observed legacy PNG has a truncated or oversized chunk")
+            raise ArchivePlanError("observed PNG has a truncated or oversized chunk")
         payload = data[position + 8 : position + 8 + length]
         recorded_crc = struct.unpack(">I", data[position + 8 + length : chunk_end])[0]
         if zlib.crc32(chunk_type + payload) & 0xFFFFFFFF != recorded_crc:
-            raise ArchivePlanError("observed legacy PNG has an invalid chunk checksum")
+            raise ArchivePlanError("observed PNG has an invalid chunk checksum")
         if re.fullmatch(rb"[A-Za-z]{4}", chunk_type) is None or not 65 <= chunk_type[2] <= 90:
-            raise ArchivePlanError("observed legacy PNG contains an invalid chunk type")
+            raise ArchivePlanError("observed PNG contains an invalid chunk type")
         if chunk_type == b"IHDR" and seen_ihdr:
-            raise ArchivePlanError("observed legacy PNG contains duplicate IHDR")
+            raise ArchivePlanError("observed PNG contains duplicate IHDR")
         if chunk_type == b"PLTE" and seen_plte:
-            raise ArchivePlanError("observed legacy PNG contains duplicate PLTE")
+            raise ArchivePlanError("observed PNG contains duplicate PLTE")
         if not seen_ihdr:
             if chunk_type != b"IHDR" or length != 13:
-                raise ArchivePlanError("observed legacy PNG must begin with IHDR")
+                raise ArchivePlanError("observed PNG must begin with IHDR")
             width, height = struct.unpack(">II", payload[:8])
             if width <= 0 or height <= 0 or width > 8192 or height > 8192 or width * height > 16_000_000:
-                raise ArchivePlanError("observed legacy PNG has invalid Logo dimensions")
+                raise ArchivePlanError("observed PNG has invalid Logo dimensions")
             bit_depth, color_type, compression, filter_method, interlace = payload[8:13]
             legal_depths = {
                 0: {1, 2, 4, 8, 16},
@@ -1318,12 +1356,12 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
                 or filter_method != 0
                 or interlace != 0
             ):
-                raise ArchivePlanError("observed legacy PNG uses unsupported or invalid IHDR encoding")
+                raise ArchivePlanError("observed PNG uses unsupported or invalid IHDR encoding")
             channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
             scanline_size = (width * channels * bit_depth + 7) // 8
             expected_decoded_size = (scanline_size + 1) * height
             if expected_decoded_size <= 0 or expected_decoded_size > 64_000_000:
-                raise ArchivePlanError("observed legacy PNG expands beyond the safe Logo limit")
+                raise ArchivePlanError("observed PNG expands beyond the safe Logo limit")
             png_height = height
             png_width = width
             png_color_type = color_type
@@ -1339,12 +1377,12 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
                 or length % 3
                 or (png_color_type == 3 and palette_entries > 2**png_bit_depth)
             ):
-                raise ArchivePlanError("observed legacy PNG has an invalid PLTE")
+                raise ArchivePlanError("observed PNG has an invalid PLTE")
             palette = payload
             seen_plte = True
         elif chunk_type == b"tRNS":
             if transparency is not None or seen_idat:
-                raise ArchivePlanError("observed legacy PNG has invalid or duplicate transparency data")
+                raise ArchivePlanError("observed PNG has invalid or duplicate transparency data")
             palette_entries = len(palette) // 3 if palette is not None else 0
             valid_transparency = (
                 (png_color_type == 0 and length == 2)
@@ -1352,26 +1390,26 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
                 or (png_color_type == 3 and seen_plte and 0 < length <= palette_entries)
             )
             if not valid_transparency:
-                raise ArchivePlanError("observed legacy PNG has invalid transparency data")
+                raise ArchivePlanError("observed PNG has invalid transparency data")
             transparency = payload
         elif chunk_type == b"IDAT":
             if idat_ended or (png_color_type == 3 and not seen_plte):
-                raise ArchivePlanError("observed legacy PNG has invalid IDAT ordering")
+                raise ArchivePlanError("observed PNG has invalid IDAT ordering")
             seen_idat = seen_idat or bool(payload)
             compressed.extend(payload)
         elif chunk_type == b"IEND":
             if length != 0 or chunk_end != len(data):
-                raise ArchivePlanError("observed legacy PNG has an invalid IEND")
+                raise ArchivePlanError("observed PNG has an invalid IEND")
             seen_iend = True
             position = chunk_end
             break
         elif seen_idat:
             idat_ended = True
         if chunk_type not in {b"IHDR", b"PLTE", b"IDAT", b"IEND"} and chunk_type[:1].isupper():
-            raise ArchivePlanError("observed legacy PNG contains an unknown critical chunk")
+            raise ArchivePlanError("observed PNG contains an unknown critical chunk")
         position = chunk_end
     if not (seen_ihdr and seen_idat and seen_iend):
-        raise ArchivePlanError("observed legacy PNG lacks complete image data")
+        raise ArchivePlanError("observed PNG lacks complete image data")
     try:
         decompressor = zlib.decompressobj()
         decoded = decompressor.decompress(bytes(compressed), expected_decoded_size + 1)
@@ -1379,17 +1417,17 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
         if remaining > 0:
             decoded += decompressor.flush(remaining)
     except zlib.error as exc:
-        raise ArchivePlanError(f"observed legacy PNG has invalid compressed image data: {exc}") from exc
+        raise ArchivePlanError(f"observed PNG has invalid compressed image data: {exc}") from exc
     if (
         not decompressor.eof
         or decompressor.unused_data
         or decompressor.unconsumed_tail
         or len(decoded) != expected_decoded_size
     ):
-        raise ArchivePlanError("observed legacy PNG compressed image data is incomplete or excessive")
+        raise ArchivePlanError("observed PNG compressed image data is incomplete or excessive")
     for row in range(png_height):
         if decoded[row * (scanline_size + 1)] > 4:
-            raise ArchivePlanError("observed legacy PNG contains an invalid scanline filter")
+            raise ArchivePlanError("observed PNG contains an invalid scanline filter")
 
     bytes_per_pixel = max(1, (png_bit_depth * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[png_color_type] + 7) // 8)
 
@@ -1457,7 +1495,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
     for row in rows:
         samples = unpack_samples(row)
         if len(samples) != png_width * channels:
-            raise ArchivePlanError("observed legacy PNG pixel samples are incomplete")
+            raise ArchivePlanError("observed PNG pixel samples are incomplete")
         for index in range(0, len(samples), channels):
             pixel = samples[index : index + channels]
             if png_color_type == 6:
@@ -1467,7 +1505,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
             elif png_color_type == 3:
                 palette_index = pixel[0]
                 if palette_index >= palette_entries:
-                    raise ArchivePlanError("observed legacy PNG references a missing palette entry")
+                    raise ArchivePlanError("observed PNG references a missing palette entry")
                 alpha = transparency[palette_index] if transparency is not None and palette_index < len(transparency) else 255
                 visible = alpha > 0
             elif png_color_type == 0:
@@ -1480,7 +1518,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
         if visible_pixel:
             break
     if not visible_pixel:
-        raise ArchivePlanError("observed legacy PNG contains no visible Logo pixel")
+        raise ArchivePlanError("observed PNG contains no visible Logo pixel")
 
 
 def prepare_identity_asset_files(
@@ -1489,7 +1527,7 @@ def prepare_identity_asset_files(
     company_slug: str,
     company: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Validate the single allowed staged visual asset: canonical logo.svg."""
+    """Validate the single allowed staged visual asset: canonical logo.svg or logo.png."""
     if staging_root is None:
         return []
     if staging_root.is_symlink() or not staging_root.is_dir():
@@ -1498,19 +1536,27 @@ def prepare_identity_asset_files(
     entries = list(staging_root.iterdir())
     if any(item.is_symlink() or not item.is_file() for item in entries):
         raise ArchivePlanError("identity assets root may contain only direct non-symlink files")
-    if {item.name for item in entries} != {"logo.svg"}:
-        raise ArchivePlanError("identity assets root must contain exactly one logo.svg and no other assets")
+    declared_path = _company_logo_asset_path(company, company_slug)
+    canonical_paths = {
+        f"companies/{company_slug}/assets/logo.svg",
+        f"companies/{company_slug}/assets/logo.png",
+    }
+    if declared_path not in canonical_paths:
+        raise ArchivePlanError(
+            "staged company Logo must exactly match company.json's canonical assets/logo.svg or assets/logo.png path"
+        )
+    expected_name = Path(declared_path).name
+    if {item.name for item in entries} != {expected_name}:
+        raise ArchivePlanError(
+            f"identity assets root must contain exactly one {expected_name} and no other assets"
+        )
 
-    canonical = f"companies/{company_slug}/assets/logo.svg"
-    if _company_logo_asset_path(company, company_slug) != canonical:
-        raise ArchivePlanError("staged logo.svg must exactly match company.json's canonical logo asset_path")
-    logo = _safe_regular_file(staging_root / "logo.svg", "logo.svg")
-    _validate_svg(logo)
-    scan_sensitive_material([logo])
+    logo = _safe_regular_file(staging_root / expected_name, expected_name)
+    _validate_observed_logo(logo, declared_path)
     return [
         {
             "source_path": str(logo),
-            "target_path": canonical,
+            "target_path": declared_path,
             "sha256": file_sha256(logo),
             "size_bytes": logo.stat().st_size,
         }
@@ -2080,7 +2126,7 @@ def build_archive_plan(
         }
     )
     return {
-        "plan_version": "9.2",
+        "plan_version": "9.3",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -2168,7 +2214,7 @@ def main() -> int:
     parser.add_argument(
         "--identity-assets-root",
         type=Path,
-        help="Optional staging directory outside the frozen package containing exactly one verified logo.svg",
+        help="Optional staging directory outside the frozen package containing exactly one verified logo.svg or logo.png",
     )
     parser.add_argument(
         "--remote-identity-assets-state",
