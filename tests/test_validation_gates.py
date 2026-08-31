@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,23 @@ from validate_research_package import (  # noqa: E402
 
 
 class ValidationGateTests(unittest.TestCase):
+    def test_write_json_uses_deterministic_lf_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "result.json"
+
+            with patch(
+                "validate_research_package.tempfile.NamedTemporaryFile",
+                wraps=tempfile.NamedTemporaryFile,
+            ) as named_temporary_file:
+                write_json(output, {"company": "腾讯", "status": "frozen"})
+
+            encoded = output.read_bytes()
+            self.assertEqual(
+                encoded,
+                '{\n  "company": "腾讯",\n  "status": "frozen"\n}\n'.encode("utf-8"),
+            )
+            self.assertEqual(named_temporary_file.call_args.kwargs["newline"], "\n")
+
     def make_vacuous_package(self, root: Path) -> Path:
         schema = {
             "$schema": EXPECTED_SCHEMA_DRAFT,

@@ -28,8 +28,8 @@
   "execution_integrity": {
     "profile": "execution-bound-v1",
     "normative_digest_sha256": "6b33b437a28df8480ba9835e256620f9a09fda16ad284529a1473eb5d2518b7b",
-    "toolchain_digest_sha256": "5e5109babb7f69b51c80286bf3152bfc987a742146de601c98b3cd6b2c1a21f9",
-    "bundle_digest_sha256": "7b5babbe5133d3ac3d5342ffcecf9462e1ab624f9576c7e5bd9fd75f1c57cf2e",
+    "toolchain_digest_sha256": "8cade52caa4e597eddb0e72e7693a6128fb7e4570c52833ee129e2c59627c805",
+    "bundle_digest_sha256": "19c7679f775be392776284fcaf4b6e425220c835c3f63e73aff04dcfbc908dc5",
     "artifacts": [
       {
         "path": "SKILL.md",
@@ -136,8 +136,8 @@
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "4f45ea52367dae8bed9acf608463692d590fca93c07f508c8a94a2e989f66a4f",
-        "size_bytes": 281712
+        "sha256": "886156bc73b54f8aab93e96ae65a4ff0d66a7f1a969c80d2afb4bfb0d61b2ad3",
+        "size_bytes": 281773
       },
       {
         "path": "scripts/validate_research_process.py",
