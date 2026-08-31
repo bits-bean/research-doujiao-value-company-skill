@@ -15,6 +15,7 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zlib
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -63,7 +64,77 @@ CANONICAL_STATE_KEYS = {"repository", "branch", "base_head", "path", "exists", "
 IDENTITY_ASSET_STATE_KEYS = {"repository", "branch", "base_head", "company_slug", "assets"}
 IDENTITY_ASSET_ENTRY_KEYS = {"path", "exists", "source_path", "sha256", "size_bytes"}
 LEGACY_LOGO_EXTENSIONS = "png|svg"
+LOGO_CROP_OPERATION = "center-square-crop-v1"
+LOGO_CROP_STAGING_FILES = {"logo.png", "logo-original.png", "logo-provenance.json"}
+LOGO_SEARCH_SURFACES = {
+    "official-site-runtime-assets",
+    "investor-relations",
+    "brand-media",
+    "official-product-support",
+}
+LOGO_PROVENANCE_KEYS = {
+    "version",
+    "company_slug",
+    "operation",
+    "source",
+    "selection",
+    "crop",
+    "output",
+}
+LOGO_PROVENANCE_SOURCE_KEYS = {
+    "file",
+    "page_url",
+    "asset_url",
+    "sha256",
+    "size_bytes",
+    "width",
+    "height",
+}
+LOGO_PROVENANCE_SELECTION_KEYS = {
+    "square_official_candidate_found",
+    "search_surfaces",
+    "candidates",
+}
+LOGO_PROVENANCE_SEARCH_SURFACE_KEYS = {"surface", "status", "urls", "note"}
+LOGO_PROVENANCE_CANDIDATE_KEYS = {
+    "asset_url",
+    "source_page_url",
+    "format",
+    "width",
+    "height",
+    "gate_status",
+    "identity_verified",
+    "is_official",
+    "officiality_evidence",
+    "decision",
+    "reason",
+}
+LOGO_PROVENANCE_CROP_KEYS = {
+    "left",
+    "top",
+    "width",
+    "height",
+    "resampled",
+    "padded",
+    "stretched",
+    "redrawn",
+}
+LOGO_PROVENANCE_OUTPUT_KEYS = {"file", "sha256", "size_bytes", "width", "height"}
 SVG_ROOT_TAG = "{http://www.w3.org/2000/svg}svg"
+ANIMATED_PNG_CHUNKS = {b"acTL", b"fcTL", b"fdAT"}
+CROP_UNSAFE_COPY_ALLOWED_CHUNKS = {
+    b"PLTE",
+    b"tRNS",
+    b"cHRM",
+    b"gAMA",
+    b"iCCP",
+    b"sBIT",
+    b"sRGB",
+    b"bKGD",
+    b"cICP",
+    b"mDCV",
+    b"cLLI",
+}
 TRUSTED_RUNTIME_BUNDLE_VERSION = "26.812.11052"
 TRUSTED_RUNTIME_ROOT = Path("/opt/codex/runtimes/codex-primary-runtime")
 TRUSTED_RUNTIME_NODE = TRUSTED_RUNTIME_ROOT / "dependencies/node/bin/node"
@@ -122,6 +193,29 @@ SENSITIVE_PATTERNS = (
 
 class ArchivePlanError(ValueError):
     """Raised when a package cannot be safely planned for GitHub delivery."""
+
+
+@dataclass(frozen=True)
+class LogoGeometry:
+    """Canvas geometry verified from the original Logo file."""
+
+    format: str
+    width: float
+    height: float
+    is_square: bool
+
+
+@dataclass(frozen=True)
+class PngRaster:
+    """Validated non-interlaced PNG samples used to prove a pixel-exact crop."""
+
+    width: int
+    height: int
+    bit_depth: int
+    color_type: int
+    channels: int
+    rows: tuple[bytes, ...]
+    preserved_chunks: tuple[tuple[str, bytes, bytes], ...]
 
 
 def _safe_regular_file(path: Path, label: str) -> Path:
@@ -344,7 +438,7 @@ def _untrusted_existing_logo(company: dict[str, Any], company_slug: str) -> tupl
     return (value if value in canonical or legacy is not None else None), logo
 
 
-def _validate_svg(path: Path) -> None:
+def _validate_svg(path: Path) -> LogoGeometry:
     if path.stat().st_size <= 0 or path.stat().st_size > 512_000:
         raise ArchivePlanError("logo.svg must be nonempty and no larger than 512,000 bytes")
     try:
@@ -576,6 +670,10 @@ def _validate_svg(path: Path) -> None:
         rf"({number_pattern.pattern})(?:px|pt|pc|mm|cm|in|em|ex|%)?",
         re.I,
     )
+    canvas_length_pattern = re.compile(
+        rf"({number_pattern.pattern})(px|pt|pc|mm|cm|in)?",
+        re.I,
+    )
 
     def parsed_length(value: Any) -> float | None:
         if not isinstance(value, str):
@@ -589,11 +687,46 @@ def _validate_svg(path: Path) -> None:
             return None
         return result if math.isfinite(result) else None
 
+    def parsed_canvas_length(value: Any) -> float | None:
+        """Resolve context-free outer SVG dimensions to CSS pixels."""
+        if not isinstance(value, str):
+            return None
+        match = canvas_length_pattern.fullmatch(value.strip())
+        if match is None:
+            return None
+        try:
+            number = float(match.group(1))
+        except ValueError:
+            return None
+        if not math.isfinite(number):
+            return None
+        unit = (match.group(2) or "px").lower()
+        factors = {
+            "px": 1.0,
+            "pt": 96.0 / 72.0,
+            "pc": 16.0,
+            "mm": 96.0 / 25.4,
+            "cm": 96.0 / 2.54,
+            "in": 96.0,
+        }
+        return number * factors[unit]
+
+    root_inline_style = re.sub(r"/\*.*?\*/", "", root.attrib.get("style", ""), flags=re.S)
+    if re.search(
+        r"(?:^|;)\s*(?:(?:min-|max-)?(?:width|height|inline-size|block-size)|aspect-ratio)\s*:",
+        root_inline_style,
+        re.I,
+    ):
+        raise ArchivePlanError("logo.svg root CSS sizing properties make the canvas dimensions ambiguous")
+    declared_dimensions: dict[str, float] = {}
     for dimension in ("width", "height"):
         if dimension in root.attrib:
-            value = parsed_length(root.attrib[dimension])
+            value = parsed_canvas_length(root.attrib[dimension])
             if value is None or value <= 0:
-                raise ArchivePlanError("logo.svg has a zero, negative, or malformed viewport dimension")
+                raise ArchivePlanError(
+                    "logo.svg has a zero, negative, malformed, or context-dependent canvas dimension"
+                )
+            declared_dimensions[dimension] = value
     viewport: tuple[float, float, float, float] | None = None
     if "viewBox" in root.attrib:
         view_box = root.attrib["viewBox"].strip()
@@ -1123,6 +1256,31 @@ def _validate_svg(path: Path) -> None:
     if not drawable:
         raise ArchivePlanError("logo.svg contains no drawable Logo geometry")
     _validate_svg_render(path)
+    if {"width", "height"} <= set(declared_dimensions):
+        width = declared_dimensions["width"]
+        height = declared_dimensions["height"]
+        return LogoGeometry(
+            "svg",
+            width,
+            height,
+            math.isclose(width, height, rel_tol=1e-9, abs_tol=1e-9),
+        )
+    if declared_dimensions:
+        return LogoGeometry(
+            "svg",
+            declared_dimensions.get("width", 0.0),
+            declared_dimensions.get("height", 0.0),
+            False,
+        )
+    if viewport is not None:
+        width, height = viewport[2], viewport[3]
+        return LogoGeometry(
+            "svg",
+            width,
+            height,
+            math.isclose(width, height, rel_tol=1e-9, abs_tol=1e-9),
+        )
+    return LogoGeometry("svg", 0.0, 0.0, False)
 
 
 def _validate_svg_render(path: Path) -> None:
@@ -1292,16 +1450,10 @@ const challenge = process.argv[3];
         raise ArchivePlanError("logo.svg rasterizes to no visible Logo pixel")
 
 
-def _validate_observed_logo(path: Path, target_path: str) -> None:
+def _decode_png(path: Path) -> PngRaster:
+    """Validate a PNG and return exact decoded samples for crop proofs."""
     if path.stat().st_size <= 0 or path.stat().st_size > 512_000:
         raise ArchivePlanError("company Logo must be nonempty and no larger than 512,000 bytes")
-    suffix = Path(target_path).suffix.lower()
-    if suffix == ".svg":
-        _validate_svg(path)
-        scan_sensitive_material([path])
-        return
-    if suffix != ".png":
-        raise ArchivePlanError("observed company Logo must be SVG or PNG")
     data = path.read_bytes()
     if not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ArchivePlanError("observed company Logo is not a PNG")
@@ -1320,6 +1472,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
     palette: bytes | None = None
     transparency: bytes | None = None
     compressed = bytearray()
+    preserved_chunks: list[tuple[str, bytes, bytes]] = []
     while position + 12 <= len(data):
         length = struct.unpack(">I", data[position : position + 4])[0]
         chunk_type = data[position + 4 : position + 8]
@@ -1332,6 +1485,8 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
             raise ArchivePlanError("observed PNG has an invalid chunk checksum")
         if re.fullmatch(rb"[A-Za-z]{4}", chunk_type) is None or not 65 <= chunk_type[2] <= 90:
             raise ArchivePlanError("observed PNG contains an invalid chunk type")
+        if chunk_type in ANIMATED_PNG_CHUNKS:
+            raise ArchivePlanError("animated PNG chunks are not allowed in a company Logo")
         if chunk_type == b"IHDR" and seen_ihdr:
             raise ArchivePlanError("observed PNG contains duplicate IHDR")
         if chunk_type == b"PLTE" and seen_plte:
@@ -1371,6 +1526,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
             palette_entries = length // 3
             if (
                 seen_idat
+                or transparency is not None
                 or png_color_type in {0, 4}
                 or length == 0
                 or length > 768
@@ -1391,11 +1547,19 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
             )
             if not valid_transparency:
                 raise ArchivePlanError("observed PNG has invalid transparency data")
+            max_sample = (1 << png_bit_depth) - 1
+            if png_color_type == 0 and int.from_bytes(payload, "big") > max_sample:
+                raise ArchivePlanError("observed PNG grayscale transparency sample is out of range")
+            if png_color_type == 2 and any(
+                int.from_bytes(payload[index : index + 2], "big") > max_sample
+                for index in (0, 2, 4)
+            ):
+                raise ArchivePlanError("observed PNG truecolor transparency sample is out of range")
             transparency = payload
         elif chunk_type == b"IDAT":
             if idat_ended or (png_color_type == 3 and not seen_plte):
                 raise ArchivePlanError("observed PNG has invalid IDAT ordering")
-            seen_idat = seen_idat or bool(payload)
+            seen_idat = True
             compressed.extend(payload)
         elif chunk_type == b"IEND":
             if length != 0 or chunk_end != len(data):
@@ -1407,6 +1571,8 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
             idat_ended = True
         if chunk_type not in {b"IHDR", b"PLTE", b"IDAT", b"IEND"} and chunk_type[:1].isupper():
             raise ArchivePlanError("observed PNG contains an unknown critical chunk")
+        if chunk_type not in {b"IHDR", b"IDAT", b"IEND"}:
+            preserved_chunks.append(("after-idat" if seen_idat else "before-idat", chunk_type, payload))
         position = chunk_end
     if not (seen_ihdr and seen_idat and seen_iend):
         raise ArchivePlanError("observed PNG lacks complete image data")
@@ -1442,7 +1608,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
             return above
         return upper_left
 
-    rows: list[bytes] = []
+    reconstructed_rows: list[bytes] = []
     previous = bytes(scanline_size)
     for row_index in range(png_height):
         offset = row_index * (scanline_size + 1)
@@ -1465,7 +1631,8 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
                 predictor = paeth(left, above, upper_left)
             reconstructed[index] = (value + predictor) & 0xFF
         previous = bytes(reconstructed)
-        rows.append(previous)
+        reconstructed_rows.append(previous)
+    del decoded
 
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[png_color_type]
 
@@ -1492,7 +1659,7 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
     )
     visible_pixel = False
     palette_entries = len(palette) // 3 if palette is not None else 0
-    for row in rows:
+    for row in reconstructed_rows:
         samples = unpack_samples(row)
         if len(samples) != png_width * channels:
             raise ArchivePlanError("observed PNG pixel samples are incomplete")
@@ -1514,11 +1681,366 @@ def _validate_observed_logo(path: Path, target_path: str) -> None:
                 visible = transparent_rgb is None or tuple(pixel) != transparent_rgb
             if visible:
                 visible_pixel = True
-                break
-        if visible_pixel:
-            break
     if not visible_pixel:
         raise ArchivePlanError("observed PNG contains no visible Logo pixel")
+    packed_rows = tuple(reconstructed_rows)
+    return PngRaster(
+        width=png_width,
+        height=png_height,
+        bit_depth=png_bit_depth,
+        color_type=png_color_type,
+        channels=channels,
+        rows=packed_rows,
+        preserved_chunks=tuple(preserved_chunks),
+    )
+
+
+def _validate_observed_logo(path: Path, target_path: str) -> LogoGeometry:
+    if path.stat().st_size <= 0 or path.stat().st_size > 512_000:
+        raise ArchivePlanError("company Logo must be nonempty and no larger than 512,000 bytes")
+    suffix = Path(target_path).suffix.lower()
+    if suffix == ".svg":
+        geometry = _validate_svg(path)
+        scan_sensitive_material([path])
+        return geometry
+    if suffix != ".png":
+        raise ArchivePlanError("observed company Logo must be SVG or PNG")
+    raster = _decode_png(path)
+    return LogoGeometry("png", raster.width, raster.height, raster.width == raster.height)
+
+
+def _strict_object(value: Any, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ArchivePlanError(f"{label} must contain exactly {sorted(keys)!r}")
+    return value
+
+
+def _positive_logo_dimension(value: Any, label: str, *, nullable: bool = False) -> float | None:
+    if value is None and nullable:
+        return None
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ArchivePlanError(f"{label} must be a positive finite number")
+    return float(value)
+
+
+def _validate_logo_search_record(
+    selection_value: Any,
+    *,
+    source_page_url: str,
+    source_asset_url: str,
+    source_width: int,
+    source_height: int,
+) -> None:
+    """Require an auditable official-source search before permitting a crop."""
+    selection = _strict_object(
+        selection_value,
+        LOGO_PROVENANCE_SELECTION_KEYS,
+        "logo provenance selection",
+    )
+    if selection.get("square_official_candidate_found") is not False:
+        raise ArchivePlanError("logo crop provenance must state that no verified official square candidate was found")
+
+    surfaces = selection.get("search_surfaces")
+    if not isinstance(surfaces, list):
+        raise ArchivePlanError("logo provenance search_surfaces must be an array")
+    observed_surfaces: set[str] = set()
+    checked_surface_urls: set[str] = set()
+    for index, raw_surface in enumerate(surfaces):
+        surface = _strict_object(
+            raw_surface,
+            LOGO_PROVENANCE_SEARCH_SURFACE_KEYS,
+            f"logo provenance search_surfaces[{index}]",
+        )
+        name = surface.get("surface")
+        status = surface.get("status")
+        urls = surface.get("urls")
+        note = surface.get("note")
+        if name not in LOGO_SEARCH_SURFACES or name in observed_surfaces:
+            raise ArchivePlanError("logo provenance search surfaces must be complete, unique, and recognized")
+        observed_surfaces.add(str(name))
+        if status not in {"checked", "not-applicable"}:
+            raise ArchivePlanError("logo provenance search surface status must be checked or not-applicable")
+        if not isinstance(urls, list) or any(not isinstance(url, str) for url in urls):
+            raise ArchivePlanError("logo provenance search surface urls must be an array of public URLs")
+        for url_index, url in enumerate(urls):
+            _public_http_url(url, f"logo provenance search_surfaces[{index}].urls[{url_index}]")
+        if status == "checked" and not urls:
+            raise ArchivePlanError("a checked logo provenance search surface must record at least one URL")
+        if status == "checked":
+            checked_surface_urls.update(urls)
+        if status == "not-applicable" and not _nonblank(note):
+            raise ArchivePlanError("a not-applicable logo provenance search surface must explain why")
+        if not isinstance(note, str):
+            raise ArchivePlanError("logo provenance search surface note must be a string")
+    if observed_surfaces != LOGO_SEARCH_SURFACES:
+        raise ArchivePlanError("logo provenance must cover every required official search surface")
+    if source_page_url not in checked_surface_urls:
+        raise ArchivePlanError("logo crop source page must be bound to a checked official search surface")
+
+    candidates = selection.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise ArchivePlanError("logo provenance must record at least one official candidate")
+    selected_count = 0
+    observed_asset_urls: set[str] = set()
+    for index, raw_candidate in enumerate(candidates):
+        candidate = _strict_object(
+            raw_candidate,
+            LOGO_PROVENANCE_CANDIDATE_KEYS,
+            f"logo provenance candidates[{index}]",
+        )
+        asset_url = _public_http_url(candidate.get("asset_url"), f"logo provenance candidates[{index}].asset_url")
+        candidate_page_url = _public_http_url(
+            candidate.get("source_page_url"),
+            f"logo provenance candidates[{index}].source_page_url",
+        )
+        logo_format = candidate.get("format")
+        gate_status = candidate.get("gate_status")
+        identity_verified = candidate.get("identity_verified")
+        is_official = candidate.get("is_official")
+        officiality_evidence = candidate.get("officiality_evidence")
+        decision = candidate.get("decision")
+        reason = candidate.get("reason")
+        if asset_url in observed_asset_urls:
+            raise ArchivePlanError("logo provenance candidate asset URLs must be unique")
+        observed_asset_urls.add(asset_url)
+        if candidate_page_url not in checked_surface_urls:
+            raise ArchivePlanError("every logo candidate must be bound to a checked official source page")
+        if logo_format not in {"svg", "png", "other"}:
+            raise ArchivePlanError("logo provenance candidate format must be svg, png, or other")
+        if gate_status not in {"pass", "rejected"}:
+            raise ArchivePlanError("logo provenance candidate gate_status must be pass or rejected")
+        if not isinstance(identity_verified, bool) or not isinstance(is_official, bool):
+            raise ArchivePlanError("logo provenance candidate identity and officiality flags must be booleans")
+        if not _nonblank(officiality_evidence):
+            raise ArchivePlanError("logo provenance candidate must record officiality evidence")
+        if gate_status == "pass" and (
+            logo_format not in {"svg", "png"}
+            or identity_verified is not True
+            or is_official is not True
+        ):
+            raise ArchivePlanError("a gate-passing logo candidate must be a verified official SVG or PNG")
+        if decision not in {"selected-crop-source", "rejected"}:
+            raise ArchivePlanError("logo provenance candidate decision must be selected-crop-source or rejected")
+        if not _nonblank(reason):
+            raise ArchivePlanError("logo provenance candidate must record a nonempty decision reason")
+        width = _positive_logo_dimension(
+            candidate.get("width"),
+            f"logo provenance candidates[{index}].width",
+            nullable=True,
+        )
+        height = _positive_logo_dimension(
+            candidate.get("height"),
+            f"logo provenance candidates[{index}].height",
+            nullable=True,
+        )
+        if (width is None) != (height is None):
+            raise ArchivePlanError("logo provenance candidate width and height must both be known or both null")
+        if gate_status == "pass" and (width is None or height is None):
+            raise ArchivePlanError("a gate-passing logo candidate must record dimensions")
+        if (
+            gate_status == "pass"
+            and width is not None
+            and height is not None
+            and math.isclose(width, height, rel_tol=1e-9, abs_tol=1e-9)
+        ):
+            raise ArchivePlanError("a verified official square candidate exists, so cropping is not permitted")
+        if decision == "selected-crop-source":
+            selected_count += 1
+            if (
+                gate_status != "pass"
+                or logo_format != "png"
+                or identity_verified is not True
+                or is_official is not True
+                or candidate_page_url != source_page_url
+                or asset_url != source_asset_url
+                or width != float(source_width)
+                or height != float(source_height)
+            ):
+                raise ArchivePlanError("selected crop source must be the verified official non-square source PNG")
+    if selected_count != 1:
+        raise ArchivePlanError("logo provenance must select exactly one official crop source")
+
+
+def _validate_center_square_crop(
+    staging_root: Path,
+    *,
+    company_slug: str,
+    company: dict[str, Any],
+    canonical_logo: Path,
+) -> dict[str, Any]:
+    """Prove that a staged PNG is the exact centered square of an official PNG."""
+    original = _safe_regular_file(staging_root / "logo-original.png", "logo-original.png")
+    provenance_path = _safe_regular_file(staging_root / "logo-provenance.json", "logo-provenance.json")
+    if provenance_path.stat().st_size <= 0 or provenance_path.stat().st_size > 128_000:
+        raise ArchivePlanError("logo-provenance.json must be nonempty and no larger than 128,000 bytes")
+    if _same_file(original, canonical_logo, "original and cropped Logo"):
+        raise ArchivePlanError("logo-original.png and logo.png must be distinct files")
+    if _same_file(provenance_path, original, "provenance and original Logo") or _same_file(
+        provenance_path,
+        canonical_logo,
+        "provenance and cropped Logo",
+    ):
+        raise ArchivePlanError("logo provenance must be a distinct file")
+    scan_sensitive_material([provenance_path])
+    provenance = _strict_object(
+        _read_object(provenance_path, "logo crop provenance"),
+        LOGO_PROVENANCE_KEYS,
+        "logo crop provenance",
+    )
+    if provenance.get("version") != "1.0":
+        raise ArchivePlanError("logo crop provenance version must be 1.0")
+    if provenance.get("company_slug") != company_slug:
+        raise ArchivePlanError("logo crop provenance belongs to a different company")
+    if provenance.get("operation") != LOGO_CROP_OPERATION:
+        raise ArchivePlanError(f"logo crop provenance operation must be {LOGO_CROP_OPERATION}")
+
+    source = _strict_object(
+        provenance.get("source"),
+        LOGO_PROVENANCE_SOURCE_KEYS,
+        "logo crop provenance source",
+    )
+    output = _strict_object(
+        provenance.get("output"),
+        LOGO_PROVENANCE_OUTPUT_KEYS,
+        "logo crop provenance output",
+    )
+    crop = _strict_object(
+        provenance.get("crop"),
+        LOGO_PROVENANCE_CROP_KEYS,
+        "logo crop provenance crop",
+    )
+    if source.get("file") != "logo-original.png" or output.get("file") != "logo.png":
+        raise ArchivePlanError("logo crop provenance must bind logo-original.png to logo.png")
+    source_page_url = _public_http_url(source.get("page_url"), "logo crop provenance source.page_url")
+    source_asset_url = _public_http_url(source.get("asset_url"), "logo crop provenance source.asset_url")
+    company_logo = company["brand_identity"]["company_logo"]
+    if company_logo.get("source_url") not in {source_page_url, source_asset_url}:
+        raise ArchivePlanError("company_logo.source_url must match the official crop source page or asset URL")
+
+    original_raster = _decode_png(original)
+    output_raster = _decode_png(canonical_logo)
+    if original_raster.width == original_raster.height:
+        raise ArchivePlanError("an already-square official PNG must be used unchanged instead of cropped")
+    side = min(original_raster.width, original_raster.height)
+    expected_left = (original_raster.width - side) // 2
+    expected_top = (original_raster.height - side) // 2
+    for _phase, chunk_type, _payload in original_raster.preserved_chunks:
+        if 65 <= chunk_type[3] <= 90 and chunk_type not in CROP_UNSAFE_COPY_ALLOWED_CHUNKS:
+            raise ArchivePlanError(
+                "official PNG contains an ancillary chunk that is unsafe to copy after cropping"
+            )
+
+    def require_file_record(
+        record: dict[str, Any],
+        path: Path,
+        raster: PngRaster,
+        label: str,
+    ) -> None:
+        if SHA256_PATTERN.fullmatch(str(record.get("sha256"))) is None:
+            raise ArchivePlanError(f"{label}.sha256 must be a lowercase SHA-256")
+        if record.get("sha256") != file_sha256(path):
+            raise ArchivePlanError(f"{label}.sha256 does not match the staged bytes")
+        size_bytes = record.get("size_bytes")
+        width = record.get("width")
+        height = record.get("height")
+        if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes <= 0:
+            raise ArchivePlanError(f"{label}.size_bytes must be a positive integer")
+        if size_bytes != path.stat().st_size:
+            raise ArchivePlanError(f"{label}.size_bytes does not match the staged bytes")
+        if (
+            not isinstance(width, int)
+            or isinstance(width, bool)
+            or not isinstance(height, int)
+            or isinstance(height, bool)
+            or width != raster.width
+            or height != raster.height
+        ):
+            raise ArchivePlanError(f"{label} dimensions do not match the decoded PNG")
+
+    require_file_record(source, original, original_raster, "logo crop provenance source")
+    require_file_record(output, canonical_logo, output_raster, "logo crop provenance output")
+    expected_crop = {
+        "left": expected_left,
+        "top": expected_top,
+        "width": side,
+        "height": side,
+        "resampled": False,
+        "padded": False,
+        "stretched": False,
+        "redrawn": False,
+    }
+    if (
+        any(
+            not isinstance(crop.get(key), int) or isinstance(crop.get(key), bool)
+            for key in ("left", "top", "width", "height")
+        )
+        or any(crop.get(key) is not False for key in ("resampled", "padded", "stretched", "redrawn"))
+        or crop != expected_crop
+    ):
+        raise ArchivePlanError("logo crop provenance must record the exact deterministic center-square crop")
+    if output_raster.width != side or output_raster.height != side:
+        raise ArchivePlanError("cropped company Logo must have the exact square output dimensions")
+    if (
+        output_raster.bit_depth != original_raster.bit_depth
+        or output_raster.color_type != original_raster.color_type
+        or output_raster.channels != original_raster.channels
+        or output_raster.preserved_chunks != original_raster.preserved_chunks
+    ):
+        raise ArchivePlanError("cropped company Logo changed PNG color interpretation or preserved metadata")
+
+    def row_sample_slice(raster: PngRaster, row_index: int, left: int, width: int) -> bytes:
+        """Return exact encoded sample values without expanding the whole image to Python ints."""
+        row = raster.rows[row_index]
+        sample_start = left * raster.channels
+        sample_end = (left + width) * raster.channels
+        if raster.bit_depth in {8, 16}:
+            bytes_per_sample = raster.bit_depth // 8
+            return row[sample_start * bytes_per_sample : sample_end * bytes_per_sample]
+        mask = (1 << raster.bit_depth) - 1
+        values = bytearray()
+        for sample_index in range(sample_start, sample_end):
+            bit_index = sample_index * raster.bit_depth
+            byte_index = bit_index // 8
+            shift = 8 - raster.bit_depth - (bit_index % 8)
+            values.append((row[byte_index] >> shift) & mask)
+        return bytes(values)
+
+    for output_row_index in range(side):
+        output_samples = row_sample_slice(output_raster, output_row_index, 0, side)
+        source_samples = row_sample_slice(
+            original_raster,
+            expected_top + output_row_index,
+            expected_left,
+            side,
+        )
+        if output_samples != source_samples:
+            raise ArchivePlanError("cropped company Logo pixels are not the exact deterministic center crop")
+
+    _validate_logo_search_record(
+        provenance.get("selection"),
+        source_page_url=source_page_url,
+        source_asset_url=source_asset_url,
+        source_width=original_raster.width,
+        source_height=original_raster.height,
+    )
+    return {
+        "provenance_path": str(provenance_path),
+        "provenance_sha256": file_sha256(provenance_path),
+        "provenance_size_bytes": provenance_path.stat().st_size,
+        "original_source_path": str(original),
+        "record": provenance,
+        "verification": {
+            "pixel_exact_center_crop": True,
+            "format_preserved": True,
+            "render_metadata_preserved": True,
+            "official_square_candidate_found": False,
+        },
+    }
 
 
 def prepare_identity_asset_files(
@@ -1526,10 +2048,10 @@ def prepare_identity_asset_files(
     *,
     company_slug: str,
     company: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Validate the single allowed staged visual asset: canonical logo.svg or logo.png."""
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Validate a square official original or a proven PNG center crop."""
     if staging_root is None:
-        return []
+        return [], None
     if staging_root.is_symlink() or not staging_root.is_dir():
         raise ArchivePlanError("identity assets root must be a non-symlink directory")
     staging_root = staging_root.resolve()
@@ -1546,14 +2068,30 @@ def prepare_identity_asset_files(
             "staged company Logo must exactly match company.json's canonical assets/logo.svg or assets/logo.png path"
         )
     expected_name = Path(declared_path).name
-    if {item.name for item in entries} != {expected_name}:
+    entry_names = {item.name for item in entries}
+    crop_mode = declared_path.endswith("/logo.png") and entry_names == LOGO_CROP_STAGING_FILES
+    if not crop_mode and entry_names != {expected_name}:
         raise ArchivePlanError(
-            f"identity assets root must contain exactly one {expected_name} and no other assets"
+            f"identity assets root must contain exactly one {expected_name}, or the exact verified PNG crop set"
         )
 
     logo = _safe_regular_file(staging_root / expected_name, expected_name)
-    _validate_observed_logo(logo, declared_path)
-    return [
+    geometry = _validate_observed_logo(logo, declared_path)
+    crop_provenance = (
+        _validate_center_square_crop(
+            staging_root,
+            company_slug=company_slug,
+            company=company,
+            canonical_logo=logo,
+        )
+        if crop_mode
+        else None
+    )
+    if not geometry.is_square:
+        raise ArchivePlanError(
+            "new canonical company Logo must be an official square original or a verified deterministic PNG center crop"
+        )
+    files = [
         {
             "source_path": str(logo),
             "target_path": declared_path,
@@ -1561,6 +2099,7 @@ def prepare_identity_asset_files(
             "size_bytes": logo.stat().st_size,
         }
     ]
+    return files, crop_provenance
 
 
 def identity_asset_action(
@@ -2013,7 +2552,7 @@ def build_archive_plan(
         else:
             raise ArchivePlanError("identity assets root must stay outside the frozen research package")
     logo_path = _company_logo_asset_path(company, company_slug)
-    identity_files = prepare_identity_asset_files(
+    identity_files, crop_provenance = prepare_identity_asset_files(
         identity_assets_root,
         company_slug=company_slug,
         company=company,
@@ -2126,7 +2665,7 @@ def build_archive_plan(
         }
     )
     return {
-        "plan_version": "9.3",
+        "plan_version": "9.4",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -2168,6 +2707,13 @@ def build_archive_plan(
             "remote_base_head": identity_head,
             "logo_guard": logo_guard,
             "company_logo_asset_path": logo_path,
+            "preparation": (
+                "verified-center-square-crop"
+                if crop_provenance is not None
+                else ("official-original-square" if identity_files else "not-staged")
+            ),
+            "official_source_derived": crop_provenance is not None,
+            "crop_provenance": crop_provenance,
             "replacement_confirmed": confirm_identity_asset_replacement,
             "clear_confirmed": confirm_identity_asset_clear,
             "new_company_without_logo_confirmed": confirm_new_company_without_logo,
@@ -2214,7 +2760,10 @@ def main() -> int:
     parser.add_argument(
         "--identity-assets-root",
         type=Path,
-        help="Optional staging directory outside the frozen package containing exactly one verified logo.svg or logo.png",
+        help=(
+            "Optional staging directory outside the frozen package containing one verified square logo.svg/logo.png, "
+            "or logo.png + logo-original.png + logo-provenance.json for a proven center crop"
+        ),
     )
     parser.add_argument(
         "--remote-identity-assets-state",
