@@ -136,8 +136,8 @@
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "4f45ea52367dae8bed9acf608463692d590fca93c07f508c8a94a2e989f66a4f",
-        "size_bytes": 281712
+        "sha256": "886156bc73b54f8aab93e96ae65a4ff0d66a7f1a969c80d2afb4bfb0d61b2ad3",
+        "size_bytes": 281773
       },
       {
         "path": "scripts/validate_research_process.py",
