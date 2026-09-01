@@ -5,8 +5,8 @@
     "repository": "bits-bean/doujiao-value-research-skill",
     "ref": "main",
     "commit": "f6260decac7ffa221a7454fc3dfef1b9bed1b720",
-    "protocol_version": "2.3.0",
-    "digest_sha256": "07fabb5f259a525bac9955171a0342bc2edd6792e2d998c6c408647c5f9ab2ea",
+    "protocol_version": "2.4.0",
+    "digest_sha256": "6a48b26bbeee0d2968564ed6f60430a9b4bb5e9360c71d022d6a587281fde345",
     "documents": [
       {
         "path": "references/specs/automation-workflow.md",
@@ -20,28 +20,28 @@
       },
       {
         "path": "references/specs/research-methodology.md",
-        "sha256": "01cb3abad1b02f90bcbba8ad0534c83fd49ef825351eb10cf5e66ac4bc4ffcea",
+        "sha256": "3ff93ee3209569dd2dcd4cfcb418543c22071fcf300b2c079529e19103faafee",
         "size_bytes": 20106
       }
     ]
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "2e76b177526c458c13de1c3469d422eb35c4b8c2cb5221b02facddd7181c5726",
-    "toolchain_digest_sha256": "2dbc32aa684a5bd489112a72530aebf521518a59dcc9818574569054a548efea",
-    "bundle_digest_sha256": "74a388e3d9cf2096b044e6bf7b244605d811eb25be6b76d348580f2901a01c2d",
+    "normative_digest_sha256": "837c5c30a747575ca02f3d4ad5f099d5018f305d02c016ff4c1157fe7563cf3f",
+    "toolchain_digest_sha256": "2cc1e43064e304bb89ec3907eb00fb51bb62818469916153e6d862edc9d87744",
+    "bundle_digest_sha256": "7786f861ce69d9581dfca38d3a3437c1214586122b13cf7a5a5785f2bce4b02c",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "86f31be8f8c6888330294924b858c54d6025cb08fe233a08d305f19431509429",
-        "size_bytes": 19687
+        "sha256": "580142e3a9f325c8a6ec9a28eda8d0b7561bf76ec39a1e34f15a43377856a308",
+        "size_bytes": 20434
       },
       {
         "path": "agents/openai.yaml",
         "role": "normative",
-        "sha256": "f16ffa8c84eec78d46fa2e954c6e78316c0695e665a2d1f13d3131f892ca2138",
-        "size_bytes": 564
+        "sha256": "0cca29ce61cb6f7183cf2ee65eba0eb6c1c22080299155636b8cc43a88889017",
+        "size_bytes": 689
       },
       {
         "path": "references/classification-and-chart-routing.md",
@@ -52,7 +52,7 @@
       {
         "path": "references/evidence-and-calculation.md",
         "role": "normative",
-        "sha256": "17474bfb3c136b618c5040f8af5a1f7b79f66dac8db6eb4cfb2fac8edc4f100a",
+        "sha256": "12d5a8c7cea5cf68ca6f1a1e7792b3b8002378a8765bb0fd6b5bd833e013ce53",
         "size_bytes": 12441
       },
       {
@@ -76,14 +76,14 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "c80b841c8289834da4cdffa54a94af3b155345cf2d28479b1115a02d76773170",
-        "size_bytes": 22570
+        "sha256": "dfb64b94f111b8778fb2a01fe30eabc94a330fbfc4b2137f02f5e8ce2c94220a",
+        "size_bytes": 22937
       },
       {
         "path": "references/research-contract.md",
         "role": "normative",
-        "sha256": "73b2840039faa2266d2067e120a6641c25fa9284d1a1e5dac74f36630877baf8",
-        "size_bytes": 28510
+        "sha256": "51da1c186e086ae9c61c05fe5cf0226b465f7ea2a705fdfa73b03200b1690bcd",
+        "size_bytes": 29071
       },
       {
         "path": "references/research-execution-and-audit.md",
@@ -112,7 +112,7 @@
       {
         "path": "references/specs/research-methodology.md",
         "role": "normative",
-        "sha256": "01cb3abad1b02f90bcbba8ad0534c83fd49ef825351eb10cf5e66ac4bc4ffcea",
+        "sha256": "3ff93ee3209569dd2dcd4cfcb418543c22071fcf300b2c079529e19103faafee",
         "size_bytes": 20106
       },
       {
@@ -136,8 +136,8 @@
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "4f45ea52367dae8bed9acf608463692d590fca93c07f508c8a94a2e989f66a4f",
-        "size_bytes": 281712
+        "sha256": "c478f9a0cde50ccff18cff0e3d3a7d7635bc249279901e59e1f21febaaf461dd",
+        "size_bytes": 283028
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -148,8 +148,8 @@
       {
         "path": "scripts/validate_skill.py",
         "role": "toolchain",
-        "sha256": "373a14bc8c0094a63363b25e29b9668f45e982ba04b02cca184368a7aa7ed36c",
-        "size_bytes": 19896
+        "sha256": "f67082d559012ad13a6357e8c8c8d0483a7883170131e404447e544bf03518ac",
+        "size_bytes": 19933
       },
       {
         "path": "scripts/verify_spec_anchor.py",

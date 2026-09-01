@@ -332,6 +332,7 @@ def main() -> int:
         "embedded-visual-asset",
         "markdown_image_pattern",
         "raw_html_tag_pattern",
+        "report-logo-workflow-leak",
         "company_slug",
         "future_or_negated_search",
     ):
