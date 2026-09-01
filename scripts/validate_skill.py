@@ -81,6 +81,7 @@ REQUIRED = (
     "scripts/validate_research_process.py",
     "scripts/freeze_research.py",
     "scripts/prepare_github_archive.py",
+    "scripts/prepare_sankey_color_audit.py",
     "scripts/verify_spec_anchor.py",
     "scripts/validate_skill.py",
     "tests/package_fixture.py",
@@ -286,9 +287,12 @@ def main() -> int:
         "不调用 `doujiao-value-system` 的图表导出命令或接口",
         "不生成网站图、社媒图或背景",
         "不选择平台比例",
-        "公司 Logo 是唯一视觉素材例外",
+        "公司 Logo 是唯一可交付视觉素材例外",
         "不得生成、重绘或用近似图替代公司 Logo",
-        "除公司 Logo 外",
+        "除公司 Logo 与",
+        "App Economy Insights",
+        "`company.json.income_statement_sankey.nodes[].color` 是网站与导出器唯一渲染真相",
+        "不得建立任务级 palette sidecar",
     ):
         if required_boundary not in skill_text:
             fail(f"SKILL.md lacks responsibility boundary: {required_boundary}")
@@ -333,8 +337,10 @@ def main() -> int:
         "markdown_image_pattern",
         "raw_html_tag_pattern",
         "report-logo-workflow-leak",
+        "report-sankey-color-workflow-leak",
         "company_slug",
         "future_or_negated_search",
+        "sankey-color-audit-blocked",
     ):
         if required_package_boundary not in package_validator_text:
             fail(f"research package validator lacks boundary: {required_package_boundary}")
@@ -459,6 +465,7 @@ def main() -> int:
             "validate_research_process.py",
             "freeze_research.py",
             "prepare_github_archive.py",
+            "prepare_sankey_color_audit.py",
             "verify_spec_anchor.py",
             "validate_skill.py",
         ):
@@ -471,6 +478,19 @@ def main() -> int:
             except py_compile.PyCompileError as exc:
                 fail(f"{script} does not compile: {exc}")
                 errors += 1
+
+    if not errors:
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/prepare_sankey_color_audit.py"), "--self-test"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode:
+            fail(f"Sankey color audit helper self-test failed: {completed.stderr.strip()}")
+            errors += 1
+        else:
+            print(completed.stdout.strip())
 
     if not errors:
         completed = subprocess.run(

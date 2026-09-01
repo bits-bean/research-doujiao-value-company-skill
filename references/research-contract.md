@@ -42,7 +42,7 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 正式报告的第一读者是假定不了解会计、银行监管或估值模型的长期投资者。每节先用白话回答“公司怎样赚钱、这个数字说明什么、为什么影响股东”，再展开专业口径。缩写、行业指标和非通用术语首次出现时，必须在同一句或紧邻括号内给出中文全称、缩写和一句通俗注解；注解至少说明“它衡量什么”或“它为什么重要”。例如：`投入资本回报率（ROIC：每投入1元经营资本能产生多少税后经营利润）`。公式出现前先解释经济含义，公式中的每个变量在旁边定义，不让读者去其他文件猜。
 
-正文与内部实现分层：`research-report.md` 只写投资者理解结论所需的经济事实、假设、计算、限制、反证和来源，不写 Schema 字段映射、JSON 文件名、验证器规则、兼容策略、冻结或生成流程。Logo 的搜索、取得、核验、文件规格或路径、缺失、回退、归档和交付状态也不属于研究正文；这些信息分别进入 `company.json`、`research-completeness.md`、证据/计算台账、manifest 或归档观察。报告可见文本和来源定位索引都不得出现 Logo / `company_logo` / 公司标志 / 公司标识等资产词。若品牌或视觉识别变化本身对生意、护城河或股东价值有实质影响，改用“品牌重塑”或“视觉识别变化”等面向读者的经济表述，只写可验证的事实与影响，不写资产处理过程。经济假设不能随实现说明一起移走：若收入与利润采用同一增速，正文应直接写明对应情景、准确年度范围和两个指标的增速；“某字段为了兼容而填成同一数值”则放在 `schema-gap-report.md`。
+正文与内部实现分层：`research-report.md` 只写投资者理解结论所需的经济事实、假设、计算、限制、反证和来源，不写 Schema 字段映射、JSON 文件名、验证器规则、兼容策略、冻结或生成流程。Logo 的搜索、取得、核验、文件规格或路径、缺失、回退、归档和交付状态，以及桑基配色的检索、别名审查、取样、私有原图、默认色和渲染状态，也不属于研究正文；这些信息分别进入 `company.json`、`research-completeness.md`、证据/计算台账、manifest 或归档观察。报告可见文本和来源定位索引都不得出现 Logo / `company_logo` / 公司标志 / 公司标识等资产词。若品牌或视觉识别变化本身对生意、护城河或股东价值有实质影响，改用“品牌重塑”或“视觉识别变化”等面向读者的经济表述，只写可验证的事实与影响，不写资产处理过程。经济假设不能随实现说明一起移走：若收入与利润采用同一增速，正文应直接写明对应情景、准确年度范围和两个指标的增速；“某字段为了兼容而填成同一数值”则放在 `schema-gap-report.md`。
 
 正式报告使用可见的纯 Markdown；除无属性 `<br>` / `<br/>` 外不得包含原始 HTML，也不得把结构或正文藏进 fenced code、HTML comment 或不可见容器。
 
@@ -62,7 +62,7 @@ Schema 2.x 的 `classification` 与 `industry_metrics` 必须完整执行 [class
 
 管理层承诺必须包含兑现状态、结果和下一验证对象；`pending` 可把尚未发生的结果写为 `null`，其他状态必须记录可观察结果。资本配置必须包含三车道、结果状态、结果和评价；`risks.pre_mortem` 必须是一组完整因果链；概率、影响或缓解措施无证据时写 `null`，不得为图表猜测。每个长期跟踪指标必须包含重要性和复查方法。这些字段是研究事实与判断，不由下游根据文字或缺失字段重建。
 
-`income_statement_sankey` 的提取清单、动态层级模板、计算值来源绑定与逐层勾稽统一执行 [income-statement-sankey.md](income-statement-sankey.md)，不得另建简化口径。
+`income_statement_sankey` 的提取清单、动态层级模板、计算值来源绑定、逐层勾稽和公司级 App Economy Insights 配色三态统一执行 [income-statement-sankey.md](income-statement-sankey.md)，不得另建简化口径或任务级 palette sidecar。`company.json.income_statement_sankey.nodes[].color` 是网站与导出器唯一渲染真相；检索、官方别名和逐节点样本审计只写入计算台账。
 
 system 图表与下游内容所需的数据、路由和来源必须在冻结前完成。最低交接映射为：
 
@@ -189,6 +189,8 @@ system 图表与下游内容所需的数据、路由和来源必须在冻结前�
 }
 ```
 
+若生成利润表桑基，`income_statement_sankey` 还必须包含 `color_audit`。它记录 App Economy Insights 的规范英文名、中文名、ticker 查询，以及从 `company.json` 或官方来源解析并绑定 `source_ids` 的常用简称 / 品牌名查询。`matched` 保存公开原图元数据和逐节点样本，但绝不保存私有证据路径或图片字节，并把样本色逐 ID 写入 `company.json`；`not_found` 仅在规范身份与已验证别名全部穷尽且无阻断时成立，节点色全空并绑定 `semantic-default-v1`；`blocked` 可留在草稿台账，但正式验证、冻结和归档必须失败关闭。
+
 非 Too Hard 的完整研究还必须有且只有一个 `valuation_role: "starting_cash_flow"` 的 `custom` 计算，作为 DCF 与 Reverse DCF 的统一起点：
 
 ```json
@@ -286,13 +288,13 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 `execution_integrity` 必须与当前信任锁完全一致；验证器自身和新增执行脚本均在工具链摘要内，不能由未受信脚本自报通过。`evidence-ledger.json.run.protocol_fingerprint`、验证报告与 manifest 的协议 / Schema / 验证器身份必须一致。外部源码 commit 没有实证时记录未验证，不能以格式正确的 commit 字符串替代来源绑定证明。
 
-`status: frozen` 仅表示研究快照不可变。Logo 元数据随 `company.json` 哈希被锁定，但 manifest 不锁定包外 Logo 字节；字节、来源 observation、安全性和实际渲染结果在授权 GitHub 交付规划时另行验证。默认 `human_review_status: pending`；只有实际人工审核后才标为 `accepted`。冻结不代表投资建议、网站已具备 Logo、网站已更新、图表已导出、渠道图片已生成或内容已发布。
+`status: frozen` 仅表示研究快照不可变。Logo 元数据与桑基节点色随 `company.json` 哈希被锁定，配色检索和样本摘要随 `calculation-ledger.json` 被锁定；manifest 不锁定包外 Logo 字节，也不包含私有 App Economy Insights PNG。Logo 字节、来源 observation、安全性和实际渲染结果在授权 GitHub 交付规划时另行验证。默认 `human_review_status: pending`；只有实际人工审核后才标为 `accepted`。冻结不代表投资建议、网站已具备 Logo、网站已更新、图表已导出、渠道图片已生成或内容已发布。
 
 历史 `manifest_version: 1.0` 只允许 `audit` 模式复核。它不能成为新增量版本的前序 manifest，不能重新冻结、GitHub 归档或作为当前正式下游交接；要继续使用必须按当前研究协议与 Schema 迁移并新建 v2 版本目录。历史 v2 若缺少当前 `integrity_profile` 或 `execution_integrity`，同样只允许 audit 诊断，不得原地补字段后重新冻结，也不得作为当前 incremental 的前序包。
 
 ## 下游交接
 
-交给 `doujiao-value-system` 图表层或 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json`、证据台账、计算台账、完整度说明和 v2 manifest；公司 Logo 作为 manifest 外的单独身份素材交给 system。下游先验证文件哈希、不变的 `research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再读取或展示数据。当前研究侧在交接前还必须验证 `integrity_profile` 与 `execution_integrity`；旧下游对未知 v2 顶层字段的兼容不能削弱研究侧门禁。
+交给 `doujiao-value-system` 图表层或 `$produce-doujiao-value-content` 的必须是同一冻结目录中的报告、`company.json`、证据台账、计算台账、完整度说明和 v2 manifest；公司 Logo 作为 manifest 外的单独身份素材交给 system。下游先验证文件哈希、不变的 `research_protocol`、Schema 锚点与版本、公司身份、数据日和估值日一致，再读取或展示数据。桑基网页与导出器共同读取 `company.json` 节点色，并用计算台账确认 `matched` 或 `not_found`；不得在下游重新搜索、取样或覆盖。当前研究侧在交接前还必须验证 `integrity_profile` 与 `execution_integrity`；旧下游对未知 v2 顶层字段的兼容不能削弱研究侧门禁。
 
 若 manifest 缺失、不是 v2、状态不是 `frozen`、文件集合不完整、哈希不匹配、研究协议或完整执行清单不受信，或 JSON 未通过 manifest `specification` 指定的同一 Schema，只能做草案或审查，不得声称正式交付。研究事实由 manifest 中的兼容研究协议、完整执行锁与 Schema 共同锁定；展示规则可以独立升级，但新研究方法或 Schema 改变事实含义时必须先完成迁移和重新冻结。
 
@@ -300,7 +302,7 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 ## 视觉素材边界
 
-公司 Logo 是研究 Skill 唯一管理的视觉素材，完整执行 [identity-assets.md](identity-assets.md)。它不是研究事实文件，不写入冻结 manifest；但 `company.json.brand_identity.company_logo` 必须与实际沿用或新增文件一致：
+公司 Logo 是研究 Skill 唯一管理并交付的视觉素材，完整执行 [identity-assets.md](identity-assets.md)。App Economy Insights 原始 PNG 只是配色逐节点核验所需的冻结包外私有研究证据，不是视觉资产，不得归档或交付。Logo 不是研究事实文件，不写入冻结 manifest；但 `company.json.brand_identity.company_logo` 必须与实际沿用或新增文件一致：
 
 - 先检查并复用同一公司目录内的现有 canonical Logo；增量研究不得静默清空或改写有效 Logo 元数据。
 - 新 canonical Logo 固定为 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一），只从公司官网、IR、官方品牌 / 媒体资料，或适用的官方产品 / 商户 / 开发者 / 支持页面取得。新增 / 替换优先使用官方原始正方形 SVG / PNG；穷尽官方正方形候选后，唯一例外是按 `identity-assets.md` 完成且逐像素证明的 PNG → PNG 确定性中心方形裁剪。不得跨格式转换、拉伸、补边、重采样、改色、包裹、清洗、生成、描摹、重绘或使用近似图。

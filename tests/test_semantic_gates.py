@@ -440,6 +440,124 @@ class SemanticGateTests(unittest.TestCase):
         validate_sankey(financial_mismatch, findings, calculations, known)
         self.assertIn("sankey-financial-statement-mismatch", {item.code for item in findings})
 
+    def test_sankey_color_audit_enforces_three_states_and_node_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+        known = {source["id"] for source in company["sources"]}
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertNotIn("sankey-color-audit", {item.code for item in findings})
+
+        missing = copy.deepcopy(calculations)
+        del missing["income_statement_sankey"]["color_audit"]
+        findings = []
+        validate_sankey(company, findings, missing, known)
+        self.assertIn("sankey-color-audit", {item.code for item in findings})
+
+        matched_company = copy.deepcopy(company)
+        matched = copy.deepcopy(calculations)
+        colors = ("#4285F4", "#CC0000", "#FBBC04", "#2CA02C")
+        samples = []
+        for index, node in enumerate(matched_company["income_statement_sankey"]["nodes"]):
+            color = colors[index % len(colors)]
+            node["color"] = color
+            samples.append(
+                {
+                    "node_id": node["id"],
+                    "source_label": node["label"],
+                    "mapping_note": "与已直接核验原图中的对应经济节点逐项映射。",
+                    "color": color,
+                    "sample_x": 10 + index,
+                    "sample_y": 20 + index,
+                }
+            )
+        audit = matched["income_statement_sankey"]["color_audit"]
+        page_url = "https://www.appeconomyinsights.com/p/test-company"
+        audit["mode"] = "matched"
+        audit["alias_review"]["review_method"] = "已核对 company.json 与官方年报中的公司简称，确认 TestCo 为可验证常用品牌名。"
+        audit["alias_review"]["aliases"] = [
+            {"value": "TestCo", "source_ids": ["SRC-FY"], "verification_note": "官方年报品牌介绍使用该简称。"}
+        ]
+        audit["queries"].extend(
+            [
+                {
+                    "identity_kind": "alias",
+                    "query_variant": query_variant,
+                    "identity_value": "TestCo",
+                    "query": (
+                        'site:appeconomyinsights.com "TestCo" Sankey'
+                        if query_variant == "sankey"
+                        else 'site:appeconomyinsights.com "TestCo" "earnings visuals"'
+                    ),
+                    "searched_at": "2026-04-15T03:35:00Z",
+                    "outcome": "matched" if query_variant == "sankey" else "no_match",
+                    "checked_urls": [page_url] if query_variant == "sankey" else [],
+                    "blocker_code": None,
+                    "notes": "已打开并核验对应公司利润表桑基图。" if query_variant == "sankey" else "未发现其他匹配图。",
+                }
+                for query_variant in ("sankey", "earnings_visuals")
+            ]
+        )
+        audit["source_page_url"] = page_url
+        audit["opened_at"] = "2026-04-15T03:40:00Z"
+        audit["direct_verification"] = {
+            "opened_actual_diagram": True,
+            "company_identity_matches": True,
+            "diagram_kind": "company-income-statement-sankey",
+            "complete_diagram_visible": True,
+        }
+        audit["source_image"] = {
+            "original_url": "https://cdn.example.test/test-company.png",
+            "access_method": "direct-image-url",
+            "captured_at": "2026-04-15T03:42:00Z",
+            "media_type": "image/png",
+            "sha256": "a" * 64,
+            "width": 1600,
+            "height": 900,
+            "size_bytes": 123456,
+        }
+        audit["node_samples"] = samples
+        audit["default_palette_version"] = None
+        findings = []
+        validate_sankey(matched_company, findings, matched, known)
+        self.assertNotIn("sankey-color-node-mismatch", {item.code for item in findings})
+        self.assertNotIn("sankey-color-mode", {item.code for item in findings})
+
+        unofficial_company = copy.deepcopy(matched_company)
+        next(source for source in unofficial_company["sources"] if source["id"] == "SRC-FY")["source_type"] = "news"
+        findings = []
+        validate_sankey(unofficial_company, findings, matched, known)
+        self.assertIn("sankey-color-alias-source", {item.code for item in findings})
+
+        leaked = copy.deepcopy(matched)
+        leaked["income_statement_sankey"]["color_audit"]["queries"][0]["notes"] += (
+            r" 私有证据仍位于 D:\private-evidence\app-economy-source.png。"
+        )
+        findings = []
+        validate_sankey(matched_company, findings, leaked, known)
+        self.assertIn("sankey-color-private-path", {item.code for item in findings})
+
+        mismatched = copy.deepcopy(matched_company)
+        mismatched["income_statement_sankey"]["nodes"][0]["color"] = "#FFFFFF"
+        findings = []
+        validate_sankey(mismatched, findings, matched, known)
+        self.assertIn("sankey-color-node-mismatch", {item.code for item in findings})
+
+        blocked = copy.deepcopy(calculations)
+        blocked_audit = blocked["income_statement_sankey"]["color_audit"]
+        blocked_audit["mode"] = "blocked"
+        blocked_audit["queries"][0]["outcome"] = "blocked"
+        blocked_audit["queries"][0]["blocker_code"] = "network_error"
+        blocked_audit["default_palette_version"] = None
+        blocked_audit["blockers"] = [
+            {"code": "network_error", "detail": "公开检索无法完成，不能证明不存在匹配图。", "page_url": None}
+        ]
+        findings = []
+        validate_sankey(company, findings, blocked, known)
+        self.assertIn("sankey-color-audit-blocked", {item.code for item in findings})
+
     def test_sankey_accepts_reported_intermediate_profit_ladder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))
@@ -505,6 +623,7 @@ class SemanticGateTests(unittest.TestCase):
                 for node_id, value in values.items()
             ],
             "calculated_nodes": [],
+            "color_audit": calculations["income_statement_sankey"]["color_audit"],
         }
         calculations["calculations"] = [
             item for item in calculations["calculations"]
@@ -589,6 +708,7 @@ class SemanticGateTests(unittest.TestCase):
             "calculated_nodes": [
                 {"node_id": "costs_and_expenses", "calculation_id": "CALC-AMEX-PRETAX-COSTS"}
             ],
+            "color_audit": calculations["income_statement_sankey"]["color_audit"],
         }
         calculations["calculations"] = [
             item for item in calculations["calculations"]
@@ -773,6 +893,15 @@ class SemanticGateTests(unittest.TestCase):
             findings = []
             validate_report(company, report + "\n" + logo_workflow_note, "full", findings, calculations)
             self.assertIn("report-logo-workflow-leak", {item.code for item in findings})
+
+        for color_workflow_note in (
+            "App Economy Insights 未找到匹配，因此桑基图采用默认色。",
+            "桑基配色已逐节点取样并写入 color_audit。",
+            "本次使用 semantic-default-v1 渲染桑基图。",
+        ):
+            findings = []
+            validate_report(company, report + "\n" + color_workflow_note, "full", findings, calculations)
+            self.assertIn("report-sankey-color-workflow-leak", {item.code for item in findings})
 
         legacy_report = report + "\n" + ("不" + "做清单")
         findings = []

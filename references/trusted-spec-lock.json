@@ -27,21 +27,21 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "837c5c30a747575ca02f3d4ad5f099d5018f305d02c016ff4c1157fe7563cf3f",
-    "toolchain_digest_sha256": "2cc1e43064e304bb89ec3907eb00fb51bb62818469916153e6d862edc9d87744",
-    "bundle_digest_sha256": "7786f861ce69d9581dfca38d3a3437c1214586122b13cf7a5a5785f2bce4b02c",
+    "normative_digest_sha256": "30e75d3db47c14fdd57834e6df2be05c1d77d876a6f94dfefab7e1098a0bf86e",
+    "toolchain_digest_sha256": "c1c35443d1e4e32e05024e9aaaa5cc1c5fe9a3bb687bc2a91e49cdcf7b0bf5af",
+    "bundle_digest_sha256": "dc362b0c475effb7dc7a444266222afbbf72af99ddc0e222a31a1e1e031ef729",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "580142e3a9f325c8a6ec9a28eda8d0b7561bf76ec39a1e34f15a43377856a308",
-        "size_bytes": 20434
+        "sha256": "3c9fe684cd3639d944ec02ad52487c026dad1b374af5cb7ad2e5e5592c1928a3",
+        "size_bytes": 21615
       },
       {
         "path": "agents/openai.yaml",
         "role": "normative",
-        "sha256": "0cca29ce61cb6f7183cf2ee65eba0eb6c1c22080299155636b8cc43a88889017",
-        "size_bytes": 689
+        "sha256": "f391f8db8351d7db9b74575f2004ace05a102df9fdd7ab5559c904c1ed2ab691",
+        "size_bytes": 803
       },
       {
         "path": "references/classification-and-chart-routing.md",
@@ -58,8 +58,8 @@
       {
         "path": "references/github-archive.md",
         "role": "normative",
-        "sha256": "f5fb3d645cc96169d88517562faa3f6d7ac3ecfa1f7251e829d39acc8ee5c2ea",
-        "size_bytes": 11587
+        "sha256": "e8d8c873fd31b017fb105fed237b67968b739c1ceaa854397cf7771459866bf2",
+        "size_bytes": 11946
       },
       {
         "path": "references/identity-assets.md",
@@ -70,20 +70,20 @@
       {
         "path": "references/income-statement-sankey.md",
         "role": "normative",
-        "sha256": "1682be1bd959c2b2f8c4aba3d5bb32793c6b365a45eac3d7e8e6f1f22e456b99",
-        "size_bytes": 4609
+        "sha256": "575547d44c5de09b95ce0217d57407e35e4ca256a36ff2ffb3c0ae2d4d05c09c",
+        "size_bytes": 8596
       },
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "dfb64b94f111b8778fb2a01fe30eabc94a330fbfc4b2137f02f5e8ce2c94220a",
-        "size_bytes": 22937
+        "sha256": "19e8112d7071bc04e234fd04f2b07c191375f93369d3b1c8dd07623240824d19",
+        "size_bytes": 23448
       },
       {
         "path": "references/research-contract.md",
         "role": "normative",
-        "sha256": "51da1c186e086ae9c61c05fe5cf0226b465f7ea2a705fdfa73b03200b1690bcd",
-        "size_bytes": 29071
+        "sha256": "50803af32eadecf8d472ef7f2a1f5f001837280cf60fc52701437f28773fd45c",
+        "size_bytes": 30512
       },
       {
         "path": "references/research-execution-and-audit.md",
@@ -94,8 +94,8 @@
       {
         "path": "references/source-routing.md",
         "role": "normative",
-        "sha256": "21e660305d83385a9fe6e2056d33445009bf5f95406ee7154476261820dbd199",
-        "size_bytes": 10967
+        "sha256": "f1c824b0a4a7ce00c6c1300d0c04c304af676f904c8ea994d6de006918ae9fd7",
+        "size_bytes": 11825
       },
       {
         "path": "references/specs/automation-workflow.md",
@@ -134,10 +134,16 @@
         "size_bytes": 131342
       },
       {
+        "path": "scripts/prepare_sankey_color_audit.py",
+        "role": "toolchain",
+        "sha256": "c629ac6e37715077d16a614cc0892d61a2641f197fc967aaadca7e42dc7919cb",
+        "size_bytes": 42117
+      },
+      {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "c478f9a0cde50ccff18cff0e3d3a7d7635bc249279901e59e1f21febaaf461dd",
-        "size_bytes": 283028
+        "sha256": "86519ef24f5ebea518c06bc73ab78185d3cec7439af6eef40f212aefe1d6e434",
+        "size_bytes": 306444
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -148,8 +154,8 @@
       {
         "path": "scripts/validate_skill.py",
         "role": "toolchain",
-        "sha256": "f67082d559012ad13a6357e8c8c8d0483a7883170131e404447e544bf03518ac",
-        "size_bytes": 19933
+        "sha256": "a887790c882c0d2708bb1831edbd31b203d08489c95288e760c8372bc6083c1d",
+        "size_bytes": 20752
       },
       {
         "path": "scripts/verify_spec_anchor.py",

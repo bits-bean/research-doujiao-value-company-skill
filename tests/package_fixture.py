@@ -906,6 +906,48 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "calculated_nodes": [
                     {"node_id": "pretax_costs", "calculation_id": "CALC-SANKEY-PRETAX-COSTS"}
                 ],
+                "color_audit": {
+                    "contract_version": "1.0.0",
+                    "provider": "App Economy Insights",
+                    "site_origin": "https://www.appeconomyinsights.com/",
+                    "completed_at": "2026-04-15T04:00:00Z",
+                    "alias_review": {
+                        "completed": True,
+                        "review_method": "已核对 company.json 身份字段与官方公司资料中的常用简称和品牌名，本测试公司没有额外可验证别名。",
+                        "aliases": [],
+                    },
+                    "mode": "not_found",
+                    "queries": [
+                        {
+                            "identity_kind": identity_kind,
+                            "query_variant": query_variant,
+                            "identity_value": identity_value,
+                            "query": (
+                                f'site:appeconomyinsights.com "{identity_value}" Sankey'
+                                if query_variant == "sankey"
+                                else f'site:appeconomyinsights.com "{identity_value}" "earnings visuals"'
+                            ),
+                            "searched_at": "2026-04-15T03:30:00Z",
+                            "outcome": "no_match",
+                            "checked_urls": [],
+                            "blocker_code": None,
+                            "notes": "已完成规定检索，未发现可直接核验的该公司利润表桑基图。",
+                        }
+                        for identity_kind, identity_value in (
+                            ("english_name", "Test Company"),
+                            ("chinese_name", "测试公司"),
+                            ("ticker", "TEST"),
+                        )
+                        for query_variant in ("sankey", "earnings_visuals")
+                    ],
+                    "source_page_url": None,
+                    "opened_at": None,
+                    "direct_verification": None,
+                    "source_image": None,
+                    "node_samples": [],
+                    "default_palette_version": "semantic-default-v1",
+                    "blockers": [],
+                },
             },
             "calculations": [
                 {"id": "CALC-SANKEY-PRETAX-COSTS", "metric": "custom", "sankey_node_id": "pretax_costs", "period": "FY2025", "formula": "total_revenue - pretax_profit", "inputs": {"total_revenue": 190 * M, "pretax_profit": 50 * M}, "result": 140 * M, "review_method": "将总收入减税前利润，并与四项已披露税前成本费用合计交叉复算。", "source_ids": ["SRC-FY"]},

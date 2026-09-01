@@ -38,7 +38,7 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
-VALIDATOR_VERSION = "research-doujiao-value-company/4.6"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.7"
 INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
@@ -84,6 +84,34 @@ PROTOCOL_DOCUMENT_PATHS = (
     "references/specs/research-methodology.md",
 )
 BUNDLED_SCHEMA_PATH = "references/specs/company.schema.json"
+SANKEY_COLOR_AUDIT_VERSION = "1.0.0"
+SANKEY_COLOR_PROVIDER = "App Economy Insights"
+SANKEY_COLOR_SITE_ORIGIN = "https://www.appeconomyinsights.com/"
+SANKEY_DEFAULT_PALETTE_VERSION = "semantic-default-v1"
+SANKEY_COLOR_IDENTITIES = ("english_name", "chinese_name", "ticker")
+SANKEY_COLOR_QUERY_VARIANTS = ("sankey", "earnings_visuals")
+SANKEY_COLOR_OUTCOMES = {"matched", "no_match", "blocked"}
+SANKEY_COLOR_BLOCKERS = {
+    "paywall",
+    "login_required",
+    "network_error",
+    "candidate_unverifiable",
+    "source_image_unavailable",
+    "other_access_failure",
+}
+SANKEY_COLOR_PATTERN = re.compile(r"#[0-9A-F]{6}")
+SANKEY_COLOR_TIMESTAMP = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})"
+)
+SANKEY_WINDOWS_ABSOLUTE_PATH = re.compile(
+    r"(?:^|[\s('\"`])(?:[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/][^\\/\s]+)"
+)
+SANKEY_POSIX_ABSOLUTE_PATH = re.compile(r"(?:^|[\s('\"`])/(?!/)[^\s]+")
+SANKEY_RELATIVE_PRIVATE_PATH = re.compile(
+    r"(?:^|[\s('\"`])(?:\.{1,2}[\\/]|private[-_]?evidence[\\/])[^\s]+",
+    re.IGNORECASE,
+)
+SANKEY_FILE_URI = re.compile(r"\bfile://", re.IGNORECASE)
 TRUSTED_LOCK_KEYS = {"lock_version", "research_protocol", "execution_integrity", "company_schema"}
 RESEARCH_PROTOCOL_KEYS = {
     "authority",
@@ -192,6 +220,16 @@ REPORT_LOGO_ASSET_TOKENS = (
     "公司标志",
     "公司标识",
     "品牌标识文件",
+)
+REPORT_SANKEY_COLOR_WORKFLOW_TOKENS = (
+    "app economy insights",
+    "color_audit",
+    "semantic-default-v1",
+    "sankey palette",
+    "桑基配色",
+    "逐节点取样",
+    "sample_x",
+    "sample_y",
 )
 REPORT_GLOSSARY_TERMS = (
     "Thesis breakers",
@@ -1919,6 +1957,372 @@ def validate_financials(company: dict[str, Any], completeness: str, mode: str, f
                 add(findings, "error", "fcf-mismatch", f"company.json.financials[{index}]", f"FCF {fcf} does not equal OCF - capex ({expected})")
 
 
+def validate_sankey_color_audit(
+    company: dict[str, Any],
+    ledger: dict[str, Any],
+    node_by_id: dict[Any, dict[str, Any]],
+    node_ids: set[Any],
+    findings: list[Finding],
+) -> None:
+    """Validate the frozen App Economy Insights tri-state color audit."""
+
+    path = "calculation-ledger.json.income_statement_sankey.color_audit"
+    audit = ledger.get("color_audit")
+    if not isinstance(audit, dict):
+        add(
+            findings,
+            "error",
+            "sankey-color-audit",
+            path,
+            "requires a company-level matched/not_found/blocked App Economy Insights color audit",
+        )
+        return
+
+    def audit_strings(value: Any, item_path: str):
+        if isinstance(value, str):
+            yield item_path, value
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                yield from audit_strings(item, f"{item_path}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                yield from audit_strings(item, f"{item_path}[{index}]")
+
+    def contains_private_local_path(value: str) -> bool:
+        return bool(
+            SANKEY_FILE_URI.search(value)
+            or SANKEY_WINDOWS_ABSOLUTE_PATH.search(value)
+            or SANKEY_POSIX_ABSOLUTE_PATH.search(value)
+            or SANKEY_RELATIVE_PRIVATE_PATH.search(value)
+        )
+
+    leaked_path = next(
+        (
+            item_path
+            for item_path, value in audit_strings(audit, path)
+            if contains_private_local_path(value)
+        ),
+        None,
+    )
+    if leaked_path is not None:
+        add(
+            findings,
+            "error",
+            "sankey-color-private-path",
+            leaked_path,
+            "color audit must not contain local or private evidence paths in any field",
+        )
+
+    required_keys = {
+        "contract_version",
+        "provider",
+        "site_origin",
+        "completed_at",
+        "alias_review",
+        "mode",
+        "queries",
+        "source_page_url",
+        "opened_at",
+        "direct_verification",
+        "source_image",
+        "node_samples",
+        "default_palette_version",
+        "blockers",
+    }
+    if set(audit) != required_keys:
+        add(
+            findings,
+            "error",
+            "sankey-color-audit-shape",
+            path,
+            f"color_audit keys must be exactly {sorted(required_keys)!r}",
+        )
+    if audit.get("contract_version") != SANKEY_COLOR_AUDIT_VERSION:
+        add(findings, "error", "sankey-color-audit-version", path, f"contract_version must be {SANKEY_COLOR_AUDIT_VERSION}")
+    if audit.get("provider") != SANKEY_COLOR_PROVIDER or audit.get("site_origin") != SANKEY_COLOR_SITE_ORIGIN:
+        add(findings, "error", "sankey-color-audit-provider", path, "provider and site_origin must bind App Economy Insights")
+
+    def parse_timestamp(value: Any, item_path: str) -> datetime | None:
+        if not isinstance(value, str) or SANKEY_COLOR_TIMESTAMP.fullmatch(value) is None:
+            add(findings, "error", "sankey-color-audit-time", item_path, "requires an RFC 3339 timestamp with an explicit timezone")
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            add(findings, "error", "sankey-color-audit-time", item_path, "contains an invalid timestamp")
+            return None
+
+    def app_economy_url(value: Any) -> bool:
+        if not isinstance(value, str):
+            return False
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
+        return (
+            parsed.scheme == "https"
+            and bool(parsed.netloc)
+            and parsed.username is None
+            and parsed.password is None
+            and (host == "appeconomyinsights.com" or host.endswith(".appeconomyinsights.com"))
+        )
+
+    completed_at = parse_timestamp(audit.get("completed_at"), f"{path}.completed_at")
+    meta = company.get("meta") if isinstance(company.get("meta"), dict) else {}
+    identities = {
+        "english_name": meta.get("company_name_en"),
+        "chinese_name": meta.get("company_name_cn"),
+        "ticker": meta.get("ticker"),
+    }
+    source_by_id = {
+        item.get("id"): item
+        for item in list_or_empty(company.get("sources"))
+        if isinstance(item, dict) and nonblank(item.get("id"))
+    }
+    alias_review = audit.get("alias_review")
+    aliases: list[dict[str, Any]] = []
+    alias_values: list[str] = []
+    alias_review_keys = {"completed", "review_method", "aliases"}
+    if not isinstance(alias_review, dict) or set(alias_review) != alias_review_keys:
+        add(findings, "error", "sankey-color-alias-review", f"{path}.alias_review", f"alias_review keys must be exactly {sorted(alias_review_keys)!r}")
+    else:
+        if alias_review.get("completed") is not True or not substantive_text(alias_review.get("review_method"), 16):
+            add(findings, "error", "sankey-color-alias-review", f"{path}.alias_review", "must document a completed review of company.json and official-source aliases")
+        alias_items = alias_review.get("aliases")
+        if not isinstance(alias_items, list):
+            add(findings, "error", "sankey-color-alias-review", f"{path}.alias_review.aliases", "aliases must be an array")
+        else:
+            canonical_folded = {str(value).casefold() for value in identities.values()}
+            seen_aliases: set[str] = set()
+            alias_keys = {"value", "source_ids", "verification_note"}
+            for index, alias in enumerate(alias_items):
+                alias_path = f"{path}.alias_review.aliases[{index}]"
+                if not isinstance(alias, dict) or set(alias) != alias_keys:
+                    add(findings, "error", "sankey-color-alias", alias_path, f"alias keys must be exactly {sorted(alias_keys)!r}")
+                    continue
+                value = alias.get("value")
+                folded = value.casefold() if isinstance(value, str) else ""
+                source_ids = alias.get("source_ids")
+                if not nonblank(value) or folded in canonical_folded or folded in seen_aliases:
+                    add(findings, "error", "sankey-color-alias", alias_path, "alias value must be unique and distinct from canonical identities")
+                else:
+                    seen_aliases.add(folded)
+                    alias_values.append(value)
+                if (
+                    not isinstance(source_ids, list)
+                    or not source_ids
+                    or any(not isinstance(source_id, str) for source_id in source_ids)
+                    or len(source_ids) != len(set(source_ids))
+                    or any(
+                        source_id not in source_by_id
+                        or source_by_id[source_id].get("source_type") not in CLASSIFICATION_OFFICIAL_SOURCE_TYPES
+                        for source_id in source_ids
+                    )
+                    or not substantive_text(alias.get("verification_note"), 8)
+                ):
+                    add(findings, "error", "sankey-color-alias-source", alias_path, "alias requires resolved official source_ids and a verification note")
+                aliases.append(alias)
+            if alias_values != sorted(alias_values, key=str.casefold):
+                add(findings, "error", "sankey-color-alias-order", f"{path}.alias_review.aliases", "aliases must be sorted case-insensitively")
+    queries = audit.get("queries")
+    observed_query_keys: list[tuple[Any, Any, Any]] = []
+    query_outcomes: list[Any] = []
+    matched_urls: set[str] = set()
+    blocked_urls: set[str] = set()
+    query_keys = {
+        "identity_kind",
+        "query_variant",
+        "identity_value",
+        "query",
+        "searched_at",
+        "outcome",
+        "checked_urls",
+        "blocker_code",
+        "notes",
+    }
+    expected_query_count = 6 + 2 * len(alias_values)
+    if not isinstance(queries, list) or len(queries) != expected_query_count:
+        add(findings, "error", "sankey-color-search", f"{path}.queries", "must contain both variants for every canonical identity and verified alias")
+        queries = []
+    for index, query in enumerate(queries):
+        query_path = f"{path}.queries[{index}]"
+        if not isinstance(query, dict) or set(query) != query_keys:
+            add(findings, "error", "sankey-color-search-shape", query_path, f"query keys must be exactly {sorted(query_keys)!r}")
+            continue
+        identity_kind = query.get("identity_kind")
+        query_variant = query.get("query_variant")
+        identity_value = query.get("identity_value")
+        observed_query_keys.append((identity_kind, identity_value, query_variant))
+        expected_identity_value = identities.get(identity_kind)
+        if identity_kind not in (*SANKEY_COLOR_IDENTITIES, "alias") or query_variant not in SANKEY_COLOR_QUERY_VARIANTS:
+            add(findings, "error", "sankey-color-search", query_path, "identity_kind or query_variant is invalid")
+        elif identity_kind == "alias" and identity_value not in alias_values:
+            add(findings, "error", "sankey-color-search-identity", query_path, "alias identity_value must resolve to alias_review")
+        elif identity_kind != "alias" and identity_value != expected_identity_value:
+            add(findings, "error", "sankey-color-search-identity", query_path, "identity_value must equal frozen company identity")
+        else:
+            expected_query = (
+                f'site:appeconomyinsights.com "{identity_value}" Sankey'
+                if query_variant == "sankey"
+                else f'site:appeconomyinsights.com "{identity_value}" "earnings visuals"'
+            )
+            if query.get("query") != expected_query:
+                add(findings, "error", "sankey-color-search-query", query_path, "query must equal the prescribed canonical search")
+        searched_at = parse_timestamp(query.get("searched_at"), f"{query_path}.searched_at")
+        if completed_at is not None and searched_at is not None and searched_at > completed_at:
+            add(findings, "error", "sankey-color-audit-time", query_path, "query timestamp cannot follow completed_at")
+        outcome = query.get("outcome")
+        query_outcomes.append(outcome)
+        if outcome not in SANKEY_COLOR_OUTCOMES:
+            add(findings, "error", "sankey-color-search-outcome", query_path, "outcome must be matched, no_match, or blocked")
+        urls = query.get("checked_urls")
+        if (
+            not isinstance(urls, list)
+            or any(not isinstance(url, str) for url in urls)
+            or len(urls) != len(set(urls))
+            or any(not app_economy_url(url) for url in urls)
+        ):
+            add(findings, "error", "sankey-color-search-url", query_path, "checked_urls must be unique App Economy Insights HTTPS URLs")
+            urls = []
+        if outcome == "matched":
+            if not urls:
+                add(findings, "error", "sankey-color-search-outcome", query_path, "matched search requires a checked URL")
+            matched_urls.update(urls)
+        if outcome == "blocked":
+            blocked_urls.update(urls)
+            if query.get("blocker_code") not in SANKEY_COLOR_BLOCKERS:
+                add(findings, "error", "sankey-color-search-blocker", query_path, "blocked search requires a recognized blocker_code")
+        elif query.get("blocker_code") is not None:
+            add(findings, "error", "sankey-color-search-blocker", query_path, "blocker_code must be null unless outcome is blocked")
+        if not substantive_text(query.get("notes"), 8):
+            add(findings, "error", "sankey-color-search-notes", query_path, "search notes must record the observed result")
+
+    expected_query_keys = [
+        (identity_kind, identities[identity_kind], query_variant)
+        for identity_kind in SANKEY_COLOR_IDENTITIES
+        for query_variant in SANKEY_COLOR_QUERY_VARIANTS
+    ]
+    expected_query_keys.extend(
+        ("alias", alias_value, query_variant)
+        for alias_value in alias_values
+        for query_variant in SANKEY_COLOR_QUERY_VARIANTS
+    )
+    if observed_query_keys != expected_query_keys:
+        add(findings, "error", "sankey-color-search-coverage", f"{path}.queries", "queries must be ordered and cover canonical identities plus every verified alias with both variants exactly once")
+
+    blockers = audit.get("blockers")
+    blocker_keys = {"code", "detail", "page_url"}
+    if not isinstance(blockers, list):
+        add(findings, "error", "sankey-color-blocker", f"{path}.blockers", "blockers must be an array")
+        blockers = []
+    for index, blocker in enumerate(blockers):
+        blocker_path = f"{path}.blockers[{index}]"
+        if not isinstance(blocker, dict) or set(blocker) != blocker_keys:
+            add(findings, "error", "sankey-color-blocker", blocker_path, f"blocker keys must be exactly {sorted(blocker_keys)!r}")
+            continue
+        if blocker.get("code") not in SANKEY_COLOR_BLOCKERS or not substantive_text(blocker.get("detail"), 8):
+            add(findings, "error", "sankey-color-blocker", blocker_path, "blocker requires a recognized code and substantive detail")
+        page_url = blocker.get("page_url")
+        if page_url is not None and (not app_economy_url(page_url) or page_url not in blocked_urls):
+            add(findings, "error", "sankey-color-blocker", blocker_path, "page_url must bind a checked URL from a blocked query")
+
+    mode = audit.get("mode")
+    node_colors = {node_id: node_by_id.get(node_id, {}).get("color") for node_id in node_ids}
+    empty_colors = all(color is None for color in node_colors.values())
+    canonical_colors = all(isinstance(color, str) and SANKEY_COLOR_PATTERN.fullmatch(color) is not None for color in node_colors.values())
+    null_match_fields = all(
+        audit.get(key) is None
+        for key in ("source_page_url", "opened_at", "direct_verification", "source_image")
+    ) and audit.get("node_samples") == []
+
+    if mode == "matched":
+        if "matched" not in query_outcomes or blockers:
+            add(findings, "error", "sankey-color-mode", path, "matched mode requires at least one directly verified match and no unresolved company-level blocker")
+        if not canonical_colors:
+            add(findings, "error", "sankey-color-node-coverage", "company.json.income_statement_sankey.nodes", "matched mode requires every node color as canonical #RRGGBB")
+        if audit.get("default_palette_version") is not None:
+            add(findings, "error", "sankey-color-default", path, "matched mode cannot bind the System default palette")
+        source_page_url = audit.get("source_page_url")
+        if not app_economy_url(source_page_url) or source_page_url not in matched_urls:
+            add(findings, "error", "sankey-color-source", f"{path}.source_page_url", "must bind a checked matched App Economy Insights page")
+        parse_timestamp(audit.get("opened_at"), f"{path}.opened_at")
+        direct = audit.get("direct_verification")
+        expected_direct = {
+            "opened_actual_diagram": True,
+            "company_identity_matches": True,
+            "diagram_kind": "company-income-statement-sankey",
+            "complete_diagram_visible": True,
+        }
+        if direct != expected_direct:
+            add(findings, "error", "sankey-color-direct-verification", f"{path}.direct_verification", "must record direct verification of the complete company income-statement Sankey")
+        source_image = audit.get("source_image")
+        source_image_keys = {
+            "original_url",
+            "access_method",
+            "captured_at",
+            "media_type",
+            "sha256",
+            "width",
+            "height",
+            "size_bytes",
+        }
+        if not isinstance(source_image, dict) or set(source_image) != source_image_keys:
+            add(findings, "error", "sankey-color-source-image", f"{path}.source_image", f"source_image keys must be exactly {sorted(source_image_keys)!r} and cannot include a private evidence path")
+        else:
+            parsed_original = urlparse(str(source_image.get("original_url", "")))
+            if parsed_original.scheme != "https" or not parsed_original.netloc or parsed_original.username or parsed_original.password:
+                add(findings, "error", "sankey-color-source-image", f"{path}.source_image.original_url", "must be a credential-free HTTPS URL")
+            if source_image.get("access_method") != "direct-image-url" or source_image.get("media_type") != "image/png":
+                add(findings, "error", "sankey-color-source-image", f"{path}.source_image", "must bind a directly retrieved PNG")
+            parse_timestamp(source_image.get("captured_at"), f"{path}.source_image.captured_at")
+            if re.fullmatch(r"[0-9a-f]{64}", str(source_image.get("sha256", ""))) is None:
+                add(findings, "error", "sankey-color-source-image", f"{path}.source_image.sha256", "must be a lowercase SHA-256")
+            if any(not isinstance(source_image.get(key), int) or isinstance(source_image.get(key), bool) or source_image.get(key) <= 0 for key in ("width", "height", "size_bytes")):
+                add(findings, "error", "sankey-color-source-image", f"{path}.source_image", "width, height, and size_bytes must be positive integers")
+        samples = audit.get("node_samples")
+        sample_keys = {"node_id", "source_label", "mapping_note", "color", "sample_x", "sample_y"}
+        sample_by_id: dict[Any, Any] = {}
+        if not isinstance(samples, list):
+            add(findings, "error", "sankey-color-samples", f"{path}.node_samples", "node_samples must be an array")
+            samples = []
+        for index, sample in enumerate(samples):
+            sample_path = f"{path}.node_samples[{index}]"
+            if not isinstance(sample, dict) or set(sample) != sample_keys:
+                add(findings, "error", "sankey-color-sample-shape", sample_path, f"sample keys must be exactly {sorted(sample_keys)!r}")
+                continue
+            node_id = sample.get("node_id")
+            if not isinstance(node_id, str):
+                add(findings, "error", "sankey-color-sample", sample_path, "node_id must be a string graph node ID")
+                continue
+            if node_id in sample_by_id:
+                add(findings, "error", "sankey-color-sample-coverage", sample_path, "node_id is duplicated")
+            sample_by_id[node_id] = sample
+            color = sample.get("color")
+            if node_id not in node_ids or not isinstance(color, str) or SANKEY_COLOR_PATTERN.fullmatch(color) is None:
+                add(findings, "error", "sankey-color-sample", sample_path, "sample must bind a graph node to canonical #RRGGBB")
+            elif node_colors.get(node_id) != color:
+                add(findings, "error", "sankey-color-node-mismatch", sample_path, "sample color must exactly equal company.json node color")
+            if not substantive_text(sample.get("source_label"), 1) or not substantive_text(sample.get("mapping_note"), 8):
+                add(findings, "error", "sankey-color-sample", sample_path, "sample requires source_label and a substantive mapping_note")
+            if any(not isinstance(sample.get(key), int) or isinstance(sample.get(key), bool) or sample.get(key) < 1 for key in ("sample_x", "sample_y")):
+                add(findings, "error", "sankey-color-sample", sample_path, "sample coordinates must be positive integers")
+        if set(sample_by_id) != node_ids:
+            add(findings, "error", "sankey-color-sample-coverage", f"{path}.node_samples", f"samples must cover every graph node exactly; mismatch {sorted(set(sample_by_id) ^ node_ids)!r}")
+    elif mode == "not_found":
+        if query_outcomes != ["no_match"] * expected_query_count or blockers:
+            add(findings, "error", "sankey-color-mode", path, "not_found requires every canonical and verified-alias search to be no_match with no blockers")
+        if not empty_colors:
+            add(findings, "error", "sankey-color-default", "company.json.income_statement_sankey.nodes", "not_found requires every node color to be null or absent")
+        if not null_match_fields or audit.get("default_palette_version") != SANKEY_DEFAULT_PALETTE_VERSION:
+            add(findings, "error", "sankey-color-default", path, f"not_found must have no match payload and bind {SANKEY_DEFAULT_PALETTE_VERSION}")
+    elif mode == "blocked":
+        if "blocked" not in query_outcomes or "matched" in query_outcomes or not blockers:
+            add(findings, "error", "sankey-color-mode", path, "blocked mode requires at least one blocked search and blocker, with no match")
+        if not empty_colors or not null_match_fields or audit.get("default_palette_version") is not None:
+            add(findings, "error", "sankey-color-blocked-state", path, "blocked mode cannot expose node colors, match evidence, samples, or a default palette")
+        add(findings, "error", "sankey-color-audit-blocked", path, "App Economy Insights search or verification is blocked; formal validation, freeze, and archive must stop")
+    else:
+        add(findings, "error", "sankey-color-mode", path, "mode must be matched, not_found, or blocked")
+
+
 def validate_sankey(
     company: dict[str, Any],
     findings: list[Finding],
@@ -2161,6 +2565,8 @@ def validate_sankey(
         return
     if ledger.get("fiscal_year") != sankey.get("fiscal_year") or not substantive_text(ledger.get("review_method"), 16):
         add(findings, "error", "sankey-disclosure-ledger", "calculation-ledger.json.income_statement_sankey", "fiscal_year must match and review_method must document line-by-line annual-report review")
+
+    validate_sankey_color_audit(company, ledger, node_by_id, node_ids, findings)
 
     known_sources = known if known is not None else set()
 
@@ -3833,6 +4239,22 @@ def validate_report_reader_contract(report: str, findings: list[Finding]) -> Non
             "investor-facing prose and its source index must not contain company Logo/identity-asset status; "
             "move asset workflow to sidecar/archive records and describe material brand changes as economic facts; "
             f"found {sorted(set(logo_asset_lines))!r}",
+        )
+
+    sankey_color_lines: list[str] = []
+    for line in report.splitlines():
+        normalized = clean_markdown_text(line).strip()
+        lowered_line = normalized.lower()
+        if any(token in lowered_line for token in REPORT_SANKEY_COLOR_WORKFLOW_TOKENS):
+            sankey_color_lines.append(normalized[:160])
+    if sankey_color_lines:
+        add(
+            findings,
+            "error",
+            "report-sankey-color-workflow-leak",
+            "research-report.md",
+            "investor-facing prose must not contain Sankey palette search, sampling, default, or rendering workflow; "
+            f"found {sorted(set(sankey_color_lines))!r}",
         )
 
     non_heading_lines = [line for line in report.splitlines() if not re.match(r"^\s*#", line)]

@@ -8,7 +8,7 @@ GitHub 写入必须由用户在本次任务中明确授权。“研究某公司�
 
 ## 发布前门禁
 
-1. 使用冻结时锁定的 Schema 和当前 Skill v2 信任锁重新验证研究包。
+1. 使用冻结时锁定的 Schema 和当前 Skill v2 信任锁重新验证研究包；重新验证必须确认桑基 `color_audit` 不是 `blocked`，`matched` 逐节点色与 `company.json` 一致，或 `not_found` 已穷尽规范身份与官方可验证别名并绑定 System 默认版本。
 2. 要求 `manifest_version: 2.0`、`status: frozen`、`human_review_status: accepted`、`validation.mode: full`、零错误，并验证 manifest 与验证报告锁定的 `company_slug` 等于本次交付 slug、manifest 中全部哈希和文件大小。v1 研究包只能审查。
 3. 运行 `prepare_github_archive.py` 生成计划。计划文件只写冻结目录外的任务工作目录，不写冻结目录。
 4. 通过 GitHub 连接器取得权限和最新 `main` SHA，确认冻结清单锁定的 Schema commit 是其祖先，且 `main:schemas/company.schema.json` 仍为锁定 blob。
@@ -52,7 +52,7 @@ companies/<company-slug>/research-manifest.json
 - 受管文件集合及内容完全相同：幂等 `noop`。
 - 任一受管文件缺失或变化：以冻结包完整受管文件集更新；旧的多余受管研究文件列入 `delete_paths`。
 - 所有非研究文件与子目录都不参与研究包比较，不得进入研究包的 `files` 或 `delete_paths`，必须原样保留。
-- 唯一例外是显式暂存的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）：路径必须与 `company.json` 完全一致，由独立 observation 和 SHA-256 门禁决定 `create`、`noop` 或经明确授权的 `update`。官方原始正方形文件保持原字节；已证明的 PNG 中心裁剪标记 `official_source_derived:true`，但仍只写入一个 canonical PNG。从不跨格式转换或删除 Logo。
+- 唯一例外是显式暂存的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）：路径必须与 `company.json` 完全一致，由独立 observation 和 SHA-256 门禁决定 `create`、`noop` 或经明确授权的 `update`。官方原始正方形文件保持原字节；已证明的 PNG 中心裁剪标记 `official_source_derived:true`，但仍只写入一个 canonical PNG。从不跨格式转换或删除 Logo。App Economy Insights 原始 PNG 只存在于私有研究证据目录，任何路径或字节出现在冻结包、计划或最终 diff 都必须阻断。
 - 新公司若声明非空 Logo 路径而没有暂存已验证文件，停止。更新现有公司时，非暂存 Logo 的路径与元数据必须与远端 canonical `company.json` 一致；不得静默清空、换路径或制造悬空引用。
 - 已确认没有可验证官方 Logo 时，只有新四元组为精确空哨兵、完整度说明列明官方来源尝试 / 网站 ticker 回退影响 / 待补条件、远端安全旧路径均有精确 observation，且另获清除引用授权，才允许 `clear-reference`。它只取消 `company.json` 引用并保留旧文件；远端本来没有 Logo 记录且新包仍为空时不需要该授权。
 - 远端本来不存在的新公司若仍为空哨兵，不属于 `clear-reference`，但首次归档默认阻断。只有独立的无 Logo 交付授权才能得到 `missing-explicitly-authorized`；通用 warning 或写入授权不能复用，且该状态必须写入计划和 PR 说明。
