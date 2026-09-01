@@ -38,7 +38,7 @@ EXPECTED_SPEC_REPOSITORY = "bits-bean/doujiao-value-system"
 EXPECTED_SCHEMA_PATH = "schemas/company.schema.json"
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_SPEC_LOCK_PATH = SKILL_ROOT / "references" / "trusted-spec-lock.json"
-VALIDATOR_VERSION = "research-doujiao-value-company/4.4"
+VALIDATOR_VERSION = "research-doujiao-value-company/4.6"
 INTEGRITY_PROFILE = "execution-bound-v1"
 EXPECTED_PROTOCOL_AUTHORITY = "research-doujiao-value-company"
 EXPECTED_PROTOCOL_REPOSITORY = "bits-bean/doujiao-value-research-skill"
@@ -157,7 +157,7 @@ REPORT_SECTIONS = (
     ("roic", ("roic 与再投资跑道", "roic", "投入资本回报")),
     ("moat", ("逐维护城河", "护城河", "moat")),
     ("durability", ("十年后需求与长期生存", "长期生存", "十年后", "durability")),
-    ("culture-management", ("文化、不做清单、管理层和资本配置", "企业文化、管理层与资本配置", "文化与管理", "stop doing", "不做清单")),
+    ("culture-management", ("文化、不为清单、管理层和资本配置", "企业文化、管理层与资本配置", "文化与管理", "stop doing", "不为清单")),
     ("buyback-ledger", ("回购明细账", "回购明细", "buyback ledger")),
     ("governance-debt", ("会计、治理、负债和红旗", "治理、债务与红旗", "治理与债务", "governance and debt")),
     ("valuation", ("估值、reverse dcf、敏感性和情景回报", "reverse dcf", "反向 dcf", "估值")),
@@ -184,6 +184,14 @@ REPORT_INTERNAL_IMPLEMENTATION_TOKENS = (
     "validate_research_package.py",
     "验证器兼容",
     "校验器兼容",
+)
+REPORT_LEGACY_TERMS = ("不" + "做清单",)
+REPORT_LOGO_ASSET_TOKENS = (
+    "logo",
+    "company_logo",
+    "公司标志",
+    "公司标识",
+    "品牌标识文件",
 )
 REPORT_GLOSSARY_TERMS = (
     "Thesis breakers",
@@ -3790,6 +3798,15 @@ def parse_forecast_year(value: Any) -> int | None:
 
 def validate_report_reader_contract(report: str, findings: list[Finding]) -> None:
     lowered = report.lower()
+    legacy_terms = sorted(term for term in REPORT_LEGACY_TERMS if term in report)
+    if legacy_terms:
+        add(
+            findings,
+            "error",
+            "report-legacy-terminology",
+            "research-report.md",
+            "investor-facing prose must use the current terminology: 不为清单",
+        )
     leaked = sorted({token for token in REPORT_INTERNAL_IMPLEMENTATION_TOKENS if token.lower() in lowered})
     if leaked:
         add(
@@ -3799,6 +3816,23 @@ def validate_report_reader_contract(report: str, findings: list[Finding]) -> Non
             "research-report.md",
             "investor-facing prose must move Schema/JSON/validator workflow explanations to sidecar files; "
             f"found {leaked!r}",
+        )
+
+    logo_asset_lines: list[str] = []
+    for line in report.splitlines():
+        normalized = clean_markdown_text(line).strip()
+        lowered_line = normalized.lower()
+        if any(token in lowered_line for token in REPORT_LOGO_ASSET_TOKENS):
+            logo_asset_lines.append(normalized[:160])
+    if logo_asset_lines:
+        add(
+            findings,
+            "error",
+            "report-logo-workflow-leak",
+            "research-report.md",
+            "investor-facing prose and its source index must not contain company Logo/identity-asset status; "
+            "move asset workflow to sidecar/archive records and describe material brand changes as economic facts; "
+            f"found {sorted(set(logo_asset_lines))!r}",
         )
 
     non_heading_lines = [line for line in report.splitlines() if not re.match(r"^\s*#", line)]

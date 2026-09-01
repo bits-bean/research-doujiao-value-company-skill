@@ -758,6 +758,36 @@ class SemanticGateTests(unittest.TestCase):
         validate_report(company, leaked, "full", findings, calculations)
         self.assertIn("report-internal-implementation-leak", {item.code for item in findings})
 
+        for logo_workflow_note in (
+            "Logo 状态：已从官网取得官方 PNG，并按 assets/logo.png 引用。",
+            "公司 Logo 已完成官方文件核验和像素验证。",
+            "尚缺官方 Logo，网站将使用 ticker 回退，后续待补。",
+            "Logo 已准备好，可供网站使用。",
+            "Logo 已找到，来源为公司官网。",
+            "Logo 文件当前可用。",
+            "公司标志已从官网取得并通过验证。",
+            "品牌标识文件尚未取得，网站暂用股票代码。",
+            "Logo：\n已从官网取得并核验。",
+            "| 对象 | 状态 |\n|---|---|\n| Logo | 已取得 |",
+        ):
+            findings = []
+            validate_report(company, report + "\n" + logo_workflow_note, "full", findings, calculations)
+            self.assertIn("report-logo-workflow-leak", {item.code for item in findings})
+
+        legacy_report = report + "\n" + ("不" + "做清单")
+        findings = []
+        validate_report(company, legacy_report, "full", findings, calculations)
+        self.assertIn("report-legacy-terminology", {item.code for item in findings})
+
+        economic_brand_fact = report.replace(
+            "核心客户续费稳定且商户受理关系覆盖广泛",
+            "品牌重塑中的视觉识别变化没有削弱核心客户续费与商户受理关系",
+            1,
+        )
+        findings = []
+        validate_report(company, economic_brand_fact, "full", findings, calculations)
+        self.assertNotIn("report-logo-workflow-leak", {item.code for item in findings})
+
         unexplained = re.sub(r"现金流折现（DCF：[^）]+）", "DCF", report, count=1)
         findings = []
         validate_report(company, unexplained, "full", findings, calculations)
@@ -1377,7 +1407,7 @@ class SemanticGateTests(unittest.TestCase):
         canonical_headings = (
             "一页式结论", "身份、数据截至日、完整度和缺失项", "商业模式与行业结构", "十年财务表和关键趋势",
             "FCF、股东调整后 FCF 与 Owner Earnings", "ROIC 与再投资跑道", "逐维护城河",
-            "十年后需求与长期生存", "文化、不做清单、管理层和资本配置", "回购明细账",
+            "十年后需求与长期生存", "文化、不为清单、管理层和资本配置", "回购明细账",
             "会计、治理、负债和红旗", "估值、Reverse DCF、敏感性和情景回报", "完整 Pre-Mortem",
             "尚待调查问题", "未来跟踪的 5—10 个领先指标", "最终结论",
         )
