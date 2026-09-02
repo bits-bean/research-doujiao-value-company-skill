@@ -53,7 +53,7 @@ class GithubDeliveryTests(unittest.TestCase):
         schema_blob = next(iter(git_blob_sha1_candidates(schema_path)))
         research_protocol = {
             "authority": "research-doujiao-value-company",
-            "repository": "bits-bean/doujiao-value-research-skill",
+            "repository": "bits-bean/research-doujiao-value-company-skill",
             "ref": "main",
             "commit": "c" * 40,
             "protocol_version": "test-1",
@@ -67,7 +67,7 @@ class GithubDeliveryTests(unittest.TestCase):
             "bundle_digest_sha256": "1" * 64,
             "artifacts": [],
             "source_binding": {
-                "repository": "bits-bean/doujiao-value-research-skill",
+                "repository": "bits-bean/research-doujiao-value-company-skill",
                 "ref": "main",
                 "payload_commit": None,
                 "verification_status": "unverified",

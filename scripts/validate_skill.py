@@ -152,7 +152,7 @@ def validate_execution_integrity(value: object) -> int:
         fail("execution_integrity source_binding must contain exactly the required keys")
         errors += 1
     elif binding != {
-        "repository": "bits-bean/doujiao-value-research-skill",
+        "repository": "bits-bean/research-doujiao-value-company-skill",
         "ref": "main",
         "payload_commit": None,
         "verification_status": "unverified",
@@ -381,7 +381,7 @@ def main() -> int:
             set(protocol) != RESEARCH_PROTOCOL_KEYS
             or
             protocol.get("authority") != SKILL_NAME
-            or protocol.get("repository") != "bits-bean/doujiao-value-research-skill"
+            or protocol.get("repository") != "bits-bean/research-doujiao-value-company-skill"
             or protocol.get("ref") != "main"
             or re.fullmatch(r"[0-9a-f]{40}", str(protocol.get("commit", ""))) is None
             or protocol.get("commit") == "0" * 40

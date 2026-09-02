@@ -2,7 +2,7 @@
   "lock_version": "3.0",
   "research_protocol": {
     "authority": "research-doujiao-value-company",
-    "repository": "bits-bean/doujiao-value-research-skill",
+    "repository": "bits-bean/research-doujiao-value-company-skill",
     "ref": "main",
     "commit": "f6260decac7ffa221a7454fc3dfef1b9bed1b720",
     "protocol_version": "2.4.0",
@@ -28,8 +28,8 @@
   "execution_integrity": {
     "profile": "execution-bound-v1",
     "normative_digest_sha256": "30e75d3db47c14fdd57834e6df2be05c1d77d876a6f94dfefab7e1098a0bf86e",
-    "toolchain_digest_sha256": "c1c35443d1e4e32e05024e9aaaa5cc1c5fe9a3bb687bc2a91e49cdcf7b0bf5af",
-    "bundle_digest_sha256": "dc362b0c475effb7dc7a444266222afbbf72af99ddc0e222a31a1e1e031ef729",
+    "toolchain_digest_sha256": "c7c9feecc26aa3bad1765c8f492ac63dcdd4152d988b081ab1065d241b24c2f0",
+    "bundle_digest_sha256": "0f613766785d07629f8bcfa4279da5d4b124f1639ce4177129f78255217779ef",
     "artifacts": [
       {
         "path": "SKILL.md",
@@ -142,8 +142,8 @@
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "86519ef24f5ebea518c06bc73ab78185d3cec7439af6eef40f212aefe1d6e434",
-        "size_bytes": 306444
+        "sha256": "928a9a844d771cd7bfd367fa57e4d71879705140b81e1f15edff8ae8f817ac7e",
+        "size_bytes": 306452
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -154,8 +154,8 @@
       {
         "path": "scripts/validate_skill.py",
         "role": "toolchain",
-        "sha256": "a887790c882c0d2708bb1831edbd31b203d08489c95288e760c8372bc6083c1d",
-        "size_bytes": 20752
+        "sha256": "4ffe93ba597199d8c324fd806fc6250f44736d66069f36fbcc025fb54dbbc635",
+        "size_bytes": 20768
       },
       {
         "path": "scripts/verify_spec_anchor.py",
@@ -165,7 +165,7 @@
       }
     ],
     "source_binding": {
-      "repository": "bits-bean/doujiao-value-research-skill",
+      "repository": "bits-bean/research-doujiao-value-company-skill",
       "ref": "main",
       "payload_commit": null,
       "verification_status": "unverified"
