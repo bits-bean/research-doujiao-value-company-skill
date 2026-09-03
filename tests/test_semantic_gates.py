@@ -79,6 +79,96 @@ def remove_h2_section(report: str, heading: str) -> str:
 
 
 class SemanticGateTests(unittest.TestCase):
+    def make_signed_sankey_case(self) -> tuple[dict, dict, set[str]]:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+        known = {source["id"] for source in company["sources"]}
+        M = 1_000_000
+        node_specs = [
+            ("product_revenue", 190 * M, 190 * M, "revenue_source"),
+            ("interest_income", 10 * M, 10 * M, "revenue_source"),
+            ("total_revenue", 200 * M, 200 * M, "revenue_total"),
+            ("reported_costs", 80 * M, 80 * M, "cost_subtotal"),
+            ("finance_expense", 5 * M, -5 * M, "cost_offset"),
+            ("positive_costs", 85 * M, 85 * M, "cost_subtotal"),
+            ("operating_cost", 50 * M, 50 * M, "cost_expense"),
+            ("taxes_and_admin", 35 * M, 35 * M, "cost_expense"),
+            ("other_income", 3 * M, 3 * M, "profit_addition"),
+            ("investment_income", 2 * M, 2 * M, "profit_addition"),
+            ("operating_profit", 125 * M, 125 * M, "profit_subtotal"),
+            ("nonoperating_expense", 10 * M, 10 * M, "cost_expense"),
+            ("nonoperating_income", 4 * M, 4 * M, "profit_addition"),
+            ("pretax_profit", 119 * M, 119 * M, "pretax_profit"),
+            ("income_tax", 19 * M, 19 * M, "income_tax"),
+            ("net_income", 100 * M, 100 * M, "net_income"),
+        ]
+        company["income_statement_sankey"] = {
+            "fiscal_year": "FY2025",
+            "basis": "income_statement",
+            "nodes": [
+                {"id": node_id, "label": "正向成本合计（计算值）" if node_id == "positive_costs" else node_id, "value": value, "statement_value": statement_value, "category": category}
+                for node_id, value, statement_value, category in node_specs
+            ],
+            "links": [
+                {"source": "product_revenue", "target": "total_revenue", "value": 190 * M},
+                {"source": "interest_income", "target": "total_revenue", "value": 10 * M},
+                {"source": "total_revenue", "target": "reported_costs", "value": 80 * M},
+                {"source": "total_revenue", "target": "operating_profit", "value": 120 * M},
+                {"source": "reported_costs", "target": "positive_costs", "value": 80 * M},
+                {"source": "finance_expense", "target": "positive_costs", "value": 5 * M},
+                {"source": "positive_costs", "target": "operating_cost", "value": 50 * M},
+                {"source": "positive_costs", "target": "taxes_and_admin", "value": 35 * M},
+                {"source": "other_income", "target": "operating_profit", "value": 3 * M},
+                {"source": "investment_income", "target": "operating_profit", "value": 2 * M},
+                {"source": "operating_profit", "target": "nonoperating_expense", "value": 10 * M},
+                {"source": "operating_profit", "target": "pretax_profit", "value": 115 * M},
+                {"source": "nonoperating_income", "target": "pretax_profit", "value": 4 * M},
+                {"source": "pretax_profit", "target": "income_tax", "value": 19 * M},
+                {"source": "pretax_profit", "target": "net_income", "value": 100 * M},
+            ],
+            "reconciled": True,
+            "source_ids": ["SRC-FY"],
+        }
+        latest_fy = next(item for item in company["financials"] if item["period"] == "FY2025")
+        latest_fy["revenue"] = 200 * M
+        latest_fy["net_income"] = 100 * M
+        disclosed_values = {
+            node_id: statement_value
+            for node_id, _, statement_value, _ in node_specs
+            if node_id != "positive_costs"
+        }
+        color_audit = calculations["income_statement_sankey"]["color_audit"]
+        calculations["income_statement_sankey"] = {
+            "fiscal_year": "FY2025",
+            "source_ids": ["SRC-FY"],
+            "review_method": "逐行核对利润表，保留负财务费用符号，并独立复算成本展开与利润主链。",
+            "disclosed_line_items": [
+                {"node_id": node_id, "value": value, "source_ids": ["SRC-FY"], "location": "Annual report income statement p. 61"}
+                for node_id, value in disclosed_values.items()
+            ],
+            "calculated_nodes": [
+                {"node_id": "positive_costs", "calculation_id": "CALC-SIGNED-POSITIVE-COSTS"}
+            ],
+            "calculated_links": [
+                {"source": "total_revenue", "target": "operating_profit", "calculation_id": "CALC-SIGNED-TO-OPERATING"},
+                {"source": "operating_profit", "target": "pretax_profit", "calculation_id": "CALC-SIGNED-TO-PRETAX"},
+            ],
+            "color_audit": color_audit,
+        }
+        calculations["calculations"] = [
+            item for item in calculations["calculations"]
+            if item.get("id") not in {"CALC-SANKEY-PRETAX-COSTS", "CALC-SANKEY-REVENUE-TO-PRETAX"}
+        ]
+        calculations["calculations"].extend(
+            [
+                {"id": "CALC-SIGNED-POSITIVE-COSTS", "metric": "custom", "sankey_node_id": "positive_costs", "period": "FY2025", "formula": "reported_costs + finance_expense_offset", "inputs": {"reported_costs": 80 * M, "finance_expense_offset": 5 * M}, "result": 85 * M, "review_method": "将披露净成本加回负财务费用的绝对额，复算全部正成本子项合计。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SIGNED-TO-OPERATING", "metric": "custom", "sankey_source": "total_revenue", "sankey_target": "operating_profit", "period": "FY2025", "formula": "total_revenue - reported_costs", "inputs": {"total_revenue": 200 * M, "reported_costs": 80 * M}, "result": 120 * M, "review_method": "用总收入扣除披露净成本，复算进入营业利润的主链续接金额。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SIGNED-TO-PRETAX", "metric": "custom", "sankey_source": "operating_profit", "sankey_target": "pretax_profit", "period": "FY2025", "formula": "operating_profit - nonoperating_expense", "inputs": {"operating_profit": 125 * M, "nonoperating_expense": 10 * M}, "result": 115 * M, "review_method": "用营业利润扣除营业外支出，复算进入税前利润的主链续接金额。", "source_ids": ["SRC-FY"]},
+            ]
+        )
+        return company, calculations, known
+
     def test_schema_version_extraction_supports_compatibility_enum(self) -> None:
         const_schema = {
             "$defs": {
@@ -93,13 +183,13 @@ class SemanticGateTests(unittest.TestCase):
             "$defs": {
                 "meta": {
                     "properties": {
-                        "schema_version": {"enum": ["2.0.0", "2.1.0"], "default": "2.1.0"}
+                        "schema_version": {"enum": ["2.0.0", "2.1.0", "2.2.0"], "default": "2.2.0"}
                     }
                 }
             }
         }
         self.assertEqual(extract_schema_version(const_schema), "2.0.0")
-        self.assertEqual(extract_schema_version(enum_schema), "2.1.0")
+        self.assertEqual(extract_schema_version(enum_schema), "2.2.0")
         invalid_definitions = (
             {"const": "2.0.0", "default": "2.1.0"},
             {"const": "2.0.0", "enum": ["2.0.0"]},
@@ -558,6 +648,95 @@ class SemanticGateTests(unittest.TestCase):
         validate_sankey(company, findings, blocked, known)
         self.assertIn("sankey-color-audit-blocked", {item.code for item in findings})
 
+    def test_sankey_accepts_signed_cost_offset_profit_additions_and_calculated_links(self) -> None:
+        company, calculations, known = self.make_signed_sankey_case()
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertFalse(findings)
+
+    def test_sankey_signed_roles_and_exact_cent_reconciliation_fail_closed(self) -> None:
+        company, calculations, known = self.make_signed_sankey_case()
+
+        cases: list[tuple[str, dict, dict, str]] = []
+        negative_addition = copy.deepcopy(company)
+        next(node for node in negative_addition["income_statement_sankey"]["nodes"] if node["id"] == "other_income")["statement_value"] = -3_000_000
+        cases.append(("negative profit addition", negative_addition, calculations, "sankey-signed-role"))
+
+        positive_offset = copy.deepcopy(company)
+        next(node for node in positive_offset["income_statement_sankey"]["nodes"] if node["id"] == "finance_expense")["statement_value"] = 5_000_000
+        cases.append(("positive cost offset", positive_offset, calculations, "sankey-signed-role"))
+
+        statement_drift = copy.deepcopy(company)
+        next(node for node in statement_drift["income_statement_sankey"]["nodes"] if node["id"] == "product_revenue")["statement_value"] += 0.02
+        cases.append(("statement drift", statement_drift, calculations, "sankey-statement-value"))
+
+        flow_drift = copy.deepcopy(company)
+        next(link for link in flow_drift["income_statement_sankey"]["links"] if link["source"] == "product_revenue")["value"] += 0.02
+        cases.append(("flow drift", flow_drift, calculations, "sankey-node-value-mismatch"))
+
+        disclosed_drift = copy.deepcopy(calculations)
+        next(item for item in disclosed_drift["income_statement_sankey"]["disclosed_line_items"] if item["node_id"] == "product_revenue")["value"] += 0.02
+        cases.append(("disclosed drift", company, disclosed_drift, "sankey-disclosed-item"))
+
+        calculated_node_drift = copy.deepcopy(calculations)
+        next(item for item in calculated_node_drift["calculations"] if item["id"] == "CALC-SIGNED-POSITIVE-COSTS")["result"] += 0.02
+        cases.append(("calculated node drift", company, calculated_node_drift, "sankey-calculated-node"))
+
+        financial_drift = copy.deepcopy(company)
+        next(item for item in financial_drift["financials"] if item["period"] == "FY2025")["revenue"] += 0.02
+        cases.append(("financial drift", financial_drift, calculations, "sankey-financial-statement-mismatch"))
+
+        equation_drift = copy.deepcopy(company)
+        next(node for node in equation_drift["income_statement_sankey"]["nodes"] if node["id"] == "pretax_profit")["statement_value"] += 0.02
+        cases.append(("tax equation drift", equation_drift, calculations, "sankey-equation-mismatch"))
+
+        for label, candidate_company, candidate_calculations, expected_code in cases:
+            with self.subTest(label=label):
+                findings: list[Finding] = []
+                validate_sankey(candidate_company, findings, candidate_calculations, known)
+                self.assertIn(expected_code, {item.code for item in findings}, findings)
+
+    def test_sankey_calculated_links_require_exact_complete_unique_bindings(self) -> None:
+        company, calculations, known = self.make_signed_sankey_case()
+
+        missing = copy.deepcopy(calculations)
+        del missing["income_statement_sankey"]["calculated_links"]
+        findings: list[Finding] = []
+        validate_sankey(company, findings, missing, known)
+        self.assertIn("sankey-calculated-link", {item.code for item in findings})
+        self.assertIn("sankey-calculated-link-coverage", {item.code for item in findings})
+
+        incomplete = copy.deepcopy(calculations)
+        incomplete["income_statement_sankey"]["calculated_links"].pop()
+        findings = []
+        validate_sankey(company, findings, incomplete, known)
+        self.assertIn("sankey-calculated-link-coverage", {item.code for item in findings})
+
+        mismatched = copy.deepcopy(calculations)
+        next(item for item in mismatched["calculations"] if item["id"] == "CALC-SIGNED-TO-PRETAX")["result"] += 0.02
+        findings = []
+        validate_sankey(company, findings, mismatched, known)
+        self.assertIn("sankey-calculated-link", {item.code for item in findings})
+
+        duplicate = copy.deepcopy(calculations)
+        duplicate["income_statement_sankey"]["calculated_links"][1]["calculation_id"] = "CALC-SIGNED-TO-OPERATING"
+        findings = []
+        validate_sankey(company, findings, duplicate, known)
+        self.assertIn("sankey-calculated-link", {item.code for item in findings})
+
+    def test_schema_2_1_sankey_audit_allows_legacy_nodes_and_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package, _, company = make_valid_unfrozen_package(Path(temp_dir))
+            calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+        company["meta"]["schema_version"] = "2.1.0"
+        for node in company["income_statement_sankey"]["nodes"]:
+            del node["statement_value"]
+        del calculations["income_statement_sankey"]["calculated_links"]
+        known = {source["id"] for source in company["sources"]}
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertFalse(findings)
+
     def test_sankey_accepts_reported_intermediate_profit_ladder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))
@@ -592,7 +771,7 @@ class SemanticGateTests(unittest.TestCase):
             "fiscal_year": "FY2025",
             "basis": "income_statement",
             "nodes": [
-                {"id": node_id, "label": node_id, "value": value * 1_000_000, "category": roles.get(node_id, "cost_expense")}
+                {"id": node_id, "label": node_id, "value": value * 1_000_000, "statement_value": value * 1_000_000, "category": roles.get(node_id, "cost_expense")}
                 for node_id, value in values.items()
             ],
             "links": [
@@ -623,12 +802,24 @@ class SemanticGateTests(unittest.TestCase):
                 for node_id, value in values.items()
             ],
             "calculated_nodes": [],
+            "calculated_links": [
+                {"source": "revenue", "target": "gross_profit", "calculation_id": "CALC-SANKEY-REVENUE-TO-GROSS"},
+                {"source": "gross_profit", "target": "operating_profit", "calculation_id": "CALC-SANKEY-GROSS-TO-OPERATING"},
+                {"source": "operating_profit", "target": "pretax_profit", "calculation_id": "CALC-SANKEY-OPERATING-TO-PRETAX"},
+            ],
             "color_audit": calculations["income_statement_sankey"]["color_audit"],
         }
         calculations["calculations"] = [
             item for item in calculations["calculations"]
-            if item.get("id") != "CALC-SANKEY-PRETAX-COSTS"
+            if item.get("id") not in {"CALC-SANKEY-PRETAX-COSTS", "CALC-SANKEY-REVENUE-TO-PRETAX"}
         ]
+        calculations["calculations"].extend(
+            [
+                {"id": "CALC-SANKEY-REVENUE-TO-GROSS", "metric": "custom", "sankey_source": "revenue", "sankey_target": "gross_profit", "period": "FY2025", "formula": "total_revenue - cost_of_revenue", "inputs": {"total_revenue": 190 * 1_000_000, "cost_of_revenue": 70 * 1_000_000}, "result": 120 * 1_000_000, "review_method": "用总收入扣除营业成本，独立复算总收入到毛利的续接金额。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SANKEY-GROSS-TO-OPERATING", "metric": "custom", "sankey_source": "gross_profit", "sankey_target": "operating_profit", "period": "FY2025", "formula": "gross_profit - product_development - sales_marketing - general_admin", "inputs": {"gross_profit": 120 * 1_000_000, "product_development": 30 * 1_000_000, "sales_marketing": 25 * 1_000_000, "general_admin": 15 * 1_000_000}, "result": 50 * 1_000_000, "review_method": "用毛利逐项扣除研发、销售和管理费用，独立复算营业利润续接金额。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SANKEY-OPERATING-TO-PRETAX", "metric": "custom", "sankey_source": "operating_profit", "sankey_target": "pretax_profit", "period": "FY2025", "formula": "operating_profit - interest_expense", "inputs": {"operating_profit": 50 * 1_000_000, "interest_expense": 5 * 1_000_000}, "result": 45 * 1_000_000, "review_method": "用营业利润扣除利息费用，独立复算营业利润到税前利润的续接金额。", "source_ids": ["SRC-FY"]},
+            ]
+        )
         findings: list[Finding] = []
         validate_sankey(company, findings, calculations, known)
         self.assertFalse(findings)
@@ -650,19 +841,19 @@ class SemanticGateTests(unittest.TestCase):
             "basis": "income_statement",
             "nodes": [
                 *[
-                    {"id": node_id, "label": node_id, "value": value, "category": "revenue_source"}
+                    {"id": node_id, "label": node_id, "value": value, "statement_value": value, "category": "revenue_source"}
                     for node_id, value in revenue_sources.items()
                 ],
-                {"id": "total_revenue", "label": "总收入", "value": 72_229_000_000, "category": "revenue_total"},
-                {"id": "costs_and_expenses", "label": "税前成本与费用合计（计算值）", "value": 58_434_000_000, "category": "pretax_costs_total"},
-                {"id": "card_member_rewards", "label": "会员奖励", "value": 18_409_000_000, "category": "cost_expense"},
-                {"id": "member_services_marketing", "label": "会员服务、获客与营销", "value": 18_766_000_000, "category": "cost_expense"},
-                {"id": "salaries_benefits", "label": "薪酬福利", "value": 9_016_000_000, "category": "cost_expense"},
-                {"id": "other_expenses", "label": "其他费用", "value": 6_987_000_000, "category": "cost_expense"},
-                {"id": "credit_loss_provision", "label": "信用损失拨备", "value": 5_256_000_000, "category": "cost_expense"},
-                {"id": "pretax_profit", "label": "税前利润", "value": 13_795_000_000, "category": "pretax_profit"},
-                {"id": "income_tax", "label": "所得税", "value": 2_962_000_000, "category": "income_tax"},
-                {"id": "net_income", "label": "净利润", "value": 10_833_000_000, "category": "net_income"},
+                {"id": "total_revenue", "label": "总收入", "value": 72_229_000_000, "statement_value": 72_229_000_000, "category": "revenue_total"},
+                {"id": "costs_and_expenses", "label": "税前成本与费用合计（计算值）", "value": 58_434_000_000, "statement_value": 58_434_000_000, "category": "pretax_costs_total"},
+                {"id": "card_member_rewards", "label": "会员奖励", "value": 18_409_000_000, "statement_value": 18_409_000_000, "category": "cost_expense"},
+                {"id": "member_services_marketing", "label": "会员服务、获客与营销", "value": 18_766_000_000, "statement_value": 18_766_000_000, "category": "cost_expense"},
+                {"id": "salaries_benefits", "label": "薪酬福利", "value": 9_016_000_000, "statement_value": 9_016_000_000, "category": "cost_expense"},
+                {"id": "other_expenses", "label": "其他费用", "value": 6_987_000_000, "statement_value": 6_987_000_000, "category": "cost_expense"},
+                {"id": "credit_loss_provision", "label": "信用损失拨备", "value": 5_256_000_000, "statement_value": 5_256_000_000, "category": "cost_expense"},
+                {"id": "pretax_profit", "label": "税前利润", "value": 13_795_000_000, "statement_value": 13_795_000_000, "category": "pretax_profit"},
+                {"id": "income_tax", "label": "所得税", "value": 2_962_000_000, "statement_value": 2_962_000_000, "category": "income_tax"},
+                {"id": "net_income", "label": "净利润", "value": 10_833_000_000, "statement_value": 10_833_000_000, "category": "net_income"},
             ],
             "links": [
                 *[
@@ -708,14 +899,17 @@ class SemanticGateTests(unittest.TestCase):
             "calculated_nodes": [
                 {"node_id": "costs_and_expenses", "calculation_id": "CALC-AMEX-PRETAX-COSTS"}
             ],
+            "calculated_links": [
+                {"source": "total_revenue", "target": "pretax_profit", "calculation_id": "CALC-AMEX-REVENUE-TO-PRETAX"}
+            ],
             "color_audit": calculations["income_statement_sankey"]["color_audit"],
         }
         calculations["calculations"] = [
             item for item in calculations["calculations"]
-            if item.get("id") != "CALC-SANKEY-PRETAX-COSTS"
+            if item.get("id") not in {"CALC-SANKEY-PRETAX-COSTS", "CALC-SANKEY-REVENUE-TO-PRETAX"}
         ]
-        calculations["calculations"].append(
-            {
+        calculations["calculations"].extend(
+            [{
                 "id": "CALC-AMEX-PRETAX-COSTS",
                 "metric": "custom",
                 "sankey_node_id": "costs_and_expenses",
@@ -725,7 +919,18 @@ class SemanticGateTests(unittest.TestCase):
                 "result": 58_434_000_000,
                 "review_method": "将总收入减税前利润，并与五项已披露税前成本费用合计交叉复算。",
                 "source_ids": ["SRC-FY"],
-            }
+            }, {
+                "id": "CALC-AMEX-REVENUE-TO-PRETAX",
+                "metric": "custom",
+                "sankey_source": "total_revenue",
+                "sankey_target": "pretax_profit",
+                "period": "FY2025",
+                "formula": "total_revenue - costs_and_expenses",
+                "inputs": {"total_revenue": 72_229_000_000, "costs_and_expenses": 58_434_000_000},
+                "result": 13_795_000_000,
+                "review_method": "用总收入扣除已复算税前成本与费用，独立核对税前利润续接金额。",
+                "source_ids": ["SRC-FY"],
+            }]
         )
 
         findings: list[Finding] = []

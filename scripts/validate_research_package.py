@@ -17,6 +17,7 @@ import sys
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
@@ -174,7 +175,8 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "$schema", "$id", "$defs", "$ref", "$comment",
     "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly",
     "type", "additionalProperties", "required", "properties", "items", "enum", "const",
-    "pattern", "minLength", "minimum", "maximum", "uniqueItems", "minItems", "maxItems", "format",
+    "allOf", "if", "then", "pattern", "minLength", "minimum", "exclusiveMinimum", "maximum",
+    "uniqueItems", "minItems", "maxItems", "format",
 }
 REPORT_SECTIONS = (
     ("one-page-conclusion", ("一页式结论", "one-page conclusion", "executive summary")),
@@ -725,6 +727,33 @@ def close_enough(actual: float, expected: float, tolerance: float | None = None)
     return abs(actual - expected) <= allowed
 
 
+SANKEY_CENT = Decimal("0.01")
+
+
+def sankey_decimal(value: Any) -> Decimal | None:
+    """Convert a finite Sankey amount without introducing binary-float rounding."""
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    if not numeric(value):
+        return None
+    try:
+        converted = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return converted if converted.is_finite() else None
+
+
+def sankey_amounts_equal(actual: Any, expected: Any) -> bool:
+    """Compare audited statement amounts at exact-cent precision."""
+    actual_decimal = sankey_decimal(actual)
+    expected_decimal = sankey_decimal(expected)
+    return (
+        actual_decimal is not None
+        and expected_decimal is not None
+        and abs(actual_decimal - expected_decimal) <= SANKEY_CENT
+    )
+
+
 def json_pointer(root: Any, ref: str) -> Any:
     if not ref.startswith("#/"):
         raise ValueError(f"only local JSON pointers are supported: {ref}")
@@ -750,6 +779,15 @@ def validate_schema_keywords(schema: Any, path: str = "$") -> list[Finding]:
         child = schema.get(container)
         if isinstance(child, dict):
             findings.extend(validate_schema_keywords(child, f"{path}.{container}"))
+    for container in ("if", "then"):
+        child = schema.get(container)
+        if isinstance(child, dict):
+            findings.extend(validate_schema_keywords(child, f"{path}.{container}"))
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list):
+        for index, child in enumerate(all_of):
+            if isinstance(child, dict):
+                findings.extend(validate_schema_keywords(child, f"{path}.allOf[{index}]"))
     return findings
 
 
@@ -794,6 +832,16 @@ def validate_schema(instance: Any, schema: dict[str, Any], root: dict[str, Any],
             return [Finding("error", "schema-ref", path, str(exc))]
         findings.extend(validate_schema(instance, target, root, path))
         schema = {key: value for key, value in schema.items() if key != "$ref"}
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list):
+        for child in all_of:
+            if isinstance(child, dict):
+                findings.extend(validate_schema(instance, child, root, path))
+    conditional = schema.get("if")
+    consequent = schema.get("then")
+    if isinstance(conditional, dict) and isinstance(consequent, dict):
+        if not validate_schema(instance, conditional, root, path):
+            findings.extend(validate_schema(instance, consequent, root, path))
     expected = schema.get("type")
     if expected is not None:
         expected_types = expected if isinstance(expected, list) else [expected]
@@ -815,6 +863,8 @@ def validate_schema(instance: Any, schema: dict[str, Any], root: dict[str, Any],
     if numeric(instance):
         if "minimum" in schema and instance < schema["minimum"]:
             add(findings, "error", "schema-minimum", path, f"below {schema['minimum']}")
+        if "exclusiveMinimum" in schema and instance <= schema["exclusiveMinimum"]:
+            add(findings, "error", "schema-exclusive-minimum", path, f"must be above {schema['exclusiveMinimum']}")
         if "maximum" in schema and instance > schema["maximum"]:
             add(findings, "error", "schema-maximum", path, f"above {schema['maximum']}")
     if isinstance(instance, list):
@@ -2341,13 +2391,21 @@ def validate_sankey(
         "revenue_source",
         "revenue_total",
         "cost_expense",
+        "cost_offset",
         "cost_subtotal",
         "pretax_costs_total",
+        "profit_addition",
         "profit_subtotal",
         "pretax_profit",
         "income_tax",
         "net_income",
     }
+    schema_version = (
+        company.get("meta", {}).get("schema_version")
+        if isinstance(company.get("meta"), dict)
+        else None
+    )
+    requires_statement_value = schema_version == "2.2.0"
     node_records = [node for node in nodes if isinstance(node, dict)]
     ids = [node.get("id") for node in node_records]
     node_by_id = {node.get("id"): node for node in node_records}
@@ -2370,8 +2428,22 @@ def validate_sankey(
             )
         else:
             role_ids[role].append(node.get("id"))
-        if not numeric(node.get("value")) or float(node.get("value", 0)) < 0:
-            add(findings, "error", "sankey-node-value", f"company.json.income_statement_sankey.nodes[{index}].value", "node values must be finite, nonnegative base-unit amounts")
+        value = node.get("value")
+        statement_value = node.get("statement_value")
+        if not numeric(value) or float(value) <= 0:
+            add(findings, "error", "sankey-node-value", f"company.json.income_statement_sankey.nodes[{index}].value", "node values must be finite, positive base-unit flow magnitudes")
+        if requires_statement_value and not numeric(statement_value):
+            add(findings, "error", "sankey-statement-value", f"company.json.income_statement_sankey.nodes[{index}].statement_value", "Schema 2.2.0 requires every Sankey node to preserve its finite signed statement value")
+        elif numeric(statement_value) and numeric(value) and not sankey_amounts_equal(value, abs(sankey_decimal(statement_value))):
+            add(findings, "error", "sankey-statement-value", f"company.json.income_statement_sankey.nodes[{index}]", "node value must equal abs(statement_value)")
+        if requires_statement_value and numeric(statement_value):
+            signed = sankey_decimal(statement_value)
+            if signed == 0:
+                add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", "Schema 2.2.0 Sankey statement_value must be nonzero")
+            elif role == "cost_offset" and signed > 0:
+                add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", "cost_offset must preserve a negative expense statement_value")
+            elif role != "cost_offset" and signed < 0:
+                add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", "only cost_offset may carry a negative statement_value in the current positive-flow contract")
 
     roles_valid = True
     for role in ("revenue_total", "pretax_profit", "income_tax", "net_income"):
@@ -2391,11 +2463,12 @@ def validate_sankey(
         for role, role_node_ids in role_ids.items()
         for node_id in role_node_ids
     }
-    incoming: dict[Any, float] = {node_id: 0.0 for node_id in node_ids}
-    outgoing: dict[Any, float] = {node_id: 0.0 for node_id in node_ids}
+    incoming: dict[Any, Decimal] = {node_id: Decimal(0) for node_id in node_ids}
+    outgoing: dict[Any, Decimal] = {node_id: Decimal(0) for node_id in node_ids}
     parents: dict[Any, set[Any]] = {node_id: set() for node_id in node_ids}
     children: dict[Any, set[Any]] = {node_id: set() for node_id in node_ids}
     actual_edges: set[tuple[Any, Any]] = set()
+    edge_values: dict[tuple[Any, Any], Decimal] = {}
     for index, link in enumerate(links):
         if not isinstance(link, dict):
             add(findings, "error", "sankey-link-shape", f"company.json.income_statement_sankey.links[{index}]", "link must be an object")
@@ -2406,15 +2479,18 @@ def validate_sankey(
             continue
         if source == target or (source, target) in actual_edges:
             add(findings, "error", "sankey-link-shape", f"company.json.income_statement_sankey.links[{index}]", "self-links and duplicate links are forbidden")
-        if not numeric(value) or float(value) < 0:
-            add(findings, "error", "sankey-link-value", f"company.json.income_statement_sankey.links[{index}].value", "link values must be finite, nonnegative base-unit amounts")
+        if not numeric(value) or float(value) <= 0:
+            add(findings, "error", "sankey-link-value", f"company.json.income_statement_sankey.links[{index}].value", "link values must be finite, positive base-unit flow magnitudes")
             continue
         actual_edges.add((source, target))
-        amount = float(value)
+        amount = sankey_decimal(value)
+        if amount is None:
+            continue
         outgoing[source] += amount
         incoming[target] += amount
         children[source].add(target)
         parents[target].add(source)
+        edge_values[(source, target)] = amount
 
     indegree = {node_id: len(parents[node_id]) for node_id in node_ids}
     queue = [node_id for node_id, degree in indegree.items() if degree == 0]
@@ -2444,7 +2520,7 @@ def validate_sankey(
             ("incoming", incoming[node_id], bool(parents[node_id])),
             ("outgoing", outgoing[node_id], bool(children[node_id])),
         ):
-            if has_flow and numeric(node_value) and not close_enough(float(node_value), flow_value):
+            if has_flow and numeric(node_value) and not sankey_amounts_equal(node_value, flow_value):
                 add(
                     findings,
                     "error",
@@ -2453,6 +2529,7 @@ def validate_sankey(
                     f"node {node_id!r} value {node_value} does not match {direction} flow {flow_value}",
                 )
 
+    continuation_edges: set[tuple[Any, Any]] = set()
     if roles_valid:
         revenue_total = role_ids["revenue_total"][0]
         pretax_profit = role_ids["pretax_profit"][0]
@@ -2464,14 +2541,25 @@ def validate_sankey(
                 add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"revenue source {node_id!r} must connect only to total revenue")
         if parents[revenue_total] != set(role_ids["revenue_source"]):
             add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "total revenue must receive every revenue source and no other node")
-        if len(parents[pretax_profit]) != 1:
-            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "pretax profit must have exactly one parent in the profit bridge")
         if children[pretax_profit] != {income_tax, net_income} or parents[income_tax] != {pretax_profit} or parents[net_income] != {pretax_profit}:
             add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "pretax profit must split only into income tax and net income")
         if children[income_tax] or children[net_income]:
             add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "income tax and net income must be terminal nodes")
 
+        profit_adjustment_targets = {"profit_subtotal", "pretax_profit"}
+        for node_id in role_ids["profit_addition"]:
+            targets = children[node_id]
+            if parents[node_id] or len(targets) != 1 or role_by_id.get(next(iter(targets), None)) not in profit_adjustment_targets:
+                add(findings, "error", "sankey-profit-addition", "company.json.income_statement_sankey.links", f"profit addition {node_id!r} must be a root with exactly one positive flow into a profit subtotal or pretax profit")
+
+        for node_id in role_ids["cost_offset"]:
+            targets = children[node_id]
+            if parents[node_id] or len(targets) != 1 or role_by_id.get(next(iter(targets), None)) != "cost_subtotal":
+                add(findings, "error", "sankey-cost-offset", "company.json.income_statement_sankey.links", f"cost offset {node_id!r} must be a root with exactly one positive flow into a cost subtotal")
+
         cost_roles = {"cost_expense", "cost_subtotal", "pretax_costs_total"}
+        profit_addition_ids = set(role_ids["profit_addition"])
+        cost_offset_ids = set(role_ids["cost_offset"])
         profit_chain: list[Any] = []
         current = revenue_total
         seen_profit_nodes = {current}
@@ -2484,6 +2572,10 @@ def validate_sankey(
                 add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"{current!r} must split into at least one cost branch and exactly one next profit node")
                 break
             successor = profit_successors[0]
+            continuation_edges.add((current, successor))
+            unexpected_parents = parents[successor] - {current} - profit_addition_ids
+            if current not in parents[successor] or unexpected_parents:
+                add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"profit node {successor!r} must receive its bridge from {current!r} and may otherwise receive only controlled profit additions")
             if current == revenue_total and successor == pretax_profit:
                 if len(cost_children) != 1 or role_by_id.get(cost_children[0]) != "pretax_costs_total":
                     add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", "minimum hierarchy requires total revenue -> calculated pretax cost total + pretax profit")
@@ -2500,8 +2592,16 @@ def validate_sankey(
             add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", "every profit_subtotal must appear exactly once on the total-revenue-to-pretax-profit chain")
 
         for node_id in role_ids["cost_subtotal"] + role_ids["pretax_costs_total"]:
-            if len(parents[node_id]) != 1 or not children[node_id] or any(role_by_id.get(child) not in {"cost_subtotal", "cost_expense"} for child in children[node_id]):
-                add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", f"cost subtotal {node_id!r} must have one parent and expand only to disclosed cost/expense leaves or lower cost subtotals")
+            structural_parents = parents[node_id] - cost_offset_ids
+            offset_parents = parents[node_id] & cost_offset_ids
+            offset_allowed = role_by_id.get(node_id) == "cost_subtotal"
+            if (
+                len(structural_parents) != 1
+                or (offset_parents and not offset_allowed)
+                or not children[node_id]
+                or any(role_by_id.get(child) not in {"cost_subtotal", "cost_expense"} for child in children[node_id])
+            ):
+                add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", f"cost subtotal {node_id!r} must have one structural parent, may receive controlled cost offsets only when categorized cost_subtotal, and expand only to disclosed cost/expense leaves or lower cost subtotals")
         for node_id in role_ids["cost_expense"]:
             if children[node_id] or len(parents[node_id]) != 1:
                 add(findings, "error", "sankey-cost-expansion", "company.json.income_statement_sankey.links", f"cost/expense {node_id!r} must be a terminal item with exactly one parent")
@@ -2510,22 +2610,31 @@ def validate_sankey(
         pending = [revenue_total]
         while pending:
             current = pending.pop()
-            for child in children[current]:
-                if child not in reachable:
-                    reachable.add(child)
-                    pending.append(child)
-        expected_reachable = node_ids - set(role_ids["revenue_source"])
-        if reachable != expected_reachable:
-            add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"all non-revenue-source nodes must be reachable from total revenue; mismatch {sorted(reachable ^ expected_reachable)!r}")
+            for adjacent in parents[current] | children[current]:
+                if adjacent not in reachable:
+                    reachable.add(adjacent)
+                    pending.append(adjacent)
+        if reachable != node_ids:
+            add(findings, "error", "sankey-connectivity", "company.json.income_statement_sankey.links", f"the positive-flow graph must be weakly connected; mismatch {sorted(reachable ^ node_ids)!r}")
 
-        revenue_value = node_by_id[revenue_total].get("value")
-        pretax_value = node_by_id[pretax_profit].get("value")
-        tax_value = node_by_id[income_tax].get("value")
-        net_value = node_by_id[net_income].get("value")
-        cost_leaf_total = sum(float(node_by_id[node_id].get("value", 0)) for node_id in role_ids["cost_expense"] if numeric(node_by_id[node_id].get("value")))
-        if numeric(revenue_value) and numeric(pretax_value) and not close_enough(float(revenue_value) - cost_leaf_total, float(pretax_value)):
-            add(findings, "error", "sankey-equation-mismatch", "company.json.income_statement_sankey", f"pretax profit {pretax_value} must equal total revenue {revenue_value} minus all disclosed pretax cost/expense leaves {cost_leaf_total}")
-        if numeric(pretax_value) and numeric(tax_value) and numeric(net_value) and not close_enough(float(pretax_value) - float(tax_value), float(net_value)):
+        def signed_node_value(node_id: Any) -> Any:
+            node = node_by_id[node_id]
+            value = node.get("statement_value")
+            return value if numeric(value) else node.get("value")
+
+        revenue_value = signed_node_value(revenue_total)
+        pretax_value = signed_node_value(pretax_profit)
+        tax_value = signed_node_value(income_tax)
+        net_value = signed_node_value(net_income)
+        pretax_decimal = sankey_decimal(pretax_value)
+        tax_decimal = sankey_decimal(tax_value)
+        net_decimal = sankey_decimal(net_value)
+        if (
+            pretax_decimal is not None
+            and tax_decimal is not None
+            and net_decimal is not None
+            and not sankey_amounts_equal(pretax_decimal - tax_decimal, net_decimal)
+        ):
             add(findings, "error", "sankey-equation-mismatch", "company.json.income_statement_sankey", f"net income {net_value} must equal pretax profit {pretax_value} minus income tax {tax_value}")
 
         fiscal_year = sankey.get("fiscal_year")
@@ -2548,8 +2657,8 @@ def validate_sankey(
                 ("net_income", net_income, financial.get("net_income")),
             )
             for metric, node_id, financial_value in comparisons:
-                node_value = node_by_id[node_id].get("value")
-                if numeric(node_value) and numeric(financial_value) and not close_enough(float(node_value), float(financial_value)):
+                node_value = signed_node_value(node_id)
+                if numeric(node_value) and numeric(financial_value) and not sankey_amounts_equal(node_value, financial_value):
                     add(
                         findings,
                         "error",
@@ -2598,8 +2707,11 @@ def validate_sankey(
             add(findings, "error", "sankey-disclosed-item", path, "node_id must be unique and resolve to a graph node")
         else:
             disclosed_ids.add(node_id)
-        if not numeric(item.get("value")) or node_id in node_by_id and numeric(node_by_id[node_id].get("value")) and not close_enough(float(item.get("value", 0)), float(node_by_id[node_id]["value"])):
-            add(findings, "error", "sankey-disclosed-item", path, "disclosed value must match the graph node")
+        node_statement_value = node_by_id.get(node_id, {}).get("statement_value")
+        if not numeric(node_statement_value):
+            node_statement_value = node_by_id.get(node_id, {}).get("value")
+        if not numeric(item.get("value")) or numeric(node_statement_value) and not sankey_amounts_equal(item.get("value"), node_statement_value):
+            add(findings, "error", "sankey-disclosed-item", path, "disclosed value must match the graph node statement_value")
         if not resolved_source_ids(source_ids) or not substantive_text(item.get("location"), 4):
             add(findings, "error", "sankey-disclosed-item", path, "each disclosed line item requires resolved source_ids and a precise annual-report location")
         if isinstance(source_ids, list):
@@ -2631,13 +2743,56 @@ def validate_sankey(
             or record.get("period") != sankey.get("fiscal_year")
             or not numeric(record.get("result"))
             or node_id not in node_by_id
-            or not numeric(node_by_id.get(node_id, {}).get("value"))
-            or not close_enough(float(record.get("result", 0)), float(node_by_id.get(node_id, {}).get("value", 0)))
+            or not numeric(node_by_id.get(node_id, {}).get("statement_value", node_by_id.get(node_id, {}).get("value")))
+            or not sankey_amounts_equal(record.get("result"), node_by_id.get(node_id, {}).get("statement_value", node_by_id.get(node_id, {}).get("value")))
             or not resolved_source_ids(record.get("source_ids"))
         ):
-            add(findings, "error", "sankey-calculated-node", path, "binding must resolve to a same-period custom calculation with matching node, result and sources")
+            add(findings, "error", "sankey-calculated-node", path, "binding must resolve to a same-period custom calculation with matching node statement_value, result and sources")
         if isinstance(record, dict) and isinstance(record.get("source_ids"), list):
             all_item_sources.update(record["source_ids"])
+
+    calculated_links = ledger.get("calculated_links")
+    if requires_statement_value:
+        if not isinstance(calculated_links, list):
+            add(findings, "error", "sankey-calculated-link", "calculation-ledger.json.income_statement_sankey.calculated_links", "Schema 2.2.0 requires calculated_links[] to cover every profit-chain continuation edge")
+            calculated_links = []
+        covered_edges: set[tuple[Any, Any]] = set()
+        link_calculation_ids: set[Any] = set()
+        for index, item in enumerate(calculated_links):
+            path = f"calculation-ledger.json.income_statement_sankey.calculated_links[{index}]"
+            if not isinstance(item, dict):
+                add(findings, "error", "sankey-calculated-link", path, "calculated-link binding must be an object")
+                continue
+            source = item.get("source")
+            target = item.get("target")
+            calculation_id = item.get("calculation_id")
+            edge = (source, target)
+            if not nonblank(source) or not nonblank(target) or not nonblank(calculation_id):
+                add(findings, "error", "sankey-calculated-link", path, "source, target and calculation_id must be nonblank")
+                continue
+            if edge in covered_edges or calculation_id in link_calculation_ids:
+                add(findings, "error", "sankey-calculated-link", path, "each continuation edge and calculation_id must be unique")
+            covered_edges.add(edge)
+            link_calculation_ids.add(calculation_id)
+            record = calculations_by_id.get(calculation_id)
+            if edge not in actual_edges or edge not in continuation_edges:
+                add(findings, "error", "sankey-calculated-link", path, "binding must reference an actual profit-chain continuation edge")
+            if (
+                not isinstance(record, dict)
+                or record.get("metric") != "custom"
+                or record.get("sankey_source") != source
+                or record.get("sankey_target") != target
+                or record.get("period") != sankey.get("fiscal_year")
+                or not numeric(record.get("result"))
+                or edge not in edge_values
+                or not sankey_amounts_equal(record.get("result"), edge_values.get(edge))
+                or not resolved_source_ids(record.get("source_ids"))
+            ):
+                add(findings, "error", "sankey-calculated-link", path, "binding must resolve to a same-period custom calculation whose Sankey endpoints, exact-cent result and sources match the continuation edge")
+            if isinstance(record, dict) and isinstance(record.get("source_ids"), list):
+                all_item_sources.update(record["source_ids"])
+        if covered_edges != continuation_edges:
+            add(findings, "error", "sankey-calculated-link-coverage", "calculation-ledger.json.income_statement_sankey.calculated_links", f"must cover each profit-chain continuation edge exactly once; mismatch {sorted(covered_edges ^ continuation_edges)!r}")
 
     if disclosed_ids & calculated_ids or disclosed_ids | calculated_ids != node_ids:
         add(findings, "error", "sankey-provenance-coverage", "calculation-ledger.json.income_statement_sankey", f"every graph node must appear exactly once as disclosed or calculated; mismatch {sorted((disclosed_ids | calculated_ids) ^ node_ids)!r}")

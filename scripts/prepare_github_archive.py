@@ -316,7 +316,10 @@ def canonical_action(
         current_version = _schema_version_tuple(current_schema)
         supported_legacy = (
             existing_version is not None
-            and (existing_version[0] == 1 or existing_version == (2, 0, 0))
+            and (
+                existing_version[0] == 1
+                or existing_version in {(2, 0, 0), (2, 1, 0)}
+            )
         )
         allowed = (
             supported_legacy

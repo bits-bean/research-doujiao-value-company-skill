@@ -231,7 +231,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "accounting_standard": "US GAAP",
             "display_language": "zh-CN",
             "source_version": "2026Q1",
-            "schema_version": "2.1.0",
+            "schema_version": "2.2.0",
             "theme": "light",
             "sankey_style": "app-economy-inspired-light",
         },
@@ -296,17 +296,17 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "fiscal_year": "FY2025",
             "basis": "income_statement",
             "nodes": [
-                {"id": "product_revenue", "label": "产品收入", "value": 120 * M, "category": "revenue_source"},
-                {"id": "subscription_revenue", "label": "订阅收入", "value": 70 * M, "category": "revenue_source"},
-                {"id": "revenue", "label": "营业收入", "value": 190 * M, "category": "revenue_total"},
-                {"id": "pretax_costs", "label": "税前成本与费用合计（计算值）", "value": 140 * M, "category": "pretax_costs_total"},
-                {"id": "fulfillment_cost", "label": "履约成本", "value": 70 * M, "category": "cost_expense"},
-                {"id": "product_development", "label": "产品研发", "value": 30 * M, "category": "cost_expense"},
-                {"id": "sales_marketing", "label": "销售与营销", "value": 25 * M, "category": "cost_expense"},
-                {"id": "general_admin", "label": "管理费用", "value": 15 * M, "category": "cost_expense"},
-                {"id": "pretax_profit", "label": "税前利润", "value": 50 * M, "category": "pretax_profit"},
-                {"id": "income_tax", "label": "所得税", "value": 14 * M, "category": "income_tax"},
-                {"id": "profit", "label": "净利润", "value": 36 * M, "category": "net_income"},
+                {"id": "product_revenue", "label": "产品收入", "value": 120 * M, "statement_value": 120 * M, "category": "revenue_source"},
+                {"id": "subscription_revenue", "label": "订阅收入", "value": 70 * M, "statement_value": 70 * M, "category": "revenue_source"},
+                {"id": "revenue", "label": "营业收入", "value": 190 * M, "statement_value": 190 * M, "category": "revenue_total"},
+                {"id": "pretax_costs", "label": "税前成本与费用合计（计算值）", "value": 140 * M, "statement_value": 140 * M, "category": "pretax_costs_total"},
+                {"id": "fulfillment_cost", "label": "履约成本", "value": 70 * M, "statement_value": 70 * M, "category": "cost_expense"},
+                {"id": "product_development", "label": "产品研发", "value": 30 * M, "statement_value": 30 * M, "category": "cost_expense"},
+                {"id": "sales_marketing", "label": "销售与营销", "value": 25 * M, "statement_value": 25 * M, "category": "cost_expense"},
+                {"id": "general_admin", "label": "管理费用", "value": 15 * M, "statement_value": 15 * M, "category": "cost_expense"},
+                {"id": "pretax_profit", "label": "税前利润", "value": 50 * M, "statement_value": 50 * M, "category": "pretax_profit"},
+                {"id": "income_tax", "label": "所得税", "value": 14 * M, "statement_value": 14 * M, "category": "income_tax"},
+                {"id": "profit", "label": "净利润", "value": 36 * M, "statement_value": 36 * M, "category": "net_income"},
             ],
             "links": [
                 {"source": "product_revenue", "target": "revenue", "value": 120 * M},
@@ -906,6 +906,9 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
                 "calculated_nodes": [
                     {"node_id": "pretax_costs", "calculation_id": "CALC-SANKEY-PRETAX-COSTS"}
                 ],
+                "calculated_links": [
+                    {"source": "revenue", "target": "pretax_profit", "calculation_id": "CALC-SANKEY-REVENUE-TO-PRETAX"}
+                ],
                 "color_audit": {
                     "contract_version": "1.0.0",
                     "provider": "App Economy Insights",
@@ -951,6 +954,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             },
             "calculations": [
                 {"id": "CALC-SANKEY-PRETAX-COSTS", "metric": "custom", "sankey_node_id": "pretax_costs", "period": "FY2025", "formula": "total_revenue - pretax_profit", "inputs": {"total_revenue": 190 * M, "pretax_profit": 50 * M}, "result": 140 * M, "review_method": "将总收入减税前利润，并与四项已披露税前成本费用合计交叉复算。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SANKEY-REVENUE-TO-PRETAX", "metric": "custom", "sankey_source": "revenue", "sankey_target": "pretax_profit", "period": "FY2025", "formula": "total_revenue - pretax_costs", "inputs": {"total_revenue": 190 * M, "pretax_costs": 140 * M}, "result": 50 * M, "review_method": "用总收入扣除已复算税前成本与费用，独立核对利润主链续接金额。", "source_ids": ["SRC-FY"]},
                 {"id": "CALC-FCF", "metric": "free_cash_flow", "period": "FY2025", "formula": "operating_cash_flow - capex_total", "inputs": {"operating_cash_flow": 48 * M, "capex_total": 19 * M}, "result": 29 * M, "source_ids": ["SRC-FY"]},
                 {"id": "CALC-ND", "metric": "net_debt", "period": "FY2025", "formula": "total_debt - cash", "inputs": {"total_debt": 19 * M, "cash": 50 * M}, "result": -31 * M, "source_ids": ["SRC-FY"]},
                 {"id": "CALC-MC", "metric": "market_cap", "period": "2026-04-15", "formula": "market_price * diluted_shares", "inputs": {"market_price": 10, "diluted_shares": 100 * M}, "result": 1000 * M, "source_ids": ["SRC-Q1"]},
