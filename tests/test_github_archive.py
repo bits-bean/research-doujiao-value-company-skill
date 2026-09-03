@@ -676,13 +676,13 @@ class GithubDeliveryTests(unittest.TestCase):
             self.assertTrue(plan["ready_for_write"])
             self.assertEqual(plan["canonical_guard"]["action"], "update-confirmed-revision")
 
-    def test_schema_2_0_to_2_1_migration_requires_explicit_confirmation(self) -> None:
+    def test_schema_2_0_to_2_2_migration_requires_explicit_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             package, _, _ = self.make_package(root)
             new_path = package / "company.json"
             new_company = json.loads(new_path.read_text(encoding="utf-8"))
-            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["schema_version"] = "2.2.0"
             new_company["meta"]["data_as_of"] = "2026-03-31"
             new_company["meta"]["valuation_date"] = "2026-04-15"
             write_json(new_path, new_company)
@@ -699,7 +699,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     existing_company_path=existing,
                     canonical_absent=False,
                     confirm_same_date_revision=False,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
                 )
             self.assertEqual(
                 canonical_action(
@@ -708,7 +708,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
                 ),
                 "update-confirmed-schema-migration",
             )
@@ -723,7 +723,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
                 )
             self.assertEqual(
                 canonical_action(
@@ -732,7 +732,37 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=True,
                     confirm_schema_migration=True,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
+                ),
+                "update-confirmed-schema-migration",
+            )
+
+    def test_schema_2_1_to_2_2_migration_is_a_confirmed_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"]["schema_version"] = "2.2.0"
+            new_company["meta"]["data_as_of"] = "2026-03-31"
+            new_company["meta"]["valuation_date"] = "2026-04-15"
+            write_json(new_path, new_company)
+
+            existing = root / "existing-schema-2-1.json"
+            old_company = copy.deepcopy(new_company)
+            old_company["meta"]["schema_version"] = "2.1.0"
+            old_company["meta"]["data_as_of"] = "2025-12-31"
+            old_company["meta"]["valuation_date"] = "2026-01-15"
+            write_json(existing, old_company)
+
+            self.assertEqual(
+                canonical_action(
+                    new_path,
+                    existing_company_path=existing,
+                    canonical_absent=False,
+                    confirm_same_date_revision=False,
+                    confirm_schema_migration=True,
+                    locked_schema_version="2.2.0",
                 ),
                 "update-confirmed-schema-migration",
             )
@@ -743,13 +773,13 @@ class GithubDeliveryTests(unittest.TestCase):
             package, _, _ = self.make_package(root)
             new_path = package / "company.json"
             new_company = json.loads(new_path.read_text(encoding="utf-8"))
-            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["schema_version"] = "2.2.0"
             new_company["meta"]["data_as_of"] = "2026-03-31"
             new_company["meta"]["valuation_date"] = "2026-04-15"
             write_json(new_path, new_company)
             existing = root / "existing-newer-schema.json"
             company = copy.deepcopy(new_company)
-            company["meta"]["schema_version"] = "2.2.0"
+            company["meta"]["schema_version"] = "2.3.0"
             company["meta"]["data_as_of"] = "2025-12-31"
             company["meta"]["valuation_date"] = "2026-01-15"
             write_json(existing, company)
@@ -760,16 +790,16 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
                 )
 
-    def test_schema_1_x_to_2_1_migration_is_a_confirmed_upgrade(self) -> None:
+    def test_schema_1_x_to_2_2_migration_is_a_confirmed_upgrade(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             package, _, _ = self.make_package(root)
             new_path = package / "company.json"
             new_company = json.loads(new_path.read_text(encoding="utf-8"))
-            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["schema_version"] = "2.2.0"
             new_company["meta"]["data_as_of"] = "2026-03-31"
             new_company["meta"]["valuation_date"] = "2026-04-15"
             write_json(new_path, new_company)
@@ -788,7 +818,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
                 ),
                 "update-confirmed-schema-migration",
             )
@@ -799,7 +829,7 @@ class GithubDeliveryTests(unittest.TestCase):
             package, _, _ = self.make_package(root)
             new_path = package / "company.json"
             new_company = json.loads(new_path.read_text(encoding="utf-8"))
-            new_company["meta"]["schema_version"] = "2.1.0"
+            new_company["meta"]["schema_version"] = "2.2.0"
             new_company["meta"]["data_as_of"] = "2026-03-31"
             new_company["meta"]["valuation_date"] = "2026-04-15"
             write_json(new_path, new_company)
@@ -819,11 +849,11 @@ class GithubDeliveryTests(unittest.TestCase):
                             canonical_absent=False,
                             confirm_same_date_revision=False,
                             confirm_schema_migration=True,
-                            locked_schema_version="2.1.0",
+                            locked_schema_version="2.2.0",
                         )
 
             noncurrent = copy.deepcopy(new_company)
-            noncurrent["meta"]["schema_version"] = "2.2.0"
+            noncurrent["meta"]["schema_version"] = "2.3.0"
             write_json(new_path, noncurrent)
             existing = root / "existing-schema-2-0.json"
             old_company = copy.deepcopy(new_company)
@@ -838,7 +868,7 @@ class GithubDeliveryTests(unittest.TestCase):
                     canonical_absent=False,
                     confirm_same_date_revision=False,
                     confirm_schema_migration=True,
-                    locked_schema_version="2.1.0",
+                    locked_schema_version="2.2.0",
                 )
 
     def test_all_three_remote_observations_are_required_at_same_head(self) -> None:

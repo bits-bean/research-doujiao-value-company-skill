@@ -2,9 +2,15 @@
 
 ## 目标与顺序
 
-先逐行提取同一财年年报利润表及相关附注，再生成节点；禁止先画图再凑数。把提取结果写入 `calculation-ledger.json.income_statement_sankey`，逐项保存 `node_id / value / source_ids / location`。年报单列的收入、成本、费用、所得税和利润不得遗漏或自行合并；只有年报本身合并披露时才能沿用合并口径。
+先逐行提取同一财年年报利润表及相关附注，再生成节点；禁止先画图再凑数。把提取结果写入 `calculation-ledger.json.income_statement_sankey`，逐项保存 `node_id / value / source_ids / location`，其中台账 `value` 必须保留报表原始符号。年报单列的收入、成本、费用、所得税和利润不得遗漏或自行合并；只有年报本身合并披露时才能沿用合并口径。
 
-节点 `category` 只使用：`revenue_source / revenue_total / cost_expense / cost_subtotal / pretax_costs_total / profit_subtotal / pretax_profit / income_tax / net_income`。金额使用实际原始数值。
+节点 `category` 只使用：`revenue_source / revenue_total / cost_expense / cost_offset / cost_subtotal / pretax_costs_total / profit_addition / profit_subtotal / pretax_profit / income_tax / net_income`。Schema 2.2.0 中每个节点同时保存：
+
+- `statement_value`：披露或计算值的实际原始数值，保留正负号；
+- `value`：仅作为桑基宽度与流量守恒值，必须为正数且等于 `abs(statement_value)`；
+- `links[].value`：必须为正数，不得用负连线、零宽连线或改号后的净额伪造守恒。
+
+Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`，但不得作为 2.2.0 正式冻结或增量链的前序包。
 
 ## 生成模板
 
@@ -18,11 +24,17 @@
 - **最低层级**：年报没有可用的毛利润、营业利润等中间利润时，使用 `revenue_total → pretax_costs_total + pretax_profit`，再由 `pretax_costs_total` 展开至每项 `cost_expense` 或披露的 `cost_subtotal`。
 - **逐级利润桥**：年报披露中间利润时，按真实计算顺序使用 `revenue_total → 成本项目 + profit_subtotal → 后续成本项目 + 下一层 profit_subtotal → pretax_profit`。例如 `总收入 → 营业成本 + 毛利润 → 营业费用 + 营业利润 → 利息及其他税前项目 + 税前利润`。此时税前成本总额在计算台账中复算，不再作为第二条并列流量重复进入图。
 
+逐级利润桥可在下一个 `profit_subtotal` 或 `pretax_profit` 接收受控的 `profit_addition` 根节点。该节点的 `statement_value` 必须严格为正，必须无流入、恰有一条正值连线指向对应利润节点。上一利润节点与下一利润节点之间的桥接连线使用扣除本层正成本后的余额；下一利润节点的流入合计则包含该余额与全部正收益加项。
+
+年报披露的净成本 subtotal 含负费用时，使用 `cost_offset`。它必须保留负 `statement_value`，无流入、恰有一条正值连线指向 `cost_subtotal`；该目标 subtotal 还必须有恰一个非 offset 的结构父节点。这允许“披露净成本 + 负费用的绝对值 → 正成本合计（计算值） → 各正成本子项”，既不重复计量负费用，也不改号或静默净额化。`cost_offset` 不得指向 `pretax_costs_total`。
+
 `cost_subtotal` 必须继续展开到已披露子项；`profit_subtotal` 每层必须恰有一个后续利润节点及至少一个成本/费用分支。禁止总收入直接连接所得税或净利润，禁止把多项已披露费用合并成“其他费用”，也禁止用净利润替代税前利润桥。
 
 ## 计算值与来源
 
 年报未直接披露、由底层项目推导的汇总节点，标签追加“（计算值）”，并在 `calculations[]` 中建立 `metric: custom` 记录，写明 `sankey_node_id`、公式、输入、结果、复核方法和非空 `source_ids`。同时在 `income_statement_sankey.calculated_nodes` 绑定 `node_id` 与 `calculation_id`。年报直接披露的节点进入 `disclosed_line_items`，逐项记录精确位置和来源。
+
+Schema 2.2.0 还必须把利润主链的每条 continuation 边（`revenue_total / profit_subtotal → 下一 profit_subtotal / pretax_profit`）写入 `income_statement_sankey.calculated_links[]`。每项使用唯一 `source / target / calculation_id`，并绑定一条 `metric: custom` 记录；记录的 `sankey_source / sankey_target`、财年、结果和来源必须与实际连线精确对应。2.0.0 / 2.1.0 历史审计不强制该数组。所有桑基节点、连线、台账和报表勾稽金额使用 Decimal 精确到分比较（绝对差 `<= 0.01`），不使用百分比容差。
 
 ```json
 {
@@ -35,6 +47,9 @@
     ],
     "calculated_nodes": [
       {"node_id": "pretax_costs", "calculation_id": "CALC-SANKEY-PRETAX-COSTS"}
+    ],
+    "calculated_links": [
+      {"source": "total_revenue", "target": "pretax_profit", "calculation_id": "CALC-SANKEY-REVENUE-TO-PRETAX"}
     ]
   },
   "calculations": [
@@ -47,6 +62,18 @@
       "inputs": {"total_revenue": 190000000, "pretax_profit": 50000000},
       "result": 140000000,
       "review_method": "与各项已披露税前成本费用合计交叉复算。",
+      "source_ids": ["SRC-FY"]
+    },
+    {
+      "id": "CALC-SANKEY-REVENUE-TO-PRETAX",
+      "metric": "custom",
+      "sankey_source": "total_revenue",
+      "sankey_target": "pretax_profit",
+      "period": "FY2025",
+      "formula": "total_revenue - pretax_costs",
+      "inputs": {"total_revenue": 190000000, "pretax_costs": 140000000},
+      "result": 50000000,
+      "review_method": "独立复算利润主链续接连线。",
       "source_ids": ["SRC-FY"]
     }
   ]
@@ -84,15 +111,16 @@ python3 scripts/prepare_sankey_color_audit.py \
 只有下列条件全部成立才写 `reconciled: true`：
 
 - 每个节点值同时等于其流入合计和流出合计（根节点/叶节点按存在的一侧校验）；
-- 图无环，所有非收入来源节点均可从总收入沿真实计算路径到达；
-- 收入来源合计 = 总收入；全部底层税前成本费用 + 税前利润 = 总收入；
+- 图无环且整体弱连通；`revenue_source` 仍只能连到唯一 `revenue_total`，`profit_addition` 与 `cost_offset` 只能按上述受控方向接入；
+- `revenue_total → profit_subtotal* → pretax_profit` 形成唯一利润主链，每层的正成本流出、桥接余额和受控加项流入分别与前后节点守恒；
 - 税前利润 = 所得税 + 净利润；
 - 总收入、净利润与同财年 `financials` 一致；
+- Schema 2.2.0 每个节点都有有限 `statement_value`，`value = abs(statement_value)`；披露台账值与 `statement_value` 同号同值，计算记录 `result` 与计算节点 `statement_value` 一致；
 - 图中每个节点恰好在披露清单或计算值清单中出现一次，披露清单每一项也都有节点和连线；
 - 桑基根级 `source_ids` 覆盖全部披露项和计算项来源。
 - `color_audit` 覆盖三项规范身份和每个官方可验证别名的两种查询；`matched` 的逐节点样本与 `nodes[].color` 完全一致，`not_found` 的节点色全空并绑定 System 默认版本，`blocked` 不得通过正式门禁。
 
-负数、税收收益或非控股权益等关系若无法在当前非负流量 Schema 下真实表达，不得改符号或硬塞入图；记录 Schema Gap 并阻断正式冻结。
+当前 2.2.0 仅放行“正值守恒图中的有符号加项与成本抵减”。所得税收益、负的利润 subtotal、负的净利润或非控股权益归属等本契约未定义的关系，仍不得改符号或硬塞入图；记录 Schema Gap 并阻断正式冻结。
 
 ## FY2025 最低层级示例
 

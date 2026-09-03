@@ -105,6 +105,43 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "meta": {
+            "type": "object",
+            "properties": {
+              "schema_version": {
+                "const": "2.2.0"
+              }
+            },
+            "required": ["schema_version"]
+          }
+        },
+        "required": ["meta"]
+      },
+      "then": {
+        "properties": {
+          "income_statement_sankey": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "statement_value": {}
+                  },
+                  "required": ["statement_value"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "nullableNumber": {
       "type": ["number", "null"]
@@ -323,9 +360,9 @@
         },
         "schema_version": {
           "type": "string",
-          "enum": ["2.0.0", "2.1.0"],
-          "default": "2.1.0",
-          "description": "company.json 数据协议版本。2.1.0 新增报告口径的普通股股东利润与稀释 EPS；2.0.0 仅为向后兼容既有冻结包。"
+          "enum": ["2.0.0", "2.1.0", "2.2.0"],
+          "default": "2.2.0",
+          "description": "company.json 数据协议版本。2.2.0 为利润表 Sankey 节点新增必填原表符号金额 statement_value，并继续以正数 value 表示几何流量；2.1.0 新增报告口径的普通股股东利润与稀释 EPS；2.0.0 与 2.1.0 仅为向后兼容既有冻结包。"
         },
         "theme": {
           "type": "string",
@@ -633,7 +670,13 @@
           "minLength": 1
         },
         "value": {
-          "type": "number"
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Sankey 几何与守恒使用的正数流量；2.2.0 必须等于 abs(statement_value)，该跨字段约束由运行时校验。"
+        },
+        "statement_value": {
+          "type": "number",
+          "description": "利润表披露或计算台账口径的带符号金额。2.2.0 每个节点必填；旧版数据由消费端回退为 value。"
         },
         "category": {
           "$ref": "#/$defs/nullableString"
@@ -658,7 +701,8 @@
         },
         "value": {
           "type": "number",
-          "minimum": 0
+          "exclusiveMinimum": 0,
+          "description": "始终为正数的 Sankey 几何流量；报表正负号只存储在节点 statement_value。"
         },
         "label": {
           "$ref": "#/$defs/nullableString"
