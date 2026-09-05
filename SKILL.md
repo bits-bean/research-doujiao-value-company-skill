@@ -72,6 +72,8 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 Schema 2.2.0 的每个桑基节点以 `statement_value` 保留报表原符号，以严格正值 `value = abs(statement_value)` 作为守恒流量；`profit_addition` 必须严格为正，`cost_offset` 必须严格为负，不得用负连线或静默净额化。金额勾稽只允许绝对差 `<= 0.01`；台账 `calculated_links` 必须恰好覆盖利润主链的每条 continuation 边并绑定可复算记录。
 
+研究层不写死节点坐标，也不调用图表渲染器；但桑基交接必须携带 [income-statement-sankey.md](references/income-statement-sankey.md#下游-x-型布局与最少交叉) 的下游布局意图：入口侧最上 / 最下分支尽量落在左上角 / 左下角，出口侧最上 / 最下分支尽量落在右上角 / 右下角，中间主干居中，使整体尽量呈 X 型；下游必须通过节点顺序、端口顺序和局部路由走廊优先消除可避免的连线交叉。不得为造型改变会计拓扑、连接关系、金额、有符号语义、利润层级或节点配色。
+
 正文只保留投资判断所需的事实、假设、计算过程、限制与反证。Schema 字段映射、JSON 文件名、验证器兼容、归档或生成流程等内部实现说明写入 `schema-gap-report.md`、`research-completeness.md`、台账或 manifest，不塞进研究叙事。Logo 的搜索、取得、核验、文件规格或路径、缺失、回退、归档和交付状态，以及桑基配色的检索、取样、原图、默认色和渲染状态，一律不写入 `research-report.md`；报告可见文本和来源定位索引都不得出现 Logo / `company_logo` / 公司标志 / 公司标识等资产词。若品牌或视觉识别变化本身对生意、护城河或股东价值有实质影响，改用“品牌重塑”或“视觉识别变化”等面向读者的经济表述，只写可验证的事实与影响，不写资产处理过程。字段背后的真实经济假设仍须在正文直接说清。例如正文应写“第1—5年收入与普通股利润都按8%增长”，而不是解释某个 Schema 字段为何暂存同一数值。
 
 `company.json` 严格通过锁定 Schema，不新增字段。Schema 暂时无法表达的估值口径保留在报告、计算台账和 `schema-gap-report.md`，不得把旧字段静默改义。新研究的 `company.json` 与 `calculation-ledger.json` 统一存实际原始数值：人民币100万元写 `1000000`，100万股写 `1000000`，比例仍写 `0.25`；不得使用千、百万或十亿缩放值，计算台账也不得逐条添加 `unit`。所有面向中国读者的文字、表格、图表和最终回复再按 [research-contract.md](references/research-contract.md#中文展示单位契约) 换算：公司级金额优先用亿元，超大规模可用万亿元，股数用万股 / 亿股，每股值用原币种 / 股，比例用百分比。

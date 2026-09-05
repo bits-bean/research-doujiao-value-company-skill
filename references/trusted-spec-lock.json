@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "aa3b9e3a228a670188259fd4e480fce4784c5c2d73d46462f7a4e00190486bc4",
+    "normative_digest_sha256": "d6e7885107035ee7a74cd4661a8a009e9d934ff9147615b0ed6e30c92362872b",
     "toolchain_digest_sha256": "58398d819965deb3ebd4838d41d2fa1c087f422c8d77c62cea846e23ace03a4d",
-    "bundle_digest_sha256": "80075dc489d425e03f293ad9a162d010971a0e8ef961629fc4bc4be013ac1f9b",
+    "bundle_digest_sha256": "0ac55e6b8208afa11a3aab31c6cb840cdb807cdd97aef8d9b917e968891a22d4",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "61444efb8d8cad3026d1c9ae3d6e60c3804391869b18dccbf8f2a53d7ffc5692",
-        "size_bytes": 22038
+        "sha256": "1aa4f031dfdd588706ba65a6544cfadb9152f48e56b803ec9ce215e424780703",
+        "size_bytes": 22650
       },
       {
         "path": "agents/openai.yaml",
@@ -70,8 +70,8 @@
       {
         "path": "references/income-statement-sankey.md",
         "role": "normative",
-        "sha256": "e6d3489dfc6a7b8aa2a33a860961cc19e52719c0d4f7db02a10c8a9c95b37c72",
-        "size_bytes": 11651
+        "sha256": "13a3b2b66e97f716b1a571fadce88c257fb2a7a5c58e14d290d83e534b86cbf9",
+        "size_bytes": 13224
       },
       {
         "path": "references/qa-gates.md",
