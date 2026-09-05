@@ -78,6 +78,20 @@ def remove_h2_section(report: str, heading: str) -> str:
     return report[:start] + report[end + (1 if end < len(report) else 0):]
 
 
+class SkillContractTests(unittest.TestCase):
+    def test_sankey_handoff_requires_x_layout_and_minimum_crossings(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        contract = (ROOT / "references" / "income-statement-sankey.md").read_text(encoding="utf-8")
+
+        self.assertIn("下游-x-型布局与最少交叉", skill)
+        self.assertIn("入口侧最上 / 最下分支尽量落在左上角 / 左下角", skill)
+        self.assertIn("出口侧最上 / 最下分支尽量落在右上角 / 右下角", skill)
+        self.assertIn("整体尽量呈清晰 X 型", contract)
+        self.assertIn("能由这三种手段消除的交叉必须为 0", contract)
+        self.assertIn("不得为了 X 型或零交叉", contract)
+        self.assertIn("没有实际预览时", contract)
+
+
 class SemanticGateTests(unittest.TestCase):
     def make_signed_sankey_case(self) -> tuple[dict, dict, set[str]]:
         with tempfile.TemporaryDirectory() as temp_dir:
