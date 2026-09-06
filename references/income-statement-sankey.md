@@ -4,20 +4,24 @@
 
 先逐行提取同一财年年报利润表及相关附注，再生成节点；禁止先画图再凑数。把提取结果写入 `calculation-ledger.json.income_statement_sankey`，逐项保存 `node_id / value / source_ids / location`，其中台账 `value` 必须保留报表原始符号。年报单列的收入、成本、费用、所得税和利润不得遗漏或自行合并；只有年报本身合并披露时才能沿用合并口径。
 
-节点 `category` 只使用：`revenue_source / revenue_total / cost_expense / cost_offset / cost_subtotal / pretax_costs_total / profit_addition / profit_subtotal / pretax_profit / income_tax / net_income`。Schema 2.2.0 中每个节点同时保存：
+节点 `category` 只使用：`revenue_source / revenue_subtotal / revenue_offset / revenue_total / cost_expense / cost_offset / cost_subtotal / pretax_costs_total / profit_addition / profit_subtotal / pretax_profit / income_tax / net_income`。Schema 2.2.0 及以后每个节点同时保存：
 
-- `statement_value`：披露或计算值的实际原始数值，保留正负号；
+- `statement_value`：披露或计算值的实际原始数值，保留正负号；只有 `cost_offset` 与 Schema 2.3.0 的 `revenue_offset` 可以为负；
 - `value`：仅作为桑基宽度与流量守恒值，必须为正数且等于 `abs(statement_value)`；
 - `links[].value`：必须为正数，不得用负连线、零宽连线或改号后的净额伪造守恒。
 
-Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`，但不得作为 2.2.0 正式冻结或增量链的前序包。
+Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`；Schema 2.2.0 保留有符号成本抵减和利润加项，但没有收入抵减角色。它们都不得作为当前 2.3.0 正式冻结或增量链的前序包。
 
 ## 生成模板
 
-共同首尾固定为：
+收入起点按披露结构二选一：
 
-1. 每项 `revenue_source → revenue_total`；
-2. `pretax_profit → income_tax + net_income`。
+1. 年报收入分项没有中间小计或负收入抵减时，每项 `revenue_source → revenue_total`；
+2. 年报披露收入层级或负收入抵减时，使用 `revenue_source → revenue_subtotal* → revenue_total`。每个 `revenue_source` 必须无流入且恰有一条收入主链流出；每个 `revenue_subtotal` 只接收 `revenue_source / revenue_subtotal`，恰有一条流向下一 `revenue_subtotal / revenue_total` 的 continuation 边，其余流出只能是终端 `revenue_offset`。每个收入来源和小计都必须沿各自唯一的 continuation 路径到达同一个 `revenue_total`，不得把平面收入源和小计父节点混接到总收入。
+
+`revenue_offset` 用于年报单列的负收入调整。它必须保留负 `statement_value`，以正的绝对值作为几何流量，只能由 `revenue_subtotal` 流入且必须无流出。于是抵减前收入小计的正流量分成“披露净收入 + 抵减绝对额”，机械等价于 `净收入 = 抵减前收入 + 负收入抵减`。不得把抵减改成正收入源流入 `revenue_total`，也不得把它分摊进某个正收入分项。`revenue_total` 仍是唯一与 `financials[].revenue` 勾稽的披露净收入节点。
+
+共同终点固定为 `pretax_profit → income_tax + net_income`。
 
 中间部分二选一，不能并画而造成重复分流：
 
@@ -28,13 +32,13 @@ Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`，但不�
 
 年报披露的净成本 subtotal 含负费用时，使用 `cost_offset`。它必须保留负 `statement_value`，无流入、恰有一条正值连线指向 `cost_subtotal`；该目标 subtotal 还必须有恰一个非 offset 的结构父节点。这允许“披露净成本 + 负费用的绝对值 → 正成本合计（计算值） → 各正成本子项”，既不重复计量负费用，也不改号或静默净额化。`cost_offset` 不得指向 `pretax_costs_total`。
 
-`cost_subtotal` 必须继续展开到已披露子项；`profit_subtotal` 每层必须恰有一个后续利润节点及至少一个成本/费用分支。禁止总收入直接连接所得税或净利润，禁止把多项已披露费用合并成“其他费用”，也禁止用净利润替代税前利润桥。
+`cost_subtotal` 必须继续展开到已披露子项；`profit_subtotal` 每层必须恰有一个后续利润节点。通常还须有至少一个成本/费用分支；若本层没有成本分支，只有后续利润节点另有至少一个受控 `profit_addition` 流入时才允许主链原额续接。最低层级的 `revenue_total → pretax_profit` 仍必须同时分出唯一 `pretax_costs_total`。禁止总收入直接连接所得税或净利润，禁止把多项已披露费用合并成“其他费用”，也禁止用净利润替代税前利润桥。
 
 ## 计算值与来源
 
-年报未直接披露、由底层项目推导的汇总节点，标签追加“（计算值）”，并在 `calculations[]` 中建立 `metric: custom` 记录，写明 `sankey_node_id`、公式、输入、结果、复核方法和非空 `source_ids`。同时在 `income_statement_sankey.calculated_nodes` 绑定 `node_id` 与 `calculation_id`。年报直接披露的节点进入 `disclosed_line_items`，逐项记录精确位置和来源。
+年报未直接披露、由底层项目推导的汇总节点，标签追加“（计算值）”，并在 `calculations[]` 中建立 `metric: custom` 记录，写明 `sankey_node_id`、公式、输入、结果、复核方法和非空 `source_ids`。同时在 `income_statement_sankey.calculated_nodes` 绑定 `node_id` 与 `calculation_id`。年报直接披露的节点进入 `disclosed_line_items`，逐项记录精确位置和来源；每个 `revenue_offset` 披露项的 `source_ids` 至少有一个必须解析到 `company.json.sources[].source_type: annual_report`，普通 `regulatory_filing` 或第三方研究来源不能代替年报。
 
-Schema 2.2.0 还必须把利润主链的每条 continuation 边（`revenue_total / profit_subtotal → 下一 profit_subtotal / pretax_profit`）写入 `income_statement_sankey.calculated_links[]`。每项使用唯一 `source / target / calculation_id`，并绑定一条 `metric: custom` 记录；记录的 `sankey_source / sankey_target`、财年、结果和来源必须与实际连线精确对应。2.0.0 / 2.1.0 历史审计不强制该数组。所有桑基节点、连线、台账和报表勾稽金额使用 Decimal 精确到分比较（绝对差 `<= 0.01`），不使用百分比容差。
+Schema 2.2.0 及以后必须把利润主链的每条 continuation 边（`revenue_total / profit_subtotal → 下一 profit_subtotal / pretax_profit`）写入 `income_statement_sankey.calculated_links[]`；Schema 2.3.0 还必须覆盖每条收入小计 continuation 边（`revenue_subtotal → 下一 revenue_subtotal / revenue_total`）。每项使用唯一 `source / target / calculation_id`，并绑定一条 `metric: custom` 记录；记录的 `sankey_source / sankey_target`、财年、结果和来源必须与实际连线精确对应。若一个 `revenue_subtotal` 直接分流至 `revenue_offset`，其 continuation 计算的 `inputs` 键集合必须恰好等于该 subtotal 节点 ID 与全部直接 offset 节点 ID，值逐项等于对应节点的带符号 `statement_value`；这些参与计算的节点 ID 因此必须是合法公式变量名。收入抵减桥的公式必须使用这些负数 offset 输入，例如 `gross_revenue + hedging_loss`，其中 `inputs.hedging_loss = -127000000`，不得改用正绝对值或未绑定别名。2.0.0 / 2.1.0 历史审计不强制该数组。所有带 `sankey_node_id` 或 `sankey_source / sankey_target` 的计算，以及桑基节点、连线、台账和报表勾稽金额，均使用 Decimal 精确到分比较（绝对差 `<= 0.01`），不使用百分比容差；普通非桑基 custom 计算仍使用通用相对容差。
 
 ```json
 {
@@ -120,16 +124,21 @@ python3 scripts/prepare_sankey_color_audit.py \
 只有下列条件全部成立才写 `reconciled: true`：
 
 - 每个节点值同时等于其流入合计和流出合计（根节点/叶节点按存在的一侧校验）；
-- 图无环且整体弱连通；`revenue_source` 仍只能连到唯一 `revenue_total`，`profit_addition` 与 `cost_offset` 只能按上述受控方向接入；
+- 图无环且整体弱连通；平面收入图的 `revenue_source` 直接连到唯一 `revenue_total`，层级收入图则经 `revenue_subtotal` 唯一续接到该节点；`revenue_offset` 是小计的受控终端抵减，`profit_addition` 与 `cost_offset` 只能按上述受控方向接入；
 - `revenue_total → profit_subtotal* → pretax_profit` 形成唯一利润主链，每层的正成本流出、桥接余额和受控加项流入分别与前后节点守恒；
 - 税前利润 = 所得税 + 净利润；
 - 总收入、净利润与同财年 `financials` 一致；
-- Schema 2.2.0 每个节点都有有限 `statement_value`，`value = abs(statement_value)`；披露台账值与 `statement_value` 同号同值，计算记录 `result` 与计算节点 `statement_value` 一致；
+- Schema 2.2.0 及以后每个节点都有有限且非零的 `statement_value`，`value = abs(statement_value)`；只有 `cost_offset / revenue_offset` 为负，披露台账值与 `statement_value` 同号同值，计算记录 `result` 与计算节点 `statement_value` 一致；
+- Schema 2.3.0 的收入小计与抵减逐层守恒，`revenue_total` 与同财年 `financials[].revenue` 相等，每条收入与利润 continuation 边都有精确计算绑定；
 - 图中每个节点恰好在披露清单或计算值清单中出现一次，披露清单每一项也都有节点和连线；
 - 桑基根级 `source_ids` 覆盖全部披露项和计算项来源。
 - `color_audit` 覆盖三项规范身份和每个官方可验证别名的两种查询；`matched` 的逐节点样本与 `nodes[].color` 完全一致，`not_found` 的节点色全空并绑定 System 默认版本，`blocked` 不得通过正式门禁。
 
-当前 2.2.0 仅放行“正值守恒图中的有符号加项与成本抵减”。所得税收益、负的利润 subtotal、负的净利润或非控股权益归属等本契约未定义的关系，仍不得改符号或硬塞入图；记录 Schema Gap 并阻断正式冻结。
+当前 2.3.0 放行“正值守恒图中的有符号利润加项、成本抵减与收入抵减”。所得税收益、负的利润 subtotal、负的净利润或非控股权益归属等本契约未定义的关系，仍不得改符号或硬塞入图；记录 Schema Gap 并阻断正式冻结。
+
+## FY2025 收入抵减示例
+
+Alphabet：Google Services `3427.21亿美元`、Google Cloud `587.05亿美元`、Other Bets `15.37亿美元`先汇入抵减前收入计算值 `4029.63亿美元`；该小计再分为披露净收入 `4028.36亿美元`与 Hedging gains (losses) 收入抵减 `1.27亿美元`，后者的 `statement_value = -127000000`、`value = 127000000`。披露净收入再分为总成本费用 `2737.97亿美元`与进入营业利润的 continuation `1290.39亿美元`；营业利润原额续接，和正的其他收入加项 `297.87亿美元`共同形成税前利润 `1588.26亿美元`。
 
 ## FY2025 最低层级示例
 

@@ -113,7 +113,7 @@
             "type": "object",
             "properties": {
               "schema_version": {
-                "const": "2.2.0"
+                "enum": ["2.2.0", "2.3.0"]
               }
             },
             "required": ["schema_version"]
@@ -134,6 +134,105 @@
                     "statement_value": {}
                   },
                   "required": ["statement_value"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "meta": {
+            "type": "object",
+            "properties": {
+              "schema_version": {
+                "enum": ["2.0.0", "2.1.0", "2.2.0"]
+              }
+            },
+            "required": ["schema_version"]
+          }
+        },
+        "required": ["meta"]
+      },
+      "then": {
+        "properties": {
+          "income_statement_sankey": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "revenue_source",
+                        "revenue_total",
+                        "cost_expense",
+                        "cost_offset",
+                        "cost_subtotal",
+                        "pretax_costs_total",
+                        "profit_addition",
+                        "profit_subtotal",
+                        "pretax_profit",
+                        "income_tax",
+                        "net_income"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "meta": {
+            "type": "object",
+            "properties": {
+              "schema_version": {
+                "const": "2.3.0"
+              }
+            },
+            "required": ["schema_version"]
+          }
+        },
+        "required": ["meta"]
+      },
+      "then": {
+        "properties": {
+          "income_statement_sankey": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "revenue_source",
+                        "revenue_subtotal",
+                        "revenue_offset",
+                        "revenue_total",
+                        "cost_expense",
+                        "cost_offset",
+                        "cost_subtotal",
+                        "pretax_costs_total",
+                        "profit_addition",
+                        "profit_subtotal",
+                        "pretax_profit",
+                        "income_tax",
+                        "net_income"
+                      ]
+                    }
+                  },
+                  "required": ["category"]
                 }
               }
             }
@@ -360,9 +459,9 @@
         },
         "schema_version": {
           "type": "string",
-          "enum": ["2.0.0", "2.1.0", "2.2.0"],
-          "default": "2.2.0",
-          "description": "company.json 数据协议版本。2.2.0 为利润表 Sankey 节点新增必填原表符号金额 statement_value，并继续以正数 value 表示几何流量；2.1.0 新增报告口径的普通股股东利润与稀释 EPS；2.0.0 与 2.1.0 仅为向后兼容既有冻结包。"
+          "enum": ["2.0.0", "2.1.0", "2.2.0", "2.3.0"],
+          "default": "2.3.0",
+          "description": "company.json 数据协议版本。2.3.0 新增以正值守恒表示负收入抵减的 revenue_subtotal / revenue_offset 受控桥；2.2.0 为利润表 Sankey 节点新增必填原表符号金额 statement_value，并继续以正数 value 表示几何流量；2.0.0、2.1.0 与 2.2.0 仅为向后兼容既有冻结包。"
         },
         "theme": {
           "type": "string",
@@ -672,14 +771,15 @@
         "value": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Sankey 几何与守恒使用的正数流量；2.2.0 必须等于 abs(statement_value)，该跨字段约束由运行时校验。"
+          "description": "Sankey 几何与守恒使用的正数流量；2.2.0 及后续版本必须等于 abs(statement_value)，该跨字段约束由运行时校验。"
         },
         "statement_value": {
           "type": "number",
-          "description": "利润表披露或计算台账口径的带符号金额。2.2.0 每个节点必填；旧版数据由消费端回退为 value。"
+          "description": "利润表披露或计算台账口径的带符号金额。2.2.0 及后续版本每个节点必填；旧版数据由消费端回退为 value。"
         },
         "category": {
-          "$ref": "#/$defs/nullableString"
+          "$ref": "#/$defs/nullableString",
+          "description": "Schema 2.3.0 的受控收入抵减使用可嵌套的 revenue_source / revenue_subtotal 正值 continuation 最终到达 revenue_total；revenue_subtotal 可另外分流至终端 revenue_offset，revenue_offset 保留负 statement_value 并使用正 value。"
         },
         "color": {
           "$ref": "#/$defs/nullableString"

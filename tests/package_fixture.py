@@ -231,7 +231,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "accounting_standard": "US GAAP",
             "display_language": "zh-CN",
             "source_version": "2026Q1",
-            "schema_version": "2.2.0",
+            "schema_version": "2.3.0",
             "theme": "light",
             "sankey_style": "app-economy-inspired-light",
         },
