@@ -419,14 +419,14 @@ class GithubDeliveryTests(unittest.TestCase):
         return provenance, original_rows, output_rows
 
     @staticmethod
-    def set_company_logo(package: Path, asset_path: str | None) -> None:
+    def set_company_logo(package: Path, asset_path: str | None, *, is_official: bool = True) -> None:
         company_path = package / "company.json"
         company = json.loads(company_path.read_text(encoding="utf-8"))
         company["brand_identity"]["company_logo"] = {
             "asset_path": asset_path,
             "source_url": "https://example.com/brand",
-            "alt": "Test Company official logo",
-            "is_official": True,
+            "alt": "Test Company logo",
+            "is_official": is_official,
         }
         write_json(company_path, company)
         manifest_path = package / "research-manifest.json"
@@ -1230,11 +1230,76 @@ class GithubDeliveryTests(unittest.TestCase):
                 ),
             )
             self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["plan_version"], "9.4")
+            self.assertEqual(ready["plan_version"], "9.5")
             self.assertEqual(ready["identity_assets"]["remote_action"], "create")
             self.assertEqual(ready["identity_assets"]["logo_guard"], "staged")
             self.assertEqual([item["target_path"] for item in ready["identity_assets"]["files"]], [target])
             self.assertEqual(ready["identity_assets"]["delete_paths"], [])
+
+    def test_verified_third_party_logo_requires_explicit_confirmation_and_keeps_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            target = "companies/test-company/assets/logo.svg"
+            self.set_company_logo(package, target, is_official=False)
+            assets = root / "identity-assets"
+            assets.mkdir()
+            logo = assets / "logo.svg"
+            logo.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>\n',
+                encoding="utf-8",
+            )
+            kwargs = {
+                "write_authorized": True,
+                "remote_company_state": self.company_state(),
+                "remote_slug_registry_state": self.registry_state(),
+                "remote_canonical_state": self.canonical_absent_state(),
+                "identity_assets_root": assets,
+                "remote_identity_assets_state": self.identity_asset_state(
+                    [{"path": target, "exists": False, "source_path": None, "sha256": None, "size_bytes": None}]
+                ),
+            }
+            with self.assertRaisesRegex(ArchivePlanError, "third-party.*planner confirmation"):
+                self.plan(package, schema, lock, **kwargs)
+
+            ready = self.plan(
+                package,
+                schema,
+                lock,
+                confirm_third_party_logo=True,
+                **kwargs,
+            )
+            self.assertTrue(ready["ready_for_write"])
+            self.assertEqual(ready["plan_version"], "9.5")
+            self.assertEqual(ready["identity_assets"]["source_kind"], "verified-third-party")
+            self.assertEqual(
+                ready["identity_assets"]["preparation"],
+                "verified-third-party-original-square",
+            )
+            self.assertTrue(ready["identity_assets"]["third_party_logo_confirmed"])
+            self.assertFalse(
+                json.loads((package / "company.json").read_text(encoding="utf-8"))["brand_identity"]["company_logo"]["is_official"]
+            )
+
+    def test_third_party_logo_cannot_use_official_png_crop_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, schema, lock = self.make_package(root)
+            self.set_company_logo(
+                package,
+                "companies/test-company/assets/logo.png",
+                is_official=False,
+            )
+            assets = root / "identity-assets"
+            self.write_center_crop_assets(assets)
+            with self.assertRaisesRegex(ArchivePlanError, "third-party.*cannot use crop mode"):
+                self.plan(
+                    package,
+                    schema,
+                    lock,
+                    identity_assets_root=assets,
+                    confirm_third_party_logo=True,
+                )
 
     def test_verified_png_logo_is_planned_without_rewriting_original_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1299,7 +1364,7 @@ class GithubDeliveryTests(unittest.TestCase):
             )
 
             self.assertTrue(ready["ready_for_write"])
-            self.assertEqual(ready["plan_version"], "9.4")
+            self.assertEqual(ready["plan_version"], "9.5")
             self.assertEqual(ready["identity_assets"]["preparation"], "verified-center-square-crop")
             self.assertTrue(ready["identity_assets"]["official_source_derived"])
             self.assertEqual(
@@ -1322,7 +1387,7 @@ class GithubDeliveryTests(unittest.TestCase):
             assets.mkdir()
             rows = [[(20 * (x + 1), 30 * (y + 1), 10, 255) for x in range(4)] for y in range(2)]
             self.write_rgba_png(assets / "logo.png", 4, 2, rows)
-            with self.assertRaisesRegex(ArchivePlanError, "official square original or a verified deterministic"):
+            with self.assertRaisesRegex(ArchivePlanError, "verified square original or an official deterministic"):
                 self.plan(package, schema, lock, identity_assets_root=assets)
 
     def test_center_crop_uses_floor_offset_for_odd_difference(self) -> None:
@@ -1592,7 +1657,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><path d="M0 0h2v1z"/></svg>\n',
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ArchivePlanError, "official square original"):
+            with self.assertRaisesRegex(ArchivePlanError, "verified square original"):
                 self.plan(package, schema, lock, identity_assets_root=assets)
             logo.write_text(
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path d="M0 0h2v2z"/></svg>\n',
@@ -1615,7 +1680,7 @@ class GithubDeliveryTests(unittest.TestCase):
                 '<svg xmlns="http://www.w3.org/2000/svg" width="1in" height="1cm" viewBox="0 0 100 100"><path d="M0 0h100v100z"/></svg>\n',
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ArchivePlanError, "official square original"):
+            with self.assertRaisesRegex(ArchivePlanError, "verified square original"):
                 self.plan(package, schema, lock, identity_assets_root=assets)
 
             logo.write_text(
@@ -2321,6 +2386,29 @@ class GithubDeliveryTests(unittest.TestCase):
             ) as build:
                 self.assertEqual(archive_main(), 0)
             self.assertTrue(build.call_args.kwargs["confirm_new_company_without_logo"])
+
+    def test_cli_wires_explicit_third_party_logo_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package = root / "package"
+            package.mkdir()
+            schema = root / "schema.json"
+            schema.write_text("{}\n", encoding="utf-8")
+            argv = [
+                "prepare_github_archive.py",
+                str(package),
+                "--schema",
+                str(schema),
+                "--company-slug",
+                "test-company",
+                "--confirm-third-party-logo",
+            ]
+            with patch("sys.argv", argv), patch(
+                "prepare_github_archive.build_archive_plan",
+                return_value={},
+            ) as build:
+                self.assertEqual(archive_main(), 0)
+            self.assertTrue(build.call_args.kwargs["confirm_third_party_logo"])
 
     def test_cli_wires_explicit_schema_migration_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -305,9 +305,9 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 公司 Logo 是研究 Skill 唯一管理并交付的视觉素材，完整执行 [identity-assets.md](identity-assets.md)。App Economy Insights 原始 PNG 只是配色逐节点核验所需的冻结包外私有研究证据，不是视觉资产，不得归档或交付。Logo 不是研究事实文件，不写入冻结 manifest；但 `company.json.brand_identity.company_logo` 必须与实际沿用或新增文件一致：
 
 - 先检查并复用同一公司目录内的现有 canonical Logo；增量研究不得静默清空或改写有效 Logo 元数据。
-- 新 canonical Logo 固定为 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一），只从公司官网、IR、官方品牌 / 媒体资料，或适用的官方产品 / 商户 / 开发者 / 支持页面取得。新增 / 替换优先使用官方原始正方形 SVG / PNG；穷尽官方正方形候选后，唯一例外是按 `identity-assets.md` 完成且逐像素证明的 PNG → PNG 确定性中心方形裁剪。不得跨格式转换、拉伸、补边、重采样、改色、包裹、清洗、生成、描摹、重绘或使用近似图。
-- `asset_path`、公开 `source_url`、准确 `alt` 与 `is_official:true` 必须成套存在；新增 SVG 须通过文件大小、脚本、事件处理器、远程引用、敏感内容与锁定渲染探针门禁，新增 PNG 须通过签名、chunk / CRC、IHDR / IDAT / IEND、解压、像素行与非透明像素门禁。
-- 找不到可验证的官方 Logo 时，四元组使用精确空哨兵：`asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 说明网站将使用 ticker 回退；这不改变投资研究结论。
+- 新 canonical Logo 固定为 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）。先检查公司官网、IR、官方品牌 / 媒体资料及适用的官方产品 / 商户 / 开发者 / 支持页面；新增 / 替换优先使用官方原始正方形 SVG / PNG，穷尽官方正方形候选后，唯一转换例外是按 `identity-assets.md` 完成且逐像素证明的官方 PNG → PNG 确定性中心方形裁剪。官方来源全部穷尽后，依本私有 Skill 记录的用户常设授权，可采用身份已交叉核验的第三方原始正方形 SVG / PNG，无需仅为第三方资格再次询问。第三方不得裁剪；所有来源都不得跨格式转换、拉伸、补边、重采样、改色、包裹、清洗、生成、描摹、重绘或使用近似图。
+- `asset_path`、公开 `source_url`、准确 `alt` 与布尔 `is_official` 必须成套存在：官方来源写 `true`，第三方托管原件如实写 `false`，且完整度说明记录官方来源穷尽、用户授权、第三方托管和身份交叉核验。新增 SVG 须通过文件大小、脚本、事件处理器、远程引用、敏感内容与锁定渲染探针门禁，新增 PNG 须通过签名、chunk / CRC、IHDR / IDAT / IEND、解压、像素行与非透明像素门禁。
+- 找不到可验证的官方 Logo，且按常设授权检查后第三方候选也不合格时，四元组使用精确空哨兵：`asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 说明网站将使用 ticker 回退；这不改变投资研究结论。
 - 远端既有 Logo 引用不得静默清空；只有完整记录官方来源尝试、网站影响与待补条件，并另获清除引用授权后才可改为空哨兵。此操作不删除旧文件。远端旧记录本来缺失而新包同样为空时不是清除。
 
 `research-report.md` 不保存 Logo 元数据、状态或流程；其余指定 sidecar / JSON 只保存所需 Logo 元数据，并禁止嵌入 Markdown 图片、HTML 图片 / 音视频标签或 `data:` 媒体 URI。产品、服务、人物、门店、业务场景、封面主视觉、背景及其他视觉素材不属于研究包、研究完整度或研究交接。本 Skill 不查找、下载、筛选、核验、生成、暂存或提交这些素材。下游内容生产 Skill 在每个内容任务内独立取得并核验；其台账不得反向改变研究事实或结论。

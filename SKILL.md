@@ -1,11 +1,11 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term company research under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for sourced company classification and chart-routing inputs, ten-year financials, industry metrics, ledgers, moat, durability, culture, management, capital allocation, risks, DCF or Reverse DCF, formal reports, schema-valid company.json, Too Hard decisions, frozen research handoffs, official company Logo handling, and company-level App Economy Insights Sankey color audits. Do not use to generate or redraw a Logo; manage other publishable visuals; render website or social images; call chart renderers or website APIs; choose channel ratios or layouts; produce social copy; publish content; predict short-term prices; or make unapproved GitHub writes.
+description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term company research under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for sourced company classification and chart-routing inputs, ten-year financials, industry metrics, ledgers, moat, durability, culture, management, capital allocation, risks, DCF or Reverse DCF, formal reports, schema-valid company.json, Too Hard decisions, frozen research handoffs, official-first company Logo handling with an authorized verified-third-party fallback, and company-level App Economy Insights Sankey color audits. Do not use to generate or redraw a Logo; manage other publishable visuals; render website or social images; call chart renderers or website APIs; choose channel ratios or layouts; produce social copy; publish content; predict short-term prices; or make unapproved GitHub writes.
 ---
 
 # 豆角长期价值研究
 
-本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告、结构化数据、台账、网站所需的官方公司 Logo，以及供网站与导出器共同消费的公司级桑基节点色。网站图表仍由 system 代码渲染；本 Skill 不制作发布用视觉成品。
+本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告、结构化数据、台账、网站所需的已验证公司 Logo，以及供网站与导出器共同消费的公司级桑基节点色。网站图表仍由 system 代码渲染；本 Skill 不制作发布用视觉成品。
 
 ## 1. 权威与边界
 
@@ -17,10 +17,10 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 - 企业质量、估值状态和研究状态分开。诚信、治理、资本韧性和数据可靠性可否决估值吸引力。
 - 审查请求只诊断；修复、冻结和 GitHub 交付各需相应授权。网站导入、图表渲染、内容生产和公开发布不属于本 Skill。
 - 本 Skill 不调用 `doujiao-value-system` 的图表导出命令或接口，不生成网站图、社媒图或背景，不选择平台比例、安全区、Logo 位置和引流文案，也不调用内容 Skill 代替用户生产或发布内容。
-- 公司 Logo 是唯一可交付视觉素材例外。首次研究缺少 Logo、公司已重塑品牌，或用户明确授权替换时，完整执行 [identity-assets.md](references/identity-assets.md)：先复用 system 中已验证的 canonical Logo，否则从公司官网、Investor Relations、官方品牌 / 媒体资料或适用的官方产品 / 商户 / 开发者 / 支持页面取得并验证真实 Logo，写入 `company.json.brand_identity.company_logo`。新增或替换时优先使用官方原始正方形 SVG / PNG；穷尽官方正方形候选后，才可对官方非方形 PNG 做不拉伸、不补边、不重采样、不改色、不重绘的确定性中心方形裁剪，并保留原件和完整 provenance。不得生成、重绘或用近似图替代公司 Logo。
-- 首次研究不能因第一个官方候选文件不安全、格式不合格或画布非方形就停止 Logo 搜索。按 `identity-assets.md` 继续检查官网当前页面实际加载的 DOM / CSS / 静态资源、IR、官方品牌或媒体资料，以及适用的官方产品、商户或支持页面；逐项记录候选 URL、格式、尺寸、是否正方形、核验结果和拒绝原因后，才可裁剪或使用空哨兵。
+- 公司 Logo 是唯一可交付视觉素材例外。首次研究缺少 Logo、公司已重塑品牌，或用户明确授权替换时，完整执行 [identity-assets.md](references/identity-assets.md)：先复用 system 中已验证的 canonical Logo，否则依次检查公司官网、Investor Relations、官方品牌 / 媒体资料和适用的官方产品 / 商户 / 开发者 / 支持页面。本私有 Skill 已记录用户常设授权：官方来源全部穷尽且已记录后，可使用出处稳定、身份可交叉核验的第三方原始正方形 SVG / PNG；无需仅因第三方资格再次询问，但每项资产仍须逐项留证、保留原字节并在 `company.json.brand_identity.company_logo` 中如实使用 `is_official:false`。不得生成、重绘或用近似图替代公司 Logo，也不得清洗来源文件。
+- 首次研究不能因第一个官方候选文件不安全、格式不合格或画布非方形就停止 Logo 搜索。按 `identity-assets.md` 继续检查官网当前页面实际加载的 DOM / CSS / 静态资源、IR、官方品牌或媒体资料，以及适用的官方产品、商户或支持页面；逐项记录候选 URL、格式、尺寸、是否正方形、核验结果和拒绝原因。官方原始正方形 SVG / PNG 始终优先；穷尽官方正方形候选后，才可对安全的官方非方形 PNG 做确定性中心方形裁剪。第三方兜底只接受通过同一安全与渲染门的原始正方形 SVG / PNG，不得裁剪、转码或改写。
 - 除公司 Logo 与 [income-statement-sankey.md](references/income-statement-sankey.md) 明确限定的 App Economy Insights 配色核验外，本 Skill 不搜索、下载、筛选、核验、生成、暂存或提交产品、服务、人物、门店、业务场景、封面主视觉、背景及其他视觉素材。配色原始 PNG 只是冻结包外私有研究证据，绝不作为视觉资产交付；研究包只保存其摘要和逐节点样本审计。内容生产所需其他素材仍由 `$produce-doujiao-value-content` 在其任务内独立完成。
-- 找不到可验证的官方 Logo 时，写入 `asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 记录 Logo 缺口；不得合成替代 Logo，也不得声称网站身份素材完整。
+- 找不到可验证的官方 Logo，且仍找不到可验证的第三方原始正方形 Logo 时，写入 `asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 记录 Logo 缺口；不得合成替代 Logo，也不得声称网站身份素材完整。采用第三方时，完整度说明必须显式记录官方来源穷尽、用户已授权常设兜底、第三方托管事实、身份交叉核验和网站展示影响。
 - `research-report.md` 不保存 Logo 元数据、状态或流程；其余指定 sidecar / JSON 只保存所需 Logo 元数据，不嵌入 Logo、图片、视频、音频、HTML 媒体标签或 `data:` 媒体 URI。Logo 字节只存在于冻结目录外的交付 / 审计目录或 system 仓库。发生裁剪时，官方原件与 provenance 必须留在冻结目录外的持久工作目录，不能只依赖会被清理的临时文件。
 
 ## 2. 模式与读取顺序
@@ -113,8 +113,8 @@ system 图表层与内容层只接收同一冻结版本的报告、`company.json
 
 - GitHub 当前研究包固定为 `companies/<company-slug>/`，报告、`company.json`、台账、验证结果与 manifest 全部直接放在该目录；不得增加日期、`-vN` 或其他版本子目录，远端版本只由 Git 历史追踪。
 - 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。已有且与 `company.json` 一致的 Logo 原样保留；缺失或明确授权替换的 Logo 按 `identity-assets.md` 验证后与研究文件进入同一原子提交。
-- 新 canonical Logo 固定使用 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`；已有 `logo-primary.svg` 或 `logo-primary.png` 只作为 legacy 沿用。官方原始正方形文件保持原字节；唯一转换例外是经 `identity-assets.md` 证明的 PNG → PNG 确定性中心方形裁剪，计划必须明确标记 `official_source_derived:true`。不得在 SVG 与 PNG 之间转换、包裹、清洗或重绘。最终差异白名单仍只包含冻结 manifest 声明的直接研究文件、`research-manifest.json`，以及本次显式暂存且通过门禁的一个 canonical Logo；原件与 provenance 不写入 GitHub。任何 `images/*`、产品图、图片 manifest、封面、背景或其他素材仍禁止进入研究归档。
-- 远端已有 Logo 只能精确沿用或经另行授权替换；若已确认没有可验证的官方 Logo，可在完整记录缺口后用独立的“清除旧引用”授权把四元组改为精确空哨兵。清除只更新 `company.json` 引用，不删除旧文件，也不能代替 Logo 替换授权。
+- 新 canonical Logo 固定使用 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`；已有 `logo-primary.svg` 或 `logo-primary.png` 只作为 legacy 沿用。官方或依常设授权采用的第三方原始正方形文件都保持原字节；第三方必须记录 `is_official:false`。归档规划时仍传 `--confirm-third-party-logo`，用于机械确认冻结包确实满足常设规则，不构成新的第三方许可提问；GitHub 写入、远端不同 Logo 替换和直接 main 仍分别遵守其独立授权门。唯一转换例外仍是经 `identity-assets.md` 证明的官方 PNG → PNG 确定性中心方形裁剪，计划必须明确标记 `official_source_derived:true`。不得在 SVG 与 PNG 之间转换、包裹、清洗或重绘。最终差异白名单仍只包含冻结 manifest 声明的直接研究文件、`research-manifest.json`，以及本次显式暂存且通过门禁的一个 canonical Logo；原件与 provenance 不写入 GitHub。任何 `images/*`、产品图、图片 manifest、封面、背景或其他素材仍禁止进入研究归档。
+- 远端已有 Logo 只能精确沿用或经另行授权替换；若已确认没有可验证的官方 Logo 和已授权第三方兜底，可在完整记录缺口后用独立的“清除旧引用”授权把四元组改为精确空哨兵。清除只更新 `company.json` 引用，不删除旧文件，也不能代替 Logo 替换授权。
 - system 中尚不存在的新公司若仍为 Logo 空哨兵，普通“提交到 GitHub”授权必须停止；只有用户另外明确说“允许无 Logo 提交”或语义完全等价的话，才可使用 `--confirm-new-company-without-logo`。`--allow-warnings`、人工接受或普通写入授权均不得推导该确认。
 - 禁止把任何网站截图、渠道成品、`images/` 生成图、背景、比例模板或平台文案作为研究提交的一部分。
 - 研究请求、冻结请求仍不自动授权 GitHub；“提交到 GitHub”授权的唯一目标是上述公司目录。

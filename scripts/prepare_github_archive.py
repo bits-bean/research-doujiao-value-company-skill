@@ -418,8 +418,8 @@ def _company_logo_asset_path(company: dict[str, Any], company_slug: str) -> str 
             "company logo asset_path must be canonical assets/logo.svg or assets/logo.png, or an existing logo-primary.* legacy path"
         )
     _public_http_url(logo.get("source_url"), "company_logo.source_url")
-    if not _nonblank(logo.get("alt")) or logo.get("is_official") is not True:
-        raise ArchivePlanError("declared company logo requires alt text and is_official true")
+    if not _nonblank(logo.get("alt")) or not isinstance(logo.get("is_official"), bool):
+        raise ArchivePlanError("declared company logo requires alt text and a boolean is_official classification")
     return value
 
 
@@ -2052,7 +2052,7 @@ def prepare_identity_asset_files(
     company_slug: str,
     company: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    """Validate a square official original or a proven PNG center crop."""
+    """Validate a square official/third-party original or a proven official PNG crop."""
     if staging_root is None:
         return [], None
     if staging_root.is_symlink() or not staging_root.is_dir():
@@ -2073,6 +2073,9 @@ def prepare_identity_asset_files(
     expected_name = Path(declared_path).name
     entry_names = {item.name for item in entries}
     crop_mode = declared_path.endswith("/logo.png") and entry_names == LOGO_CROP_STAGING_FILES
+    company_logo = company["brand_identity"]["company_logo"]
+    if crop_mode and company_logo.get("is_official") is not True:
+        raise ArchivePlanError("verified third-party company Logo must preserve original square bytes and cannot use crop mode")
     if not crop_mode and entry_names != {expected_name}:
         raise ArchivePlanError(
             f"identity assets root must contain exactly one {expected_name}, or the exact verified PNG crop set"
@@ -2092,7 +2095,7 @@ def prepare_identity_asset_files(
     )
     if not geometry.is_square:
         raise ArchivePlanError(
-            "new canonical company Logo must be an official square original or a verified deterministic PNG center crop"
+            "new canonical company Logo must be a verified square original or an official deterministic PNG center crop"
         )
     files = [
         {
@@ -2425,6 +2428,7 @@ def build_archive_plan(
     confirm_identity_asset_replacement: bool = False,
     confirm_identity_asset_clear: bool = False,
     confirm_new_company_without_logo: bool = False,
+    confirm_third_party_logo: bool = False,
     trusted_lock: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if root.is_symlink() or not root.is_dir():
@@ -2555,6 +2559,14 @@ def build_archive_plan(
         else:
             raise ArchivePlanError("identity assets root must stay outside the frozen research package")
     logo_path = _company_logo_asset_path(company, company_slug)
+    new_logo_record = company["brand_identity"]["company_logo"]
+    logo_source_kind = (
+        "none"
+        if logo_path is None
+        else ("official" if new_logo_record.get("is_official") is True else "verified-third-party")
+    )
+    if confirm_third_party_logo and logo_source_kind != "verified-third-party":
+        raise ArchivePlanError("--confirm-third-party-logo is valid only for a declared third-party-hosted Logo")
     identity_files, crop_provenance = prepare_identity_asset_files(
         identity_assets_root,
         company_slug=company_slug,
@@ -2567,9 +2579,8 @@ def build_archive_plan(
         )
     if new_company_without_logo and not confirm_new_company_without_logo:
         raise ArchivePlanError(
-            "new company without a verified official Logo requires explicit no-Logo delivery authorization"
+            "new company without a verified Logo requires explicit no-Logo delivery authorization"
         )
-    new_logo_record = company["brand_identity"]["company_logo"]
     existing_logo_path: str | None = None
     existing_logo_record: Any = None
     if canonical_exists is True and remote_canonical_state is not None:
@@ -2585,6 +2596,12 @@ def build_archive_plan(
     logo_metadata_changed = canonical_exists is True and (
         existing_logo_path != logo_path or existing_logo_record != new_logo_record
     )
+    third_party_logo_needs_confirmation = bool(
+        logo_source_kind == "verified-third-party"
+        and (logo_path in staged_targets or canonical_exists is False or logo_metadata_changed)
+    )
+    if third_party_logo_needs_confirmation and not confirm_third_party_logo:
+        raise ArchivePlanError("new or replacement third-party company Logo requires explicit planner confirmation under the standing fallback policy")
     existing_record_is_absent = isinstance(existing_logo_record, dict) and set(existing_logo_record) == {
         "asset_path",
         "source_url",
@@ -2668,7 +2685,7 @@ def build_archive_plan(
         }
     )
     return {
-        "plan_version": "9.4",
+        "plan_version": "9.5",
         "repository": TARGET_REPOSITORY,
         "target_branch": TARGET_BRANCH,
         "strategy": strategy,
@@ -2710,13 +2727,19 @@ def build_archive_plan(
             "remote_base_head": identity_head,
             "logo_guard": logo_guard,
             "company_logo_asset_path": logo_path,
+            "source_kind": logo_source_kind,
             "preparation": (
                 "verified-center-square-crop"
                 if crop_provenance is not None
-                else ("official-original-square" if identity_files else "not-staged")
+                else (
+                    f"{logo_source_kind}-original-square"
+                    if identity_files
+                    else "not-staged"
+                )
             ),
             "official_source_derived": crop_provenance is not None,
             "crop_provenance": crop_provenance,
+            "third_party_logo_confirmed": confirm_third_party_logo,
             "replacement_confirmed": confirm_identity_asset_replacement,
             "clear_confirmed": confirm_identity_asset_clear,
             "new_company_without_logo_confirmed": confirm_new_company_without_logo,
@@ -2796,7 +2819,12 @@ def main() -> int:
     parser.add_argument(
         "--confirm-new-company-without-logo",
         action="store_true",
-        help="Allow first delivery of a new company only after the user explicitly accepts the documented missing official Logo",
+        help="Allow first delivery of a new company only after the user explicitly accepts the documented missing verified Logo",
+    )
+    parser.add_argument(
+        "--confirm-third-party-logo",
+        action="store_true",
+        help="Confirm that a new or replacement verified third-party-hosted Logo satisfies the standing fallback policy while preserving is_official false",
     )
     parser.add_argument("--output", type=Path, help="Write plan outside the frozen package; default stdout")
     args = parser.parse_args()
@@ -2851,6 +2879,7 @@ def main() -> int:
             confirm_identity_asset_replacement=args.confirm_identity_asset_replacement,
             confirm_identity_asset_clear=args.confirm_identity_asset_clear,
             confirm_new_company_without_logo=args.confirm_new_company_without_logo,
+            confirm_third_party_logo=args.confirm_third_party_logo,
         )
         if args.output is not None:
             output = args.output

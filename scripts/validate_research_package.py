@@ -1597,14 +1597,14 @@ def validate_company_logo(
         )
         return
 
-    if is_official is not True or not all(nonblank(value) for value in (asset_path, source_url, alt)):
-        code = "official-logo-metadata" if is_official is True else "company-logo-sentinel"
+    if not isinstance(is_official, bool) or not all(nonblank(value) for value in (asset_path, source_url, alt)):
+        code = "official-logo-metadata" if is_official is True else "company-logo-metadata"
         add(
             findings,
             "error",
             code,
             path_label,
-            "company Logo must be either three nonempty strings with is_official true or the exact null/null/null/false sentinel",
+            "company Logo must be either three nonempty strings with a boolean is_official classification or the exact null/null/null/false sentinel",
         )
         return
 
@@ -1614,6 +1614,57 @@ def validate_company_logo(
         for line in visible_markdown_disclosure_text(completeness).splitlines()
         if "logo" in line.lower()
     ]
+    visible_logo_text = " ".join(visible_logo_lines)
+    if is_official is False:
+        third_party_dimensions = {
+            "third-party hosting disclosure": any(
+                token in visible_logo_text
+                for token in ("第三方托管", "第三方来源", "third-party hosted", "third party hosted")
+            ),
+            "completed official-source exhaustion": any(
+                token in visible_logo_text
+                for token in (
+                    "官方来源已穷尽",
+                    "已穷尽官方来源",
+                    "官方候选已穷尽",
+                    "official sources exhausted",
+                    "no verified official logo remained",
+                )
+            ),
+            "explicit user authorization": any(
+                token in visible_logo_text
+                for token in ("用户已授权", "用户授权", "user authorized", "user-approved")
+            ),
+            "identity verification": any(
+                token in visible_logo_text
+                for token in ("身份交叉核验", "身份核验", "图形一致", "品牌一致", "identity verified", "authenticity verified")
+            ),
+            "website display impact": "网站" in visible_logo_text
+            and any(token in visible_logo_text for token in ("展示", "回退", "ticker", "fallback")),
+        }
+        missing_third_party = [
+            label for label, satisfied in third_party_dimensions.items() if not satisfied
+        ]
+        if missing_third_party:
+            add(
+                findings,
+                "error",
+                "third-party-logo-evidence",
+                "research-completeness.md",
+                "verified third-party Logo metadata requires visible documentation of "
+                + ", ".join(missing_third_party),
+            )
+    elif any(
+        token in visible_logo_text
+        for token in ("采用第三方", "第三方托管", "third-party hosted", "third party hosted")
+    ):
+        add(
+            findings,
+            "error",
+            "company-logo-officiality-contradiction",
+            "research-completeness.md",
+            "a visibly disclosed third-party-hosted Logo cannot be labeled is_official true",
+        )
     missing_markers = (
         "缺失",
         "未找到",
@@ -1657,7 +1708,7 @@ def validate_company_logo(
             "error",
             "company-logo-completeness-contradiction",
             "research-completeness.md",
-            "official Logo metadata conflicts with an unresolved visible Logo-missing disclosure",
+            "declared Logo metadata conflicts with an unresolved visible Logo-missing disclosure",
         )
     canonical = {
         f"companies/{company_slug}/assets/logo.svg",
@@ -1679,9 +1730,9 @@ def validate_company_logo(
         add(
             findings,
             "error",
-            "official-logo-source",
+            "official-logo-source" if is_official else "third-party-logo-source",
             f"{path_label}.source_url",
-            "official company Logo requires a stable public http/https source URL without credentials or signed query parameters",
+            "company Logo requires a stable public http/https source URL without credentials or signed query parameters",
         )
 
 
