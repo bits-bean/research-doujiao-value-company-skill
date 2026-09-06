@@ -8,7 +8,7 @@
 - `research_protocol` 兼容元组保持不变；当前运行另绑定 `integrity_profile: execution-bound-v1`、验证器 SHA-256 和 `protocol_fingerprint`。外部源码 commit 未实证时没有伪装成已验证。
 - 已锁定 `doujiao-value-system` 的单一 Schema commit、blob、SHA-256 与 `schema_version`，Skill 内只读副本一致。
 - 公司法定名称、主要证券、ticker、交易所、财年、会计准则和报告币种无歧义。
-- `company_logo` 使用 system 中已验证的现有 Logo，或使用来自公司官网 / IR / 官方品牌与媒体资料、通过 `identity-assets.md` 门禁的官方原始正方形 SVG / PNG；穷尽官方正方形候选后，唯一兜底是带完整 provenance、经规划器逐像素证明的 PNG 中心方形裁剪。除该 PNG → PNG 例外外，不得转换、拉伸、补边、重采样、改色、清洗、生成、描摹或重绘。首个官方候选不合格或非方形时已继续检查官网实际加载的 DOM / CSS / 静态资源、IR、品牌 / 媒体资料及适用的官方产品 / 商户 / 支持页面，并逐项记录候选 URL、格式、尺寸、是否正方形、核验结果与拒绝原因。只有完成后才可裁剪或使用精确空哨兵，并记录网站 ticker 回退影响和待补条件。
+- `company_logo` 使用 system 中已验证的现有 Logo，或使用来自公司官网 / IR / 官方品牌与媒体资料、通过 `identity-assets.md` 门禁的官方原始正方形 SVG / PNG；穷尽官方正方形候选后，唯一转换兜底是带完整 provenance、经规划器逐像素证明的官方 PNG 中心方形裁剪。首个官方候选不合格或非方形时已继续检查官网实际加载的 DOM / CSS / 静态资源、IR、品牌 / 媒体资料及适用的官方产品 / 商户 / 支持页面，并逐项记录候选 URL、格式、尺寸、是否正方形、核验结果与拒绝原因。官方来源全部穷尽后，依用户常设授权可采用身份已交叉核验的第三方原始正方形 SVG / PNG，无需仅为第三方资格再次询问；第三方托管必须写 `is_official:false`，且完整度说明记录常设授权、托管事实和核验依据。除官方 PNG → PNG 例外外，不得转换、拉伸、补边、重采样、改色、清洗、生成、描摹或重绘。只有完成全部检查后才可使用第三方或精确空哨兵，并记录网站展示影响。
 - 数据截至日、估值日和股价时间戳明确。
 - `classification` 已由官方业务与监管来源验证；sector / 行业 slug 只作标签，`accounting_profile` 与 `returns_profile` 兼容并唯一决定行业适配与图表路由。
 - `protocol_access / schema_access / official_source_retrieval / challenge_source_retrieval / calculation_runtime / package_write` 六项真实能力探针全部通过；两项来源探针绑定不同、已解析的来源 ID 与实际取回内容 SHA-256。
@@ -119,7 +119,7 @@
 - 已冻结目录不再修改；任何修复生成新版本。
 - 下游使用同一 report、JSON、v2 manifest、不变的兼容研究协议、完整执行锁与 Schema 锚点。
 - system 图表和内容层所需的分类、路由、原始序列、`source_ids`、估值链与长期跟踪字段已在冻结数据 / 台账中完成；不存在要求下游从散文、截图或缺失字段猜测的关键输入。
-- `company_logo` 四元组自洽：非空时路径、公开来源 URL、准确 alt、`is_official:true` 成套存在；空缺时四项为 `null/null/null/false`。Logo 文件留在 manifest 外，冻结目录中没有任何素材文件。
+- `company_logo` 四元组自洽：非空时路径、公开来源 URL、准确 alt、布尔 `is_official` 成套存在；官方来源为 `true`，经授权第三方托管为 `false` 且有完整度说明中的官方来源穷尽 / 用户授权 / 身份核验闭环；空缺时四项为 `null/null/null/false`。Logo 文件留在 manifest 外，冻结目录中没有任何素材文件。
 - `validation-report.json` 与 manifest 锁定同一精确 `company_slug`；研究包 Markdown / JSON 不包含 Markdown 图片、除无属性 `<br>` 外的原始 HTML 或 `data:` 图片 / 音视频媒体。
 - 本 Skill 未调用图表渲染器、网站 API 或内容 Skill，未选择渠道比例、背景和布局，也未生成网站 / 社媒图片或发布内容。
 - 旧 Schema → 当前锁定 Schema 2.3.0 的迁移在新目录从原始证据重建并以 `full` 冻结；Schema 1.x、2.0.0、2.1.0 与 2.2.0 包只按各自旧锁审计，不能成为 2.3.0 incremental 前序。同日远端替换同时需要 Schema 迁移与同日修订确认。缺少 `execution_integrity` 的历史 v2 同样只审计，不得原地补锁或作为当前 incremental 前序。
@@ -140,7 +140,7 @@
 - 前序增量研究包已在当前受信研究协议与 Schema 下重新执行 `full` 验证，fresh errors/warnings 与冻结记录一致；未把自报零错误当作证据。
 - 默认经独立分支和 PR；直接 `main` 需要用户明确指定，并且只使用单一原子提交、非强制、仅快进更新。
 - 最终 diff 只修改 `companies/<company-slug>/` 的受管研究包文件，以及本次显式暂存、验证通过的可选 `assets/logo.svg` 或 `assets/logo.png`（二选一）；只允许删除被新冻结包替代的旧受管研究文件，保留其他 Logo、品牌图像及非研究资产，不自动删除旧 `research/` 目录或历史子目录，不包含其他公司、路径或 Schema 文件变化。
-- 非空 Logo 路径与 `company.json` 完全一致，并有同一最新 `main` SHA 的精确文件 observation；沿用时确认 `exists:true`，新增 / 替换时核对 SHA-256。来源 URL 实际可打开且为官方公开来源，alt 非空。官方原始正方形 SVG / PNG 必须保持原字节；裁剪 PNG 必须有精确三文件 staging、完整搜索及候选台账、固定裁剪框、输入 / 输出摘要与逐像素等价证明，计划标记 `official_source_derived:true`，而最终 diff 仍只包含 canonical Logo。SVG 使用标准命名空间且无脚本、事件处理器、外部样式、远程引用、敏感信息或跨渲染器颜色函数，并通过锁定 Sharp / libvips / librsvg 版本的实际非透明像素探针；canonical 或 legacy PNG 通过完整 chunk、CRC、解压和像素可见性验证。远端不同内容只有在用户明确授权替换时更新；清除既有引用另需独立授权、精确 observation 和完整缺口说明，且不删除旧文件。`images/`、图片 manifest、产品图、网站截图、渠道成品、背景和模板全部排除。
+- 非空 Logo 路径与 `company.json` 完全一致，并有同一最新 `main` SHA 的精确文件 observation；沿用时确认 `exists:true`，新增 / 替换时核对 SHA-256。来源 URL 实际可打开，alt 非空，官方 / 第三方分类如实；新增或替换第三方时还需 `--confirm-third-party-logo`，计划记录 `source_kind: verified-third-party`。官方或第三方原始正方形 SVG / PNG 必须保持原字节；只有官方裁剪 PNG 可使用精确三文件 staging、完整搜索及候选台账、固定裁剪框、输入 / 输出摘要与逐像素等价证明，计划标记 `official_source_derived:true`，而最终 diff 仍只包含 canonical Logo。SVG 使用标准命名空间且无脚本、事件处理器、外部样式、远程引用、敏感信息或跨渲染器颜色函数，并通过锁定 Sharp / libvips / librsvg 版本的实际非透明像素探针；canonical 或 legacy PNG 通过完整 chunk、CRC、解压和像素可见性验证。远端不同内容只有在用户明确授权替换时更新；清除既有引用另需独立授权、精确 observation 和完整缺口说明，且不删除旧文件。`images/`、图片 manifest、产品图、网站截图、渠道成品、背景和模板全部排除。
 - canonical observation 证明是新公司且 Logo 为空时，普通“提交到 GitHub”、warning 确认和人工接受均保持阻断；只有用户另外明确接受无 Logo 交付时才使用 `--confirm-new-company-without-logo`，并核对计划为 `logo_guard: missing-explicitly-authorized`、`new_company_without_logo_confirmed:true`。未获该授权的新公司最终 diff 必须实际包含经验证的 `assets/logo.svg` 或 `assets/logo.png`。
 - 提交后按 commit 重新读取远端文件并核对全部研究目标与可选 Logo 的路径、SHA-256 和 `company.json` 元数据。
 

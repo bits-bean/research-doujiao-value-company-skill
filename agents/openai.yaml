@@ -1,8 +1,8 @@
 interface:
   display_name: 豆角长期价值研究
-  short_description: 完成长期价值研究、官方 Logo 与公司级桑基配色审计
+  short_description: 完成长期价值研究、已验证 Logo 与公司级桑基配色审计
   default_prompt: 使用 $research-doujiao-value-company 完成证据驱动的长期价值研究，冻结报告、company.json
-    与台账，取得和验证网站所需官方公司 Logo，并完成 App Economy Insights 公司级桑基配色三态；网站与导出器共同读取
+    与台账，按官方优先、官方来源穷尽后依常设授权采用经核验第三方的规则取得网站所需公司 Logo，并完成 App Economy Insights 公司级桑基配色三态；网站与导出器共同读取
     company.json 节点色，检索和取样只进计算台账且私有原图不进研究包。Logo 与配色流程都不写入 research-report.md；不要生成或重绘 Logo，也不要制作其他视觉或渠道内容。
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg

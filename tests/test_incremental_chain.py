@@ -137,7 +137,17 @@ class IncrementalChainTests(unittest.TestCase):
             }
             write_json(package / "company.json", company)
             findings = validate_research_package(package, schema_path, "full", "test-company")
-            self.assertIn("company-logo-sentinel", {item.code for item in findings})
+            self.assertIn("third-party-logo-evidence", {item.code for item in findings})
+
+            completeness_path = package / "research-completeness.md"
+            completeness_path.write_text(
+                completeness_path.read_text(encoding="utf-8")
+                + "\nLogo：官方来源已穷尽；用户已授权常设第三方兜底。该文件为第三方托管原件，已完成身份交叉核验；交付到 system 后网站展示使用该 Logo，不再回退 ticker。\n",
+                encoding="utf-8",
+            )
+            findings = validate_research_package(package, schema_path, "full", "test-company")
+            self.assertNotIn("third-party-logo-evidence", {item.code for item in findings})
+            self.assertNotIn("company-logo-metadata", {item.code for item in findings})
 
             for asset_path in (
                 "../../evil.svg",

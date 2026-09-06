@@ -27,21 +27,21 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "fd815ec1e6fd608d99515d2cfd823a383ef0f5f71b316dc241484313e67dd74e",
-    "toolchain_digest_sha256": "4fb9c94a6295cbfb7064c8937a81d3865e5832930a2628c9a61c0ed40318aa2a",
-    "bundle_digest_sha256": "2a70127b82f5e2d77b684375075cd41617fb1c6a676153b114a3f82386faa296",
+    "normative_digest_sha256": "95837245a72dd6bcf887f1cdfc437aac9b2c010c26a38935f386c219ba03d1bb",
+    "toolchain_digest_sha256": "6a88ef585f14f2f8f2b099a42e9df6cbe63c41adbc7862a9278658930e48fa79",
+    "bundle_digest_sha256": "10b1ff7ee56775b61f698fb4bb349df09a09e9031ca81dc9e54a9cd04dede42a",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "20b1c0616927f4f53f2bdb78e2decad96fab6884b4db79860cb56aadffbbfbf7",
-        "size_bytes": 22946
+        "sha256": "88b475c4dd51a006758ac6025915956d113e1f11faccc5b6dc303436bd3ea6ac",
+        "size_bytes": 23879
       },
       {
         "path": "agents/openai.yaml",
         "role": "normative",
-        "sha256": "f391f8db8351d7db9b74575f2004ace05a102df9fdd7ab5559c904c1ed2ab691",
-        "size_bytes": 803
+        "sha256": "a96efdad0c758ba35b4ff466e30a2a5617fc15325e28b01c3485feeb4f0aff27",
+        "size_bytes": 878
       },
       {
         "path": "references/classification-and-chart-routing.md",
@@ -58,14 +58,14 @@
       {
         "path": "references/github-archive.md",
         "role": "normative",
-        "sha256": "7762cdcc34df88bc59c1f01532da8ba2233aab1c5dcb2318c81f8b7dec233adb",
-        "size_bytes": 11963
+        "sha256": "c6e4d60586f407b282982a425f6f7714e30280b51713e0962f7eb80aa9a2cbbc",
+        "size_bytes": 12651
       },
       {
         "path": "references/identity-assets.md",
         "role": "normative",
-        "sha256": "eb4314674fddbd6154985dbb649c682a6824cc109cc44ec8473871fabbf001d9",
-        "size_bytes": 16434
+        "sha256": "6b1bdd2c6a6c4f5ab6d2b156991cb7b3ab759d556b519afd6c2bd21b4d69b081",
+        "size_bytes": 19038
       },
       {
         "path": "references/income-statement-sankey.md",
@@ -76,14 +76,14 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "5d7f47fa0d406e8207d0b80517c91badfc23ff33eb6efc9758e4d99c49b56148",
-        "size_bytes": 24372
+        "sha256": "f5171f50390e330d88a657dd3589d95dcf4fcf387f84120b49d7eabbe52a6886",
+        "size_bytes": 24954
       },
       {
         "path": "references/research-contract.md",
         "role": "normative",
-        "sha256": "8e9ba2dc186c588f1b4c1601f612b8d84553c4f018709bb6e319b4a0348f6caa",
-        "size_bytes": 30700
+        "sha256": "048afd60e57e0e472cd5aeee40aecfd6f20768c9c151cdf8513ab8a644c67ee6",
+        "size_bytes": 31158
       },
       {
         "path": "references/research-execution-and-audit.md",
@@ -94,8 +94,8 @@
       {
         "path": "references/source-routing.md",
         "role": "normative",
-        "sha256": "7317459313162b163fddf23cdf3db8ba5077d365f3aaa73dbab3f2a7ff8e9686",
-        "size_bytes": 11841
+        "sha256": "e2d4e983902a5514ad536c425622e0fdd8e80b6d00d7c37daae6b93253c9e01d",
+        "size_bytes": 12221
       },
       {
         "path": "references/specs/automation-workflow.md",
@@ -130,8 +130,8 @@
       {
         "path": "scripts/prepare_github_archive.py",
         "role": "toolchain",
-        "sha256": "686631ad0803ab7546f2de7dfe62412499ea1aa78c168ccfebab8b108cb4982a",
-        "size_bytes": 131412
+        "sha256": "1ca9da072a3fb173eb52ea88fae93f77c5551d5f9f71b4c80eb0c40fbfc6b8df",
+        "size_bytes": 133071
       },
       {
         "path": "scripts/prepare_sankey_color_audit.py",
@@ -142,8 +142,8 @@
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "f845abe0279ff36c0194cc1c7b420e6b7aab26d014f9e50e84010be8d36c48f4",
-        "size_bytes": 323715
+        "sha256": "03547cf164f7d065a87351fa8ee0459e8e1319af2f7f40f426877faaac2c5ec7",
+        "size_bytes": 326050
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -154,8 +154,8 @@
       {
         "path": "scripts/validate_skill.py",
         "role": "toolchain",
-        "sha256": "4ffe93ba597199d8c324fd806fc6250f44736d66069f36fbcc025fb54dbbc635",
-        "size_bytes": 20768
+        "sha256": "5d15d29dade1b6983aefd0f010ced2cb874986b291cfb81fee10c4ed405733e1",
+        "size_bytes": 20982
       },
       {
         "path": "scripts/verify_spec_anchor.py",

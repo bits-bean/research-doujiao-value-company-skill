@@ -4,7 +4,7 @@
 
 把人工接受的当前研究包提交到 `bits-bean/doujiao-value-system` 的唯一公司目录。本地冻结包可继续保存不可变审计快照；GitHub 每家公司只维护一个不带版本号的当前研究目录，版本历史由 Git commit 保存。
 
-GitHub 写入必须由用户在本次任务中明确授权。“研究某公司”“生成 `company.json`”“冻结研究包”或“生成渠道内容”都不构成写入授权；“提交到 GitHub”“合并到 main”等才构成授权。授权范围是受管研究文件，以及本次按 [identity-assets.md](identity-assets.md) 显式暂存并验证的单一公司 Logo。替换远端不同内容的 Logo、清除远端既有 Logo 引用，或首次提交一个仍缺 Logo 的新公司，都需要用户分别另行明确授权，三种授权不能互相替代。普通“提交到 GitHub”绝不等于“允许无 Logo 提交”。
+GitHub 写入必须由用户在本次任务中明确授权。“研究某公司”“生成 `company.json`”“冻结研究包”或“生成渠道内容”都不构成写入授权；“提交到 GitHub”“合并到 main”等才构成授权。授权范围是受管研究文件，以及本次按 [identity-assets.md](identity-assets.md) 显式暂存并验证的单一公司 Logo。替换远端不同内容的 Logo、清除远端既有 Logo 引用，或首次提交一个仍缺 Logo 的新公司，都需要用户分别另行明确授权，三种授权不能互相替代。本私有 Skill 已有“官方来源穷尽后可用经核验第三方”的用户常设授权；新增或替换第三方时仍传入 `--confirm-third-party-logo`，但该参数只机械确认冻结证据满足常设规则，不构成新的第三方许可，也不替代 GitHub 写入或远端替换授权。普通“提交到 GitHub”绝不等于“允许无 Logo 提交”。
 
 ## 发布前门禁
 
@@ -14,7 +14,7 @@ GitHub 写入必须由用户在本次任务中明确授权。“研究某公司�
 4. 通过 GitHub 连接器取得权限和最新 `main` SHA，确认冻结清单锁定的 Schema commit 是其祖先，且 `main:schemas/company.schema.json` 仍为锁定 blob。
 5. 在同一最新 `main` SHA 下取得当前公司目录、slug / identity registry 与目录内正式 `company.json` 三项 observation。slug 不存在时还要反向确认同一公司身份未绑定其他 slug。
 6. 先运行确定性敏感字符串扫描，再语义复核非公开个人信息、资料保密性和再分发权；任一层失败都阻断提交。
-7. 完整读取 `identity-assets.md`。`company.json` 声明非空 Logo 时，取得同一 `main` SHA 的精确远端素材 observation，并把每个 `exists:true` 的文件下载到临时 `source_path` 校验实际字节；沿用时验证内容可渲染，新增或替换时优先暂存唯一官方原始正方形 `logo.svg` / `logo.png`。只有穷尽官方正方形候选后，才允许使用精确三文件模式 `logo.png` + `logo-original.png` + `logo-provenance.json`；规划器必须解码两个 PNG、证明输出是 `center-square-crop-v1` 逐像素精确中心裁剪，且只把 canonical `logo.png` 纳入计划。不得跨格式转换、拉伸、补边、重采样、改色、清洗、描摹或重绘。路径 / 元数据切换时 observation 同时覆盖旧路径和新路径，且需要明确替换授权。新包使用精确空哨兵、远端 canonical 却声明旧 Logo 时，同样观察所有安全旧路径并要求独立清除引用授权。除最终单一 canonical Logo 例外外，计划中出现任何 `assets/`、`images/`、产品图、图片 manifest、网站截图、社媒成品、背景或渠道模板都阻断提交。
+7. 完整读取 `identity-assets.md`。`company.json` 声明非空 Logo 时，取得同一 `main` SHA 的精确远端素材 observation，并把每个 `exists:true` 的文件下载到临时 `source_path` 校验实际字节；沿用时验证内容可渲染，新增或替换时优先暂存唯一官方原始正方形 `logo.svg` / `logo.png`。只有穷尽官方正方形候选后，才允许对官方 PNG 使用精确三文件模式 `logo.png` + `logo-original.png` + `logo-provenance.json`；规划器必须解码两个 PNG、证明输出是 `center-square-crop-v1` 逐像素精确中心裁剪，且只把 canonical `logo.png` 纳入计划。官方来源全部穷尽后，可依用户常设授权暂存身份交叉核验并通过同一门禁的第三方原始正方形 `logo.svg` / `logo.png`；它必须保持原字节、写 `is_official:false` 并传 `--confirm-third-party-logo`。不得跨格式转换、拉伸、补边、重采样、改色、清洗、描摹或重绘。路径 / 元数据切换时 observation 同时覆盖旧路径和新路径，且需要明确替换授权。新包使用精确空哨兵、远端 canonical 却声明旧 Logo 时，同样观察所有安全旧路径并要求独立清除引用授权。除最终单一 canonical Logo 例外外，计划中出现任何 `assets/`、`images/`、产品图、图片 manifest、网站截图、社媒成品、背景或渠道模板都阻断提交。
 8. 若 canonical observation 证明该公司尚不存在，而新包使用 Logo 空哨兵，默认停止。只有用户明确说“允许无 Logo 提交”或语义完全等价的话，才可使用 `--confirm-new-company-without-logo`；普通写入授权、人工接受或 warning 确认均不能推导该参数。
 9. 任一预检不可访问、陈旧或含糊时停止，不得用本地缓存、旧聊天或其他来源猜测远端状态。
 
@@ -52,9 +52,9 @@ companies/<company-slug>/research-manifest.json
 - 受管文件集合及内容完全相同：幂等 `noop`。
 - 任一受管文件缺失或变化：以冻结包完整受管文件集更新；旧的多余受管研究文件列入 `delete_paths`。
 - 所有非研究文件与子目录都不参与研究包比较，不得进入研究包的 `files` 或 `delete_paths`，必须原样保留。
-- 唯一例外是显式暂存的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）：路径必须与 `company.json` 完全一致，由独立 observation 和 SHA-256 门禁决定 `create`、`noop` 或经明确授权的 `update`。官方原始正方形文件保持原字节；已证明的 PNG 中心裁剪标记 `official_source_derived:true`，但仍只写入一个 canonical PNG。从不跨格式转换或删除 Logo。App Economy Insights 原始 PNG 只存在于私有研究证据目录，任何路径或字节出现在冻结包、计划或最终 diff 都必须阻断。
+- 唯一例外是显式暂存的 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`（二选一）：路径必须与 `company.json` 完全一致，由独立 observation 和 SHA-256 门禁决定 `create`、`noop` 或经明确授权的 `update`。官方或经授权第三方原始正方形文件保持原字节；第三方计划记录 `source_kind: verified-third-party` 与显式确认。已证明的官方 PNG 中心裁剪标记 `official_source_derived:true`，但仍只写入一个 canonical PNG。从不跨格式转换或删除 Logo。App Economy Insights 原始 PNG 只存在于私有研究证据目录，任何路径或字节出现在冻结包、计划或最终 diff 都必须阻断。
 - 新公司若声明非空 Logo 路径而没有暂存已验证文件，停止。更新现有公司时，非暂存 Logo 的路径与元数据必须与远端 canonical `company.json` 一致；不得静默清空、换路径或制造悬空引用。
-- 已确认没有可验证官方 Logo 时，只有新四元组为精确空哨兵、完整度说明列明官方来源尝试 / 网站 ticker 回退影响 / 待补条件、远端安全旧路径均有精确 observation，且另获清除引用授权，才允许 `clear-reference`。它只取消 `company.json` 引用并保留旧文件；远端本来没有 Logo 记录且新包仍为空时不需要该授权。
+- 已确认没有可验证官方 Logo 和已授权第三方兜底时，只有新四元组为精确空哨兵、完整度说明列明来源尝试 / 网站 ticker 回退影响 / 待补条件、远端安全旧路径均有精确 observation，且另获清除引用授权，才允许 `clear-reference`。它只取消 `company.json` 引用并保留旧文件；远端本来没有 Logo 记录且新包仍为空时不需要该授权。
 - 远端本来不存在的新公司若仍为空哨兵，不属于 `clear-reference`，但首次归档默认阻断。只有独立的无 Logo 交付授权才能得到 `missing-explicitly-authorized`；通用 warning 或写入授权不能复用，且该状态必须写入计划和 PR 说明。
 - 发现版本子目录时停止；清理遗留 `research/` 或历史目录必须由用户明确指定精确路径，不得随本次整包提交自动扩张删除范围。
 
