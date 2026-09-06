@@ -97,6 +97,7 @@ class SemanticGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             package, _, company = make_valid_unfrozen_package(Path(temp_dir))
             calculations = json.loads((package / "calculation-ledger.json").read_text(encoding="utf-8"))
+        company["meta"]["schema_version"] = "2.2.0"
         known = {source["id"] for source in company["sources"]}
         M = 1_000_000
         node_specs = [
@@ -183,6 +184,67 @@ class SemanticGateTests(unittest.TestCase):
         )
         return company, calculations, known
 
+    def make_revenue_offset_sankey_case(self) -> tuple[dict, dict, set[str]]:
+        company, calculations, known = self.make_signed_sankey_case()
+        company["meta"]["schema_version"] = "2.3.0"
+        sankey = company["income_statement_sankey"]
+
+        product = next(node for node in sankey["nodes"] if node["id"] == "product_revenue")
+        interest = next(node for node in sankey["nodes"] if node["id"] == "interest_income")
+        product["value"] = product["statement_value"] = 190_000_000
+        interest["value"] = interest["statement_value"] = 10_000_000
+        sankey["nodes"].extend(
+            [
+                {"id": "cloud_revenue", "label": "cloud_revenue", "value": 5_000_000, "statement_value": 5_000_000, "category": "revenue_source"},
+                {"id": "services_revenue", "label": "services_revenue", "value": 200_000_000, "statement_value": 200_000_000, "category": "revenue_subtotal"},
+                {"id": "gross_revenue", "label": "抵减前收入（计算值）", "value": 205_000_000, "statement_value": 205_000_000, "category": "revenue_subtotal"},
+                {"id": "hedging_loss", "label": "hedging_loss", "value": 5_000_000, "statement_value": -5_000_000, "category": "revenue_offset"},
+            ]
+        )
+        sankey["links"] = [
+            link
+            for link in sankey["links"]
+            if link["source"] not in {"product_revenue", "interest_income"}
+        ]
+        sankey["links"][:0] = [
+            {"source": "product_revenue", "target": "services_revenue", "value": 190_000_000},
+            {"source": "interest_income", "target": "services_revenue", "value": 10_000_000},
+            {"source": "services_revenue", "target": "gross_revenue", "value": 200_000_000},
+            {"source": "cloud_revenue", "target": "gross_revenue", "value": 5_000_000},
+            {"source": "gross_revenue", "target": "total_revenue", "value": 200_000_000},
+            {"source": "gross_revenue", "target": "hedging_loss", "value": 5_000_000},
+        ]
+
+        ledger = calculations["income_statement_sankey"]
+        disclosed = {
+            item["node_id"]: item for item in ledger["disclosed_line_items"]
+        }
+        disclosed["product_revenue"]["value"] = 190_000_000
+        disclosed["interest_income"]["value"] = 10_000_000
+        disclosed.update(
+            {
+                "cloud_revenue": {"node_id": "cloud_revenue", "value": 5_000_000, "source_ids": ["SRC-FY"], "location": "Annual report revenue note p. 59"},
+                "services_revenue": {"node_id": "services_revenue", "value": 200_000_000, "source_ids": ["SRC-FY"], "location": "Annual report revenue subtotal p. 59"},
+                "hedging_loss": {"node_id": "hedging_loss", "value": -5_000_000, "source_ids": ["SRC-FY"], "location": "Annual report revenue offset p. 59"},
+            }
+        )
+        ledger["disclosed_line_items"] = list(disclosed.values())
+        ledger["calculated_nodes"].append(
+            {"node_id": "gross_revenue", "calculation_id": "CALC-SIGNED-GROSS-REVENUE"}
+        )
+        ledger["calculated_links"][:0] = [
+            {"source": "services_revenue", "target": "gross_revenue", "calculation_id": "CALC-SIGNED-SERVICES-TO-GROSS"},
+            {"source": "gross_revenue", "target": "total_revenue", "calculation_id": "CALC-SIGNED-GROSS-TO-NET"},
+        ]
+        calculations["calculations"].extend(
+            [
+                {"id": "CALC-SIGNED-GROSS-REVENUE", "metric": "custom", "sankey_node_id": "gross_revenue", "period": "FY2025", "formula": "services_revenue + cloud_revenue", "inputs": {"services_revenue": 200_000_000, "cloud_revenue": 5_000_000}, "result": 205_000_000, "review_method": "将全部正收入分项汇总为抵减前收入并与披露收入桥交叉复核。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SIGNED-SERVICES-TO-GROSS", "metric": "custom", "sankey_source": "services_revenue", "sankey_target": "gross_revenue", "period": "FY2025", "formula": "product_revenue + interest_income", "inputs": {"product_revenue": 190_000_000, "interest_income": 10_000_000}, "result": 200_000_000, "review_method": "复算收入层级中服务收入进入抵减前收入的续接金额。", "source_ids": ["SRC-FY"]},
+                {"id": "CALC-SIGNED-GROSS-TO-NET", "metric": "custom", "sankey_source": "gross_revenue", "sankey_target": "total_revenue", "period": "FY2025", "formula": "gross_revenue + hedging_loss", "inputs": {"gross_revenue": 205_000_000, "hedging_loss": -5_000_000}, "result": 200_000_000, "review_method": "用抵减前收入加带原始负号的套保损失，复算披露净收入。", "source_ids": ["SRC-FY"]},
+            ]
+        )
+        return company, calculations, known
+
     def test_schema_version_extraction_supports_compatibility_enum(self) -> None:
         const_schema = {
             "$defs": {
@@ -197,13 +259,13 @@ class SemanticGateTests(unittest.TestCase):
             "$defs": {
                 "meta": {
                     "properties": {
-                        "schema_version": {"enum": ["2.0.0", "2.1.0", "2.2.0"], "default": "2.2.0"}
+                        "schema_version": {"enum": ["2.0.0", "2.1.0", "2.2.0", "2.3.0"], "default": "2.3.0"}
                     }
                 }
             }
         }
         self.assertEqual(extract_schema_version(const_schema), "2.0.0")
-        self.assertEqual(extract_schema_version(enum_schema), "2.2.0")
+        self.assertEqual(extract_schema_version(enum_schema), "2.3.0")
         invalid_definitions = (
             {"const": "2.0.0", "default": "2.1.0"},
             {"const": "2.0.0", "enum": ["2.0.0"]},
@@ -667,6 +729,358 @@ class SemanticGateTests(unittest.TestCase):
         findings: list[Finding] = []
         validate_sankey(company, findings, calculations, known)
         self.assertFalse(findings)
+
+    def test_sankey_accepts_nested_revenue_subtotals_and_terminal_offset(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertFalse(findings)
+
+    def test_schema_23_nested_revenue_offset_passes_calculation_and_sankey_gates(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+        findings: list[Finding] = []
+        validate_calculations(calculations, company, known, "audit", findings)
+        validate_sankey(company, findings, calculations, known)
+        self.assertFalse(findings)
+
+    def test_sankey_accepts_profit_continuation_with_only_a_positive_addition(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+        sankey = company["income_statement_sankey"]
+        sankey["nodes"] = [
+            node for node in sankey["nodes"] if node["id"] != "nonoperating_expense"
+        ]
+        sankey["links"] = [
+            link
+            for link in sankey["links"]
+            if link["target"] != "nonoperating_expense"
+        ]
+        next(
+            link
+            for link in sankey["links"]
+            if link["source"] == "operating_profit" and link["target"] == "pretax_profit"
+        )["value"] = 125_000_000
+        next(
+            link
+            for link in sankey["links"]
+            if link["source"] == "pretax_profit" and link["target"] == "income_tax"
+        )["value"] = 29_000_000
+        for node_id, value in (("pretax_profit", 129_000_000), ("income_tax", 29_000_000)):
+            node = next(node for node in sankey["nodes"] if node["id"] == node_id)
+            node["value"] = node["statement_value"] = value
+
+        ledger = calculations["income_statement_sankey"]
+        ledger["disclosed_line_items"] = [
+            item
+            for item in ledger["disclosed_line_items"]
+            if item["node_id"] != "nonoperating_expense"
+        ]
+        for node_id, value in (("pretax_profit", 129_000_000), ("income_tax", 29_000_000)):
+            next(
+                item for item in ledger["disclosed_line_items"] if item["node_id"] == node_id
+            )["value"] = value
+        bridge = next(
+            item for item in calculations["calculations"] if item["id"] == "CALC-SIGNED-TO-PRETAX"
+        )
+        bridge.update(
+            {
+                "formula": "pretax_profit - nonoperating_income",
+                "inputs": {
+                    "pretax_profit": 129_000_000,
+                    "nonoperating_income": 4_000_000,
+                },
+                "result": 125_000_000,
+                "review_method": "从税前利润扣除单列的正收益加项，反向复算营业利润主链原额续接金额。",
+            }
+        )
+
+        findings: list[Finding] = []
+        validate_calculations(calculations, company, known, "audit", findings)
+        validate_sankey(company, findings, calculations, known)
+        self.assertFalse(findings)
+
+    def test_sankey_revenue_total_cannot_skip_first_cost_branch(self) -> None:
+        company, calculations, known = self.make_signed_sankey_case()
+        sankey = company["income_statement_sankey"]
+
+        next(
+            link
+            for link in sankey["links"]
+            if link["source"] == "total_revenue" and link["target"] == "reported_costs"
+        )["source"] = "operating_profit"
+        next(
+            link
+            for link in sankey["links"]
+            if link["source"] == "total_revenue" and link["target"] == "operating_profit"
+        )["value"] = 200_000_000
+        operating_profit = next(
+            node for node in sankey["nodes"] if node["id"] == "operating_profit"
+        )
+        operating_profit["value"] = operating_profit["statement_value"] = 205_000_000
+        next(
+            item
+            for item in calculations["income_statement_sankey"]["disclosed_line_items"]
+            if item["node_id"] == "operating_profit"
+        )["value"] = 205_000_000
+        bridge = next(
+            item
+            for item in calculations["calculations"]
+            if item["id"] == "CALC-SIGNED-TO-OPERATING"
+        )
+        bridge.update(
+            {
+                "formula": "total_revenue",
+                "inputs": {"total_revenue": 200_000_000},
+                "result": 200_000_000,
+            }
+        )
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertIn("sankey-profit-chain", {item.code for item in findings}, findings)
+
+    def test_sankey_profit_subtotal_cannot_skip_cost_without_positive_addition(self) -> None:
+        company, calculations, known = self.make_signed_sankey_case()
+        sankey = company["income_statement_sankey"]
+        removed = {"nonoperating_expense", "nonoperating_income"}
+        sankey["nodes"] = [node for node in sankey["nodes"] if node["id"] not in removed]
+        sankey["links"] = [
+            link
+            for link in sankey["links"]
+            if link["source"] not in removed and link["target"] not in removed
+        ]
+        next(
+            link
+            for link in sankey["links"]
+            if link["source"] == "operating_profit" and link["target"] == "pretax_profit"
+        )["value"] = 125_000_000
+        next(
+            link
+            for link in sankey["links"]
+            if link["source"] == "pretax_profit" and link["target"] == "income_tax"
+        )["value"] = 25_000_000
+        for node_id, value in (("pretax_profit", 125_000_000), ("income_tax", 25_000_000)):
+            node = next(node for node in sankey["nodes"] if node["id"] == node_id)
+            node["value"] = node["statement_value"] = value
+
+        ledger = calculations["income_statement_sankey"]
+        ledger["disclosed_line_items"] = [
+            item for item in ledger["disclosed_line_items"] if item["node_id"] not in removed
+        ]
+        for node_id, value in (("pretax_profit", 125_000_000), ("income_tax", 25_000_000)):
+            next(
+                item for item in ledger["disclosed_line_items"] if item["node_id"] == node_id
+            )["value"] = value
+        bridge = next(
+            item
+            for item in calculations["calculations"]
+            if item["id"] == "CALC-SIGNED-TO-PRETAX"
+        )
+        bridge.update(
+            {
+                "formula": "operating_profit",
+                "inputs": {"operating_profit": 125_000_000},
+                "result": 125_000_000,
+            }
+        )
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertIn("sankey-profit-chain", {item.code for item in findings}, findings)
+
+    def test_sankey_revenue_offset_topology_and_sign_fail_closed(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+
+        positive_offset = copy.deepcopy(company)
+        next(node for node in positive_offset["income_statement_sankey"]["nodes"] if node["id"] == "hedging_loss")["statement_value"] = 5_000_000
+
+        nonterminal_offset = copy.deepcopy(company)
+        nonterminal_offset["income_statement_sankey"]["links"].append(
+            {"source": "hedging_loss", "target": "income_tax", "value": 5_000_000}
+        )
+
+        missing_bridge_binding = copy.deepcopy(calculations)
+        missing_bridge_binding["income_statement_sankey"]["calculated_links"] = [
+            item
+            for item in missing_bridge_binding["income_statement_sankey"]["calculated_links"]
+            if item["source"] != "gross_revenue"
+        ]
+
+        missing_nested_bridge_binding = copy.deepcopy(calculations)
+        missing_nested_bridge_binding["income_statement_sankey"]["calculated_links"] = [
+            item
+            for item in missing_nested_bridge_binding["income_statement_sankey"]["calculated_links"]
+            if item["source"] != "services_revenue"
+        ]
+
+        legacy_version = copy.deepcopy(company)
+        legacy_version["meta"]["schema_version"] = "2.2.0"
+
+        mixed_root_parents = copy.deepcopy(company)
+        next(
+            link
+            for link in mixed_root_parents["income_statement_sankey"]["links"]
+            if link["source"] == "interest_income" and link["target"] == "services_revenue"
+        )["target"] = "total_revenue"
+
+        offset_with_wrong_parent = copy.deepcopy(company)
+        next(
+            link
+            for link in offset_with_wrong_parent["income_statement_sankey"]["links"]
+            if link["target"] == "hedging_loss"
+        )["source"] = "cloud_revenue"
+
+        two_subtotal_continuations = copy.deepcopy(company)
+        two_subtotal_continuations["income_statement_sankey"]["links"].append(
+            {"source": "services_revenue", "target": "total_revenue", "value": 1}
+        )
+
+        cases = [
+            (positive_offset, calculations, "sankey-signed-role"),
+            (nonterminal_offset, calculations, "sankey-revenue-offset"),
+            (company, missing_bridge_binding, "sankey-calculated-link-coverage"),
+            (company, missing_nested_bridge_binding, "sankey-calculated-link-coverage"),
+            (legacy_version, calculations, "sankey-role-version"),
+            (mixed_root_parents, calculations, "sankey-revenue-chain"),
+            (offset_with_wrong_parent, calculations, "sankey-revenue-offset"),
+            (two_subtotal_continuations, calculations, "sankey-revenue-subtotal"),
+        ]
+        for candidate_company, candidate_calculations, expected_code in cases:
+            with self.subTest(expected_code=expected_code):
+                findings: list[Finding] = []
+                validate_sankey(candidate_company, findings, candidate_calculations, known)
+                self.assertIn(expected_code, {item.code for item in findings}, findings)
+
+    def test_sankey_revenue_offset_must_be_disclosed_not_a_calculated_plug(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+        offset = next(
+            node
+            for node in company["income_statement_sankey"]["nodes"]
+            if node["id"] == "hedging_loss"
+        )
+        offset["label"] = "hedging_loss（计算值）"
+        ledger = calculations["income_statement_sankey"]
+        ledger["disclosed_line_items"] = [
+            item for item in ledger["disclosed_line_items"] if item["node_id"] != "hedging_loss"
+        ]
+        ledger["calculated_nodes"].append(
+            {"node_id": "hedging_loss", "calculation_id": "CALC-PLUG-HEDGING-LOSS"}
+        )
+        calculations["calculations"].append(
+            {
+                "id": "CALC-PLUG-HEDGING-LOSS",
+                "metric": "custom",
+                "sankey_node_id": "hedging_loss",
+                "period": "FY2025",
+                "formula": "net_revenue - gross_revenue",
+                "inputs": {"net_revenue": 200_000_000, "gross_revenue": 205_000_000},
+                "result": -5_000_000,
+                "review_method": "用净收入与抵减前收入之差生成未披露平衡项。",
+                "source_ids": ["SRC-FY"],
+            }
+        )
+
+        findings: list[Finding] = []
+        validate_sankey(company, findings, calculations, known)
+        self.assertIn(
+            "sankey-revenue-offset-provenance",
+            {item.code for item in findings},
+            findings,
+        )
+
+    def test_sankey_revenue_offset_requires_an_annual_report_source(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+
+        for source_type in ("research", "regulatory_filing"):
+            with self.subTest(source_type=source_type):
+                candidate_company = copy.deepcopy(company)
+                candidate_calculations = copy.deepcopy(calculations)
+                source_id = f"SRC-NON-ANNUAL-{source_type.upper()}"
+                candidate_company["sources"].append(
+                    {
+                        "id": source_id,
+                        "title": "Non-annual source",
+                        "source_type": source_type,
+                    }
+                )
+                candidate_company["income_statement_sankey"]["source_ids"].append(source_id)
+                candidate_calculations["income_statement_sankey"]["source_ids"].append(source_id)
+                next(
+                    item
+                    for item in candidate_calculations["income_statement_sankey"]["disclosed_line_items"]
+                    if item["node_id"] == "hedging_loss"
+                )["source_ids"] = [source_id]
+
+                findings: list[Finding] = []
+                validate_sankey(
+                    candidate_company,
+                    findings,
+                    candidate_calculations,
+                    known | {source_id},
+                )
+                self.assertIn(
+                    "sankey-revenue-offset-annual-report-source",
+                    {item.code for item in findings},
+                    findings,
+                )
+
+    def test_sankey_revenue_offset_bridge_inputs_preserve_node_ids_and_signs(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+        positive_offset_input = copy.deepcopy(calculations)
+        bridge = next(
+            item
+            for item in positive_offset_input["calculations"]
+            if item["id"] == "CALC-SIGNED-GROSS-TO-NET"
+        )
+        bridge["formula"] = "gross_revenue - hedging_loss_abs"
+        bridge["inputs"] = {
+            "gross_revenue": 205_000_000,
+            "hedging_loss_abs": 5_000_000,
+        }
+
+        findings: list[Finding] = []
+        validate_calculations(positive_offset_input, company, known, "audit", findings)
+        validate_sankey(company, findings, positive_offset_input, known)
+        self.assertNotIn("custom-calculation-mismatch", {item.code for item in findings})
+        self.assertIn(
+            "sankey-revenue-offset-calculation-inputs",
+            {item.code for item in findings},
+            findings,
+        )
+
+    def test_sankey_revenue_offset_and_ledger_use_exact_cent_reconciliation(self) -> None:
+        company, calculations, known = self.make_revenue_offset_sankey_case()
+
+        offset_drift = copy.deepcopy(company)
+        next(
+            node
+            for node in offset_drift["income_statement_sankey"]["nodes"]
+            if node["id"] == "hedging_loss"
+        )["statement_value"] += 0.02
+
+        disclosed_drift = copy.deepcopy(calculations)
+        next(
+            item
+            for item in disclosed_drift["income_statement_sankey"]["disclosed_line_items"]
+            if item["node_id"] == "hedging_loss"
+        )["value"] += 0.02
+
+        continuation_drift = copy.deepcopy(company)
+        next(
+            link
+            for link in continuation_drift["income_statement_sankey"]["links"]
+            if link["source"] == "gross_revenue" and link["target"] == "total_revenue"
+        )["value"] += 0.02
+
+        cases = [
+            (offset_drift, calculations, "sankey-statement-value"),
+            (company, disclosed_drift, "sankey-disclosed-item"),
+            (continuation_drift, calculations, "sankey-node-value-mismatch"),
+        ]
+        for candidate_company, candidate_calculations, expected_code in cases:
+            with self.subTest(expected_code=expected_code):
+                findings: list[Finding] = []
+                validate_sankey(candidate_company, findings, candidate_calculations, known)
+                self.assertIn(expected_code, {item.code for item in findings}, findings)
 
     def test_sankey_signed_roles_and_exact_cent_reconciliation_fail_closed(self) -> None:
         company, calculations, known = self.make_signed_sankey_case()
@@ -1304,6 +1718,67 @@ class SemanticGateTests(unittest.TestCase):
         validate_calculations(ledger, {"meta": {"financial_unit": "unit", "share_unit": "share"}, "financials": [], "valuation": {}}, {"SRC-001"}, "audit", findings)
         codes = {item.code for item in findings}
         self.assertTrue({"calculation-tolerance", "custom-calculation-mismatch"}.issubset(codes))
+
+    def test_sankey_custom_calculations_use_decimal_exact_cent_tolerance(self) -> None:
+        company = {
+            "meta": {"financial_unit": "unit", "share_unit": "share"},
+            "financials": [],
+            "valuation": {},
+        }
+
+        def codes_for(record: dict) -> set[str]:
+            ledger = {"numeric_convention": "base_units", "calculations": [record]}
+            findings: list[Finding] = []
+            validate_calculations(ledger, company, {"SRC-001"}, "audit", findings)
+            return {item.code for item in findings}
+
+        positive = {
+            "id": "CALC-SANKEY-POSITIVE",
+            "metric": "custom",
+            "period": "FY2025",
+            "formula": "base_amount + adjustment",
+            "inputs": {"base_amount": 900, "adjustment": 100},
+            "result": 1000.02,
+            "review_method": "逐项核对输入并独立复算桑基节点金额到分。",
+            "source_ids": ["SRC-001"],
+        }
+        self.assertNotIn("custom-calculation-mismatch", codes_for(positive))
+
+        positive_node = copy.deepcopy(positive)
+        positive_node["sankey_node_id"] = "positive_node"
+        self.assertIn("custom-calculation-mismatch", codes_for(positive_node))
+
+        positive_boundary = copy.deepcopy(positive_node)
+        positive_boundary["result"] = 1000.01
+        self.assertNotIn("custom-calculation-mismatch", codes_for(positive_boundary))
+
+        decimal_boundary = copy.deepcopy(positive_node)
+        decimal_boundary["formula"] = "fraction_a + fraction_b"
+        decimal_boundary["inputs"] = {"fraction_a": 0.1, "fraction_b": 0.2}
+        decimal_boundary["result"] = 0.29
+        self.assertNotIn("custom-calculation-mismatch", codes_for(decimal_boundary))
+
+        negative_continuation = {
+            "id": "CALC-SANKEY-NEGATIVE",
+            "metric": "custom",
+            "sankey_source": "source_node",
+            "sankey_target": "target_node",
+            "period": "FY2025",
+            "formula": "zero_balance - gross_amount",
+            "inputs": {"zero_balance": 0, "gross_amount": 1000},
+            "result": -999.98,
+            "review_method": "逐项核对输入并独立复算桑基续接金额到分。",
+            "source_ids": ["SRC-001"],
+        }
+        self.assertIn("custom-calculation-mismatch", codes_for(negative_continuation))
+
+        negative_boundary = copy.deepcopy(negative_continuation)
+        negative_boundary["result"] = -999.99
+        self.assertNotIn("custom-calculation-mismatch", codes_for(negative_boundary))
+
+        excessive_tolerance = copy.deepcopy(positive_boundary)
+        excessive_tolerance["tolerance"] = 0.02
+        self.assertIn("calculation-tolerance", codes_for(excessive_tolerance))
 
     def test_calculation_ledger_requires_unscaled_base_values_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

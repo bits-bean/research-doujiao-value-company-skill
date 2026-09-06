@@ -35,9 +35,9 @@
 - 财务行不能只是期间齐全而数值全空；核心收入、净利润、股数及行业关键指标必须具有实质覆盖。
 - 财年变更、拆股、并购、重述、币种、正负号已统一；金额为报告币种实际数值、股数为实际股数，未使用千、百万或十亿缩放值。
 - FCF、Owner Earnings、ROIC、股份、回购、净债务、市值和 EV 已复核。
-- Schema 2.2.0 下已区分总净利润、归属于普通股股东的利润与公司报告的稀释 EPS；官方未披露时使用 `null` 并说明缺口，没有用总净利润除以股数伪造稀释 EPS。
+- Schema 2.3.0 下已区分总净利润、归属于普通股股东的利润与公司报告的稀释 EPS；官方未披露时使用 `null` 并说明缺口，没有用总净利润除以股数伪造稀释 EPS。
 - `null`、`[]` 和真实 0 没有混用。
-- 桑基完整通过 `income-statement-sankey.md` 的披露清单、动态利润层级、计算值来源、逐层勾稽与公司级配色三态门禁；Schema 2.2.0 每个节点均有带原始符号的 `statement_value`，正值流量 `value = abs(statement_value)`，所有节点和连线严格为正、全图弱连通且逐节点守恒，所有金额勾稽使用精确到分的绝对容差。`profit_addition` 只能以严格为正的报表值作为无流入的受控利润加项，`cost_offset` 只能用负 `statement_value` 展开净成本 subtotal；`calculated_links` 必须恰好覆盖每条利润主链 continuation 边并绑定精确匹配的计算记录。不得遗漏或合并年报单列项目，不能用扁平节点、负连线或静默净额通过总额对账。配色至少完成英文全名、中文名、ticker 与全部官方可验证简称 / 品牌名的两种查询；`matched` 逐节点样本与 `company.json` 色值相等，`not_found` 节点色全空且绑定 `semantic-default-v1`，`blocked` 失败关闭。披露不足时不编造，明确降级并记录缺口。
+- 桑基完整通过 `income-statement-sankey.md` 的披露清单、动态收入与利润层级、计算值来源、逐层勾稽与公司级配色三态门禁；Schema 2.3.0 每个节点均有带原始符号的 `statement_value`，正值流量 `value = abs(statement_value)`，所有节点和连线严格为正、全图弱连通且逐节点守恒，所有金额勾稽使用精确到分的绝对容差。`profit_addition` 只能以严格为正的报表值作为无流入的受控利润加项，`cost_offset` 只能用负 `statement_value` 展开净成本 subtotal，`revenue_offset` 必须来自年报单列披露，只能用负 `statement_value` 作为 `revenue_subtotal` 的终端抵减；披露净 `revenue_total` 仍与 `financials[].revenue` 勾稽。只有 `profit_subtotal` 可在后续利润节点另有受控正收益加项时无成本分支续接，`revenue_total` 首层仍必须分出成本。`calculated_links` 必须恰好覆盖收入小计与利润主链的每条 continuation 边并绑定精确匹配的计算记录。不得遗漏或合并年报单列项目，不能用扁平节点、负连线或静默净额通过总额对账。配色至少完成英文全名、中文名、ticker 与全部官方可验证简称 / 品牌名的两种查询；`matched` 逐节点样本与 `company.json` 色值相等，`not_found` 节点色全空且绑定 `semantic-default-v1`，`blocked` 失败关闭。披露不足时不编造，明确降级并记录缺口。
 - 银行、保险、REIT、周期和软件等行业没有被错误套用普通模板。
 - `industry_metrics` 的 `period + code` 唯一，value_type 与数值口径一致；路由要求的主指标、资本约束指标和每股 / 增量结果有实质覆盖，缺失没有被插值或换模板掩盖。银行与支付信贷须有长期 ROE / ROTCE；资本板块可用最新 CET1 / 资本充足率加同期目标区间或监管最低要求的当前仪表；第三板块可用每股权益长期序列或至少三个完整财年的回购对股数影响。当前仪表必须披露它不是长期资本趋势。
 
@@ -122,7 +122,7 @@
 - `company_logo` 四元组自洽：非空时路径、公开来源 URL、准确 alt、`is_official:true` 成套存在；空缺时四项为 `null/null/null/false`。Logo 文件留在 manifest 外，冻结目录中没有任何素材文件。
 - `validation-report.json` 与 manifest 锁定同一精确 `company_slug`；研究包 Markdown / JSON 不包含 Markdown 图片、除无属性 `<br>` 外的原始 HTML 或 `data:` 图片 / 音视频媒体。
 - 本 Skill 未调用图表渲染器、网站 API 或内容 Skill，未选择渠道比例、背景和布局，也未生成网站 / 社媒图片或发布内容。
-- 旧 Schema → 当前锁定 Schema 2.2.0 的迁移在新目录从原始证据重建并以 `full` 冻结；Schema 1.x、2.0.0 与 2.1.0 包只按各自旧锁审计，不能成为 2.2.0 incremental 前序。同日远端替换同时需要 Schema 迁移与同日修订确认。缺少 `execution_integrity` 的历史 v2 同样只审计，不得原地补锁或作为当前 incremental 前序。
+- 旧 Schema → 当前锁定 Schema 2.3.0 的迁移在新目录从原始证据重建并以 `full` 冻结；Schema 1.x、2.0.0、2.1.0 与 2.2.0 包只按各自旧锁审计，不能成为 2.3.0 incremental 前序。同日远端替换同时需要 Schema 迁移与同日修订确认。缺少 `execution_integrity` 的历史 v2 同样只审计，不得原地补锁或作为当前 incremental 前序。
 
 ## 阻断项
 

@@ -70,7 +70,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 按 [research-contract.md](references/research-contract.md) 建立新版本目录；生成 `income_statement_sankey` 时完整执行 [income-statement-sankey.md](references/income-statement-sankey.md)，并在计算台账完成 App Economy Insights 规范身份与官方可验证别名检索、`matched / not_found / blocked` 三态裁决和逐节点取样审计。`company.json.income_statement_sankey.nodes[].color` 是网站与导出器唯一渲染真相；不得建立任务级 palette sidecar。`classification`、`financials`、`industry_metrics`、`income_statement_sankey`、`segments`、二十年以上的结构化 `durability` 判断、承诺的下次验证、资本配置结果、风险因果链、估值敏感性和长期跟踪方法必须是有来源的研究产出，不能留给网站或内容层猜测。证据台账还必须保存预检、独立 pass、研究可得性、驱动图、管理层决策、论点状态、估值审查与来源审计。每个结构化 `source_ids` 必须解析到同一 `company.json.sources`，关键计算另由计算台账提供公式、输入和来源，使 system 图表和下游内容无需重新研究即可追溯。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
 
-Schema 2.2.0 的每个桑基节点以 `statement_value` 保留报表原符号，以严格正值 `value = abs(statement_value)` 作为守恒流量；`profit_addition` 必须严格为正，`cost_offset` 必须严格为负，不得用负连线或静默净额化。金额勾稽只允许绝对差 `<= 0.01`；台账 `calculated_links` 必须恰好覆盖利润主链的每条 continuation 边并绑定可复算记录。
+Schema 2.3.0 的每个桑基节点以 `statement_value` 保留报表原符号，以严格正值 `value = abs(statement_value)` 作为守恒流量；`profit_addition` 必须严格为正，`cost_offset / revenue_offset` 必须严格为负。收入抵减只能由 `revenue_subtotal` 以终端分流表达，不能作为正流量源接入净收入；只有 `profit_subtotal` 可在后续利润节点另有受控正收益加项时无成本分支续接，`revenue_total` 首层仍必须分出成本。不得用负连线或静默净额化。金额勾稽只允许绝对差 `<= 0.01`；台账 `calculated_links` 必须恰好覆盖收入小计和利润主链的每条 continuation 边并绑定可复算记录。
 
 研究层不写死节点坐标，也不调用图表渲染器；但桑基交接必须携带 [income-statement-sankey.md](references/income-statement-sankey.md#下游-x-型布局与最少交叉) 的下游布局意图：入口侧最上 / 最下分支尽量落在左上角 / 左下角，出口侧最上 / 最下分支尽量落在右上角 / 右下角，中间主干居中，使整体尽量呈 X 型；下游必须通过节点顺序、端口顺序和局部路由走廊优先消除可避免的连线交叉。不得为造型改变会计拓扑、连接关系、金额、有符号语义、利润层级或节点配色。
 
@@ -99,7 +99,7 @@ python3 scripts/freeze_research.py <package> \
 
 新 manifest 固定为 v2，保留既有 `research_protocol` 兼容块，并新增 `integrity_profile: execution-bound-v1` 与当前 `execution_integrity`；验证报告与 manifest 同时锁定精确 `company_slug`，并记录验证器、工具链和协议指纹。Logo 元数据与桑基节点色随 `company.json` 被锁定，配色检索和取样摘要随 `calculation-ledger.json` 被锁定；私有 App Economy Insights PNG 永不进入冻结包。`blocked` 配色审计必须产生 error，不能用 `--allow-warnings` 绕过。包外 Logo 字节要到授权归档规划时才按 observation、hash、安全门和固定渲染运行时验证。风险加权来源审计必须重新打开公司身份、估值输入、起始现金流、DCF 假设、适用的监管资本及全部关键论断来源，并按确定性种子抽检普通主张。警告默认阻断；只有完整度说明逐项解释原因、影响和待补证据时才能 `--allow-warnings`。该通用 warning 确认只允许冻结研究，不构成新公司无 Logo 的 GitHub 交付授权。只有真实人工审核后才使用 `--human-reviewed`。冻结只表示不可变，不等于投资建议、网站已具备 Logo 或网站已更新。
 
-旧 Schema → 当前锁定 Schema 2.2.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建当前协议要求的结构字段，在新目录按 2.2.0 完整验证后以 `full` 模式冻结。Schema 1.x、2.0.0 与 2.1.0 包都不得直接作为当前 2.2.0 `incremental` 的前序包，也不得仅改 `schema_version`。
+旧 Schema → 当前锁定 Schema 2.3.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建当前协议要求的结构字段，在新目录按 2.3.0 完整验证后以 `full` 模式冻结。Schema 1.x、2.0.0、2.1.0 与 2.2.0 包都不得直接作为当前 2.3.0 `incremental` 的前序包，也不得仅改 `schema_version`。
 
 ## 8. 增量与下游
 

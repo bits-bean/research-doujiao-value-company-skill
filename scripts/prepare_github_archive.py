@@ -318,7 +318,7 @@ def canonical_action(
             existing_version is not None
             and (
                 existing_version[0] == 1
-                or existing_version in {(2, 0, 0), (2, 1, 0)}
+                or existing_version in {(2, 0, 0), (2, 1, 0), (2, 2, 0)}
             )
         )
         allowed = (
