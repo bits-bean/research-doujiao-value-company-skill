@@ -24,7 +24,9 @@ from prepare_github_archive import (  # noqa: E402
     TRUSTED_DESKTOP_RUNTIME_NODE,
     TRUSTED_DESKTOP_RUNTIME_NODE_MODULES,
     TRUSTED_DESKTOP_RUNTIME_ROOT,
+    TRUSTED_DESKTOP_RUNTIME_NODE_SHA256,
     TRUSTED_RUNTIME_BUNDLE_VERSION,
+    TRUSTED_RUNTIME_PROFILES,
     _decode_png,
     _public_http_url,
     _validate_observed_logo,
@@ -2225,6 +2227,8 @@ class GithubDeliveryTests(unittest.TestCase):
         )
         if not all(path.exists() for path in required):
             self.skipTest("locked desktop SVG runtime is unavailable")
+        if file_sha256(TRUSTED_DESKTOP_RUNTIME_NODE) != TRUSTED_DESKTOP_RUNTIME_NODE_SHA256:
+            self.skipTest("installed desktop runtime is a different release; old release is unavailable")
         with tempfile.TemporaryDirectory() as temp_dir:
             logo = Path(temp_dir) / "logo.svg"
             logo.write_text(
@@ -2242,10 +2246,30 @@ class GithubDeliveryTests(unittest.TestCase):
             with patch.dict(os.environ, runtime_env, clear=True):
                 _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
 
+    def test_svg_renderer_accepts_locked_cached_runtime(self) -> None:
+        profile = next(p for p in TRUSTED_RUNTIME_PROFILES if p["bundle_version"] == "26.904.11930")
+        if not profile["node"].is_file():
+            self.skipTest("locked cached runtime is unavailable")
+        if file_sha256(profile["node"]) != profile["node_sha256"]:
+            self.skipTest("installed cached runtime is a different release")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logo = Path(temp_dir) / "logo.svg"
+            logo.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#006fcf" d="M0 0h16v16H0z"/></svg>\n', encoding="utf-8")
+            runtime_env = {
+                "CODEX_PRIMARY_RUNTIME_ROOT": str(profile["runtime_root"]),
+                "CODEX_PRIMARY_RUNTIME_NODE": str(profile["node"]),
+                "CODEX_PRIMARY_RUNTIME_NODE_MODULES": str(profile["node_modules"]),
+                "CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION": profile["bundle_version"],
+            }
+            with patch.dict(os.environ, runtime_env, clear=True):
+                _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
+                with patch.dict(profile, {"node_sha256": "0" * 64}):
+                    with self.assertRaisesRegex(ArchivePlanError, "artifact digest"):
+                        _validate_observed_logo(logo, "companies/test-company/assets/logo.svg")
+
     def test_svg_renderer_does_not_inherit_node_preload_options(self) -> None:
         if os.environ.get("CODEX_PRIMARY_RUNTIME_BUNDLE_VERSION") not in {
-            TRUSTED_RUNTIME_BUNDLE_VERSION,
-            TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION,
+            profile["bundle_version"] for profile in TRUSTED_RUNTIME_PROFILES
         }:
             self.skipTest("locked SVG runtime is unavailable, so the NODE_OPTIONS path cannot be exercised")
         with tempfile.TemporaryDirectory() as temp_dir:

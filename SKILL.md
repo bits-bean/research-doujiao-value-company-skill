@@ -39,13 +39,14 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 
 正式研究使用 `standard` 档：主研究、隔离的对抗审查、隔离的来源审计和综合四个 pass 缺一不可；专项审计使用 `audit` 档并至少安排两个相互独立的对抗审查。各 pass 只提交主张、证据、反证和置信度，由综合 pass 裁决冲突，不让多个角色分别生成整份报告。
 
-研究开始时完整读取 [classification-and-chart-routing.md](references/classification-and-chart-routing.md)，先用官方证据确定 `classification`，再选择会计、回报和行业指标框架。`sector` 与行业标签只用于检索；只有 `accounting_profile` 和 `returns_profile` 可控制计算与下游图表路由。银行与支付信贷的回报图固定为长期 ROE / ROTCE 主序列、最新 CET1 / 资本充足率加目标或监管区间的当前仪表，以及“每股权益长期序列”或“至少三个完整财年的回购对股数影响”二选一；不得因缺少八年 CET1 或选择回购替代路径而改用普通企业模板。
+研究开始时完整读取 [classification-and-chart-routing.md](references/classification-and-chart-routing.md)，先用官方证据确定 `classification`，再选择会计、回报和行业指标框架。`sector` 与行业标签只用于检索；公司类型驱动的会计计算与资本回报图表路由只由 `accounting_profile` 和 `returns_profile` 控制。银行与支付信贷的回报图固定为长期 ROE / ROTCE 主序列、最新 CET1 / 资本充足率加目标或监管区间的当前仪表，以及“每股权益长期序列”或“至少三个完整财年的回购对股数影响”二选一；不得因缺少八年 CET1 或选择回购替代路径而改用普通企业模板。
 
 ## 3. 证据和十年财务
 
 完整读取 [evidence-and-calculation.md](references/evidence-and-calculation.md) 与 [research-execution-and-audit.md](references/research-execution-and-audit.md)，先做 `evidence-ledger.json` 和 `calculation-ledger.json`，再写结论。
 
 - 默认十个完整财年 + 最新季度 + TTM，统一财年变化、重述、拆股、并购、币种、单位和正负号。
+- 按 [revenue-mix-history.md](references/revenue-mix-history.md) 查齐十年官方收入构成、金额与占比，逐年勾稽总营收并核对官方重列范围；最新财年补齐每类收入的付款方、付费原因、增长驱动及口径说明。商业模式章节交接收入来源、价值交换、利润流向、收入结构演变四部分；最新环形图及说明卡、十年水平金额与占比堆积图消费同一冻结数据，结构演变须解释赚钱方式及战略重心的变化。网站默认折叠经营解读，不在十年财务重复放图；不能只交总营收趋势或最新一年构成。
 - 关键数字记录期间、口径、来源 ID 和页码 / 章节；推断和估算记录最强反证与推翻条件。
 - 资料可得性与商业论点确定性分开评级；资料多不自动等于论点可靠，资料少也不自动等于公司差。
 - 在证据台账中建立 2—5 项经营与价值驱动、管理层决策过程 / 结果台账、关键论断裁决、论点假设状态、被否决主张、未解冲突和版本修订记录。增量更新必须把假设及估值参数相对上一冻结版本的变化逐项归因，不能随现价无声漂移。

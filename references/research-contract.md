@@ -56,7 +56,7 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 当前 Schema 2.3.0 允许读取历史 2.0.0 / 2.1.0 / 2.2.0 包，但新研究固定写 `meta.schema_version: 2.3.0`。财务期在官方披露可得时分别保存总净利润、归属于普通股股东的利润和公司报告的稀释 EPS；缺失使用 `null`。不得用 `net_income ÷ diluted_shares` 生成 `diluted_eps`，也不得把归母口径与总净利润无声混用。
 
-Schema 2.x 的 `classification` 与 `industry_metrics` 必须完整执行 [classification-and-chart-routing.md](classification-and-chart-routing.md)。分类来自官方业务与监管证据；宽 sector 和行业 slug 仅用于标签与检索，只有 `accounting_profile` 和 `returns_profile` 控制会计、回报和下游图表路由。行业指标按 `period + code` 唯一，并保留 `value_type` 与来源。银行与支付信贷的主 ROE / ROTCE 必须是长期序列；资本约束可用最新 CET1 / 资本充足率配合同期管理层目标区间或监管最低要求作当前仪表；第三板块必须在每股权益长期序列和至少三个完整财年的回购对股数影响中二选一。当前资本截面不能冒充长期趋势，须在完整度说明中标明限制。
+Schema 2.x 的 `classification` 与 `industry_metrics` 必须完整执行 [classification-and-chart-routing.md](classification-and-chart-routing.md)。分类来自官方业务与监管证据；宽 sector 和行业 slug 仅用于标签与检索，公司类型驱动的会计计算与资本回报图表路由只由 `accounting_profile` 和 `returns_profile` 控制。行业指标按 `period + code` 唯一，并保留 `value_type` 与来源。银行与支付信贷的主 ROE / ROTCE 必须是长期序列；资本约束可用最新 CET1 / 资本充足率配合同期管理层目标区间或监管最低要求作当前仪表；第三板块必须在每股权益长期序列和至少三个完整财年的回购对股数影响中二选一。当前资本截面不能冒充长期趋势，须在完整度说明中标明限制。
 
 `durability` 必须以至少二十年为期限，分别记录需求持久性、适应能力和外部冲击的标准化状态、判断、证据、破坏条件及来源，并给出总体状态与结论。长期生存不能由护城河分数、估值终值或一句叙事反推。
 
@@ -70,6 +70,7 @@ system 图表与下游内容所需的数据、路由和来源必须在冻结前�
 |---|---|
 | 公司身份与路由 | `meta`、`classification`、`brand_identity` |
 | 商业模式与收支 | `segments`、`income_statement_sankey` |
+| 收入来源与收入结构演变 | `segments` 的年度主拆分金额与占比、最新类别的付款方 / 付费原因 / 增长驱动 / 口径说明、`financials.revenue`、计算台账及报告经营解读；按 [revenue-mix-history.md](revenue-mix-history.md) 在商业模式下交接最新环图与说明卡、十年水平金额与占比图及默认折叠解读 |
 | 十年财务与资本回报 | `financials`、`industry_metrics`、`buyback_ledger` |
 | 护城河与长期生存 | `moat`、`durability` |
 | 文化与资本配置 | `management`、`capital_allocation` |
