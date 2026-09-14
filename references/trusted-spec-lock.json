@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "7317214cc17805eec5c3b61a6ce9874ff441f368aca58afae833f026d59c6ff5",
-    "toolchain_digest_sha256": "4f366cd266c9bcd4f7e0e6d5823733454f607fd017aaa2f6eb9791d3d4841e9a",
-    "bundle_digest_sha256": "f11ed2d17949af74e28ab977fe0916b35be637adef79862fa77208cc46869531",
+    "normative_digest_sha256": "e7bfd8e38b43286867ddf43cf9b0fb5dfdcd98c4feba4d0a6fda39f89655fc9a",
+    "toolchain_digest_sha256": "e0c8bd3368d188bd4ae380e541e84eeaad58ccf3fed5a5f190315484723be74c",
+    "bundle_digest_sha256": "c711ed3b2bfc89ce84c60798a6fe8b1f40c848776254fcba361be5d5536f8a6d",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "cfbbcabd83ad2483b0798e4e8b2ab3aec6f8e9cccb883e80fb786c55a7d92208",
-        "size_bytes": 24962
+        "sha256": "adf6ae179bcdf842b8d88104a3a3b59a06b746695e2ff4f4aba74f077a426569",
+        "size_bytes": 25226
       },
       {
         "path": "agents/openai.yaml",
@@ -46,8 +46,8 @@
       {
         "path": "references/business-model-actors.md",
         "role": "normative",
-        "sha256": "f4925d1e6c2c1b9a37b696ee886e77f8f8510055fa76121a2f5a776337a8ca6b",
-        "size_bytes": 5408
+        "sha256": "07c5cc10e4162a8eabdd76a53f986abaf0f2e9f9303cb5685373c069043db58c",
+        "size_bytes": 8325
       },
       {
         "path": "references/classification-and-chart-routing.md",
@@ -160,8 +160,8 @@
       {
         "path": "scripts/validate_research_process.py",
         "role": "toolchain",
-        "sha256": "8688c95c17ea759da32dd393580e6aca4525da3f563eb78fb7dad78375347fa6",
-        "size_bytes": 82808
+        "sha256": "ba3a8b6bb727d5446d5f3a3b96f8bac211f0ee2d9ffa2370987f16341935f389",
+        "size_bytes": 84420
       },
       {
         "path": "scripts/validate_skill.py",

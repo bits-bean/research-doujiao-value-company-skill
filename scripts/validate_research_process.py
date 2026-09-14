@@ -1351,6 +1351,29 @@ def validate_business_model(
         elif illustration == "company":
             fail("company-illustration", path, "only the company actor may use the company identity asset")
         sources(actor.get("source_ids"), path + ".source_ids")
+        if "official_logos" in actor:
+            logos = actor["official_logos"]
+            logo_path = path + ".official_logos"
+            if not isinstance(logos, list):
+                fail("official-logos", logo_path, "must be an array of sourced brand references")
+                continue
+            if actor_id == "company" and logos:
+                fail("company-official-logos", logo_path, "the company actor must keep its canonical company identity asset")
+            asset_ids: set[str] = set()
+            for logo_index, logo in enumerate(logos):
+                item_path = f"{logo_path}[{logo_index}]"
+                if not isinstance(logo, dict) or set(logo) != {"asset_id", "brand_name", "brand_name_en", "source_ids"}:
+                    fail("official-logo", item_path, "must contain only asset_id, brand_name, brand_name_en and source_ids; asset bytes and provenance belong downstream")
+                    continue
+                asset_id = logo.get("asset_id")
+                if not identifier(asset_id) or asset_id in asset_ids:
+                    fail("official-logo-id", item_path + ".asset_id", "must be a unique opaque lowercase asset key, not a URL or path")
+                else:
+                    asset_ids.add(asset_id)
+                for key in ("brand_name", "brand_name_en"):
+                    if not _nonblank(logo.get(key)):
+                        fail("official-logo-brand", item_path + "." + key, "must name the actual official brand or product without replacing the role caption")
+                sources(logo.get("source_ids"), item_path + ".source_ids")
     if company_count != 1:
         fail("company-count", ".actors", "must have exactly one actor with id company")
     flows = graph.get("flows")

@@ -53,7 +53,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 - 普通企业复算 FCF、Owner Earnings、ROIC、净债务、市值和 EV；金融、保险、REIT、资源等使用分类契约指定的行业适配口径，并把通用财务字段无法表达的序列写入 `industry_metrics`。
 - 护城河同时读取竞争对手和替代品；长期生存把需求持久性、适应能力和外部冲击拆开验证；文化和管理层比较承诺与实际行动。
 
-研究价值交换时同时读取 [business-model-actors.md](references/business-model-actors.md)：按当前公司的实际使用者、付款方、产品与交付渠道、供给与合作对象生成具体名称和关系，不套“客户 / 产品与渠道 / 生态伙伴”四角色模板。把有来源的对象、连线及插图语义写入证据台账 `business_model`，由下游按真实对象数量和身份渲染。
+研究价值交换时同时读取 [business-model-actors.md](references/business-model-actors.md)：按当前公司的实际使用者、付款方、产品与交付渠道、供给与合作对象生成具体名称和关系，不套“客户 / 产品与渠道 / 生态伙伴”四角色模板。把有来源的对象、连线及插图语义写入证据台账 `business_model`；实际角色涉及已确认品牌或产品时，以可选 `official_logos` 交接品牌身份，优先使用下游已验证的官方标识，缺少时沿用对应角色插图。品牌引用是研究元数据，实际素材和官方出处核验仍由网站或内容层管理，不扩大研究素材交付范围。
 
 ## 4. 长期价值判断
 
