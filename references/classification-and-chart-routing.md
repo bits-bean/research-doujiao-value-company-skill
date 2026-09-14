@@ -4,7 +4,7 @@
 
 在研究开始时先形成有来源的 `classification`，再决定会计口径、资本回报研究框架和下游图表。不得根据某个财务字段是否存在、估值倍数、公司名称或模型猜测来反推公司类型。
 
-`sector`、`primary_industry` 和 `secondary_industries` 用于标签、检索和同业选择；只有 `accounting_profile` 与 `returns_profile` 可以控制计算或图表路由。行业标签与路由字段冲突时阻断冻结，不能让网站或内容层自行猜测。
+`sector`、`primary_industry` 和 `secondary_industries` 用于标签、检索和同业选择；公司类型驱动的会计计算与资本回报图表路由只由 `accounting_profile` 与 `returns_profile` 控制。行业标签与路由字段冲突时阻断冻结，不能让网站或内容层自行猜测。
 
 ## classification
 
@@ -45,6 +45,10 @@
 - `payments_network` 和 `software_platform` 使用 `standard_corporate`。
 - `payments_credit` 可使用 `regulated_bank`；只有能够证明不受银行监管资本约束时才可使用 `standard_corporate`，并在完整度说明中解释。
 - `standard_roic` 默认使用 `standard_corporate`。
+
+## 十年营收结构图
+
+所有会计框架均须执行 [revenue-mix-history.md](revenue-mix-history.md)，以官方披露决定一个互斥的主拆分维度，再按完整性、符号和可比性选择图形。商业模式下的最新收入来源采用环形图与动态数量的说明卡；十年收入结构默认只用一张水平金额堆积图，柱长体现年度总额差异，并直接显示各项金额与占比、年度总额及明细表。读图、口径和经营解读默认折叠；负调整、缺失和分类断点按该契约处理。这不改变上述会计与资本回报路由，也不在十年财务重复展示同图。
 
 ## industry_metrics
 

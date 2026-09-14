@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "95837245a72dd6bcf887f1cdfc437aac9b2c010c26a38935f386c219ba03d1bb",
-    "toolchain_digest_sha256": "6a88ef585f14f2f8f2b099a42e9df6cbe63c41adbc7862a9278658930e48fa79",
-    "bundle_digest_sha256": "10b1ff7ee56775b61f698fb4bb349df09a09e9031ca81dc9e54a9cd04dede42a",
+    "normative_digest_sha256": "7317214cc17805eec5c3b61a6ce9874ff441f368aca58afae833f026d59c6ff5",
+    "toolchain_digest_sha256": "4f366cd266c9bcd4f7e0e6d5823733454f607fd017aaa2f6eb9791d3d4841e9a",
+    "bundle_digest_sha256": "f11ed2d17949af74e28ab977fe0916b35be637adef79862fa77208cc46869531",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "88b475c4dd51a006758ac6025915956d113e1f11faccc5b6dc303436bd3ea6ac",
-        "size_bytes": 23879
+        "sha256": "cfbbcabd83ad2483b0798e4e8b2ab3aec6f8e9cccb883e80fb786c55a7d92208",
+        "size_bytes": 24962
       },
       {
         "path": "agents/openai.yaml",
@@ -44,16 +44,22 @@
         "size_bytes": 878
       },
       {
+        "path": "references/business-model-actors.md",
+        "role": "normative",
+        "sha256": "f4925d1e6c2c1b9a37b696ee886e77f8f8510055fa76121a2f5a776337a8ca6b",
+        "size_bytes": 5408
+      },
+      {
         "path": "references/classification-and-chart-routing.md",
         "role": "normative",
-        "sha256": "1fb53c787a938e6a14992e3d819ecc84a3cbd0bf08f743d6469f1ef3a310b600",
-        "size_bytes": 7487
+        "sha256": "7435443cf515ed8564f9e35ceda794bfc0b73295c3f4ef10a833b3b23c9faa12",
+        "size_bytes": 8164
       },
       {
         "path": "references/evidence-and-calculation.md",
         "role": "normative",
-        "sha256": "25d1dc5e81f0b76bcdb085867568b41ccd1fbd49bfc83aec83532b1544a47f91",
-        "size_bytes": 12646
+        "sha256": "b0ea04b1ff432169bf3d12f89f00d4297b95d3132dbd0ffb2831e84fa7607a58",
+        "size_bytes": 13138
       },
       {
         "path": "references/github-archive.md",
@@ -64,8 +70,8 @@
       {
         "path": "references/identity-assets.md",
         "role": "normative",
-        "sha256": "6b1bdd2c6a6c4f5ab6d2b156991cb7b3ab759d556b519afd6c2bd21b4d69b081",
-        "size_bytes": 19038
+        "sha256": "3995975f067d82eb73ffa237d01db4258f8c94030b4c40e5e68c172a09014004",
+        "size_bytes": 19366
       },
       {
         "path": "references/income-statement-sankey.md",
@@ -76,20 +82,26 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "f5171f50390e330d88a657dd3589d95dcf4fcf387f84120b49d7eabbe52a6886",
-        "size_bytes": 24954
+        "sha256": "3b9642db50e5e382a47bbe4cdfc563c96dd9ae82aa38a0b31bd4495730c86421",
+        "size_bytes": 25717
       },
       {
         "path": "references/research-contract.md",
         "role": "normative",
-        "sha256": "048afd60e57e0e472cd5aeee40aecfd6f20768c9c151cdf8513ab8a644c67ee6",
-        "size_bytes": 31158
+        "sha256": "00b81614f7f1e37e90ae54921f9e8f4287e9cd658b1581cdebf4b6e3f6dd033d",
+        "size_bytes": 31556
       },
       {
         "path": "references/research-execution-and-audit.md",
         "role": "normative",
-        "sha256": "f3c29a642c3e0f45ef97a18d4727af9edfbf864866ad1263ffb1ad0f249d1bf8",
-        "size_bytes": 13358
+        "sha256": "37ef3bf5df9095f2e0d7dda27c0addd367e7d13247e4979458af99f44266af8e",
+        "size_bytes": 13530
+      },
+      {
+        "path": "references/revenue-mix-history.md",
+        "role": "normative",
+        "sha256": "7e6c02f8dcf23e8e73e50fd58a8bb918bfe0df86ea3b347deba1a407a65322fc",
+        "size_bytes": 12029
       },
       {
         "path": "references/source-routing.md",
@@ -130,8 +142,8 @@
       {
         "path": "scripts/prepare_github_archive.py",
         "role": "toolchain",
-        "sha256": "1ca9da072a3fb173eb52ea88fae93f77c5551d5f9f71b4c80eb0c40fbfc6b8df",
-        "size_bytes": 133071
+        "sha256": "829e3e1daca0b627314ba0db53921749c97b85c91a049743c3ca5865cab7eaa5",
+        "size_bytes": 134038
       },
       {
         "path": "scripts/prepare_sankey_color_audit.py",
@@ -148,8 +160,8 @@
       {
         "path": "scripts/validate_research_process.py",
         "role": "toolchain",
-        "sha256": "1cbb5cd239021f87da0a86d0712a46f44edee42717806baf0497c9ec1ef5bfc4",
-        "size_bytes": 75968
+        "sha256": "8688c95c17ea759da32dd393580e6aca4525da3f563eb78fb7dad78375347fa6",
+        "size_bytes": 82808
       },
       {
         "path": "scripts/validate_skill.py",

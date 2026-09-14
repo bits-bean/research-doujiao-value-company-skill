@@ -147,6 +147,7 @@ TRUSTED_DESKTOP_RUNTIME_NODE_MODULES = TRUSTED_DESKTOP_RUNTIME_ROOT / "lib/node_
 TRUSTED_DESKTOP_RUNTIME_NODE_SHA256 = "89e8a2189d06dc839df08722f4cc397f1d86df343f880db74b1d22ffa8dd3645"
 TRUSTED_SHARP_ENTRY_SHA256 = "d69f275bc49fcd2a6188b26b35c986d4db32a1b008653fef88adb4598688232a"
 TRUSTED_SHARP_PACKAGE_SHA256 = "0f3a7e7eb4f22978dfde46e6c7c6ecf3b86b43e33c3d366de88b334b4610c3ff"
+TRUSTED_CACHED_RUNTIME_ROOT = Path.home() / ".cache/codex-runtimes/codex-primary-runtime"
 TRUSTED_RUNTIME_PROFILES = (
     {
         "bundle_version": TRUSTED_RUNTIME_BUNDLE_VERSION,
@@ -154,6 +155,8 @@ TRUSTED_RUNTIME_PROFILES = (
         "node": TRUSTED_RUNTIME_NODE,
         "node_modules": TRUSTED_RUNTIME_NODE_MODULES,
         "node_sha256": TRUSTED_RUNTIME_NODE_SHA256,
+        "sharp_package_sha256": TRUSTED_SHARP_PACKAGE_SHA256,
+        "renderer_versions": {"sharp": "0.35.3", "vips": "8.18.3", "rsvg": "2.62.90"},
     },
     {
         "bundle_version": TRUSTED_DESKTOP_RUNTIME_BUNDLE_VERSION,
@@ -161,6 +164,17 @@ TRUSTED_RUNTIME_PROFILES = (
         "node": TRUSTED_DESKTOP_RUNTIME_NODE,
         "node_modules": TRUSTED_DESKTOP_RUNTIME_NODE_MODULES,
         "node_sha256": TRUSTED_DESKTOP_RUNTIME_NODE_SHA256,
+        "sharp_package_sha256": TRUSTED_SHARP_PACKAGE_SHA256,
+        "renderer_versions": {"sharp": "0.35.3", "vips": "8.18.3", "rsvg": "2.62.90"},
+    },
+    {
+        "bundle_version": "26.904.11930",
+        "runtime_root": TRUSTED_CACHED_RUNTIME_ROOT,
+        "node": TRUSTED_CACHED_RUNTIME_ROOT / "dependencies/node/bin/node",
+        "node_modules": TRUSTED_CACHED_RUNTIME_ROOT / "dependencies/node/node_modules",
+        "node_sha256": "27db838bb204ef7c21df2931f5656e4c8fb32e6e947f363a402b49714d32b5b1",
+        "sharp_package_sha256": "27b5a6c6e1e1f27c527b09a963c932979403837d0f5f013ab5bdfb4a0ef2269a",
+        "renderer_versions": {"sharp": "0.35.4", "vips": "8.18.6", "rsvg": "2.62.91"},
     },
 )
 SENSITIVE_PATTERNS = (
@@ -1357,7 +1371,7 @@ def _validate_svg_render(path: Path) -> None:
     if (
         file_sha256(node_path) != runtime_profile["node_sha256"]
         or file_sha256(sharp_entry) != TRUSTED_SHARP_ENTRY_SHA256
-        or file_sha256(sharp_package) != TRUSTED_SHARP_PACKAGE_SHA256
+        or file_sha256(sharp_package) != runtime_profile["sharp_package_sha256"]
     ):
         raise ArchivePlanError("trusted SVG raster runtime artifact digest does not match the locked release")
     challenge = secrets.token_hex(32)
@@ -1365,12 +1379,8 @@ def _validate_svg_render(path: Path) -> None:
 const sharp = require(process.argv[2]);
 const input = process.argv[1];
 const challenge = process.argv[3];
+const requiredVersions = JSON.parse(process.argv[4]);
 (async () => {
-  const requiredVersions = {
-    sharp: '0.35.3',
-    vips: '8.18.3',
-    rsvg: '2.62.90'
-  };
   for (const [component, required] of Object.entries(requiredVersions)) {
     if (sharp.versions[component] !== required) {
       throw new Error(
@@ -1420,7 +1430,8 @@ const challenge = process.argv[3];
     environment: dict[str, str] = {}
     try:
         completed = subprocess.run(
-            [str(node_path), "-e", javascript, str(path), str(sharp_entry), challenge],
+            [str(node_path), "-e", javascript, str(path), str(sharp_entry), challenge,
+             json.dumps(runtime_profile["renderer_versions"], sort_keys=True)],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1438,7 +1449,7 @@ const challenge = process.argv[3];
         receipt = json.loads(completed.stdout.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ArchivePlanError("safe SVG raster validation returned an invalid receipt") from exc
-    expected_versions = {"sharp": "0.35.3", "vips": "8.18.3", "rsvg": "2.62.90"}
+    expected_versions = runtime_profile["renderer_versions"]
     if (
         not isinstance(receipt, dict)
         or set(receipt) != {"protocol", "challenge", "visible", "versions"}

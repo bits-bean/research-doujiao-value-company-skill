@@ -14,6 +14,24 @@ SOURCE_IDS = ["SRC-FY", "SRC-Q1"]
 M = 1_000_000
 
 
+def make_business_model_fixture(company: dict) -> dict:
+    return {
+        "version": "1.0",
+        "period": company["income_statement_sankey"]["fiscal_year"],
+        "company_identity": {key: company["meta"][key] for key in ("company_name_en", "ticker", "exchange")},
+        "actors": [
+            {"id": "company", "label": company["meta"]["company_name_cn"], "label_en": company["meta"]["company_name_en"], "detail": "发行收费卡并提供支付服务", "detail_en": "Issues fee-based cards and provides payments", "illustration": "company", "source_ids": ["SRC-FY"]},
+            {"id": "cardholders", "label": "付费持卡会员", "label_en": "Fee-paying card members", "detail": "支付会员费并使用卡片权益", "detail_en": "Pay membership fees and use card benefits", "illustration": "cardholder", "source_ids": ["SRC-FY"]},
+        ],
+        "flows": [
+            {"id": "membership-fee", "source": "cardholders", "target": "company", "label": "卡片会员费", "label_en": "Card membership fees", "kind": "money", "source_ids": ["SRC-FY"]},
+            {"id": "member-service", "source": "company", "target": "cardholders", "label": "支付服务与会员权益", "label_en": "Payment services and benefits", "kind": "value", "source_ids": ["SRC-FY"]},
+        ],
+        "notes": "仅解释已披露的会员服务关系，箭头不是会计流量。",
+        "notes_en": "Only disclosed membership relationships; arrows are not accounting flows.",
+    }
+
+
 def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
     """Create real-schema inputs; the caller may add validation report and manifest."""
     schema_path = root / "company.schema.json"
@@ -817,6 +835,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
 
     evidence = {
         "ledger_version": "2.0",
+        "business_model": make_business_model_fixture(company),
         "run": {
             "run_id": "RUN-TEST-2026Q1",
             "research_mode": "full",

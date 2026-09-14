@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from package_fixture import make_valid_unfrozen_package  # noqa: E402
+from package_fixture import make_business_model_fixture, make_valid_unfrozen_package  # noqa: E402
 from validate_research_process import (  # noqa: E402
     canonical_company_sha256,
     deterministic_ordinary_claim_sample,
@@ -298,6 +298,7 @@ def build_valid_process_ledger(
     fingerprint = _fingerprint()
     ledger = {
         "ledger_version": "2.0",
+        "business_model": make_business_model_fixture(company),
         "run": {
             "run_id": "RUN-2026-04-15-TEST",
             "research_mode": "full",
