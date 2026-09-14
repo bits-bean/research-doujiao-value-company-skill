@@ -30,7 +30,7 @@
 
 `evidence-ledger.json` 根级必须包含 `ledger_version: "2.0"`、`run`、`researchability`、
 `business_driver_map`、`management_decision_ledger`、`thesis`、`valuation_review`、`source_audit` 和
-`claims`。新正式交接还必须包含 [商业模式具体对象图谱](business-model-actors.md) `business_model`，与经营驱动方程分别表达交易关系和价值驱动。`run` 必须包含：
+`claims`。新正式交接还必须包含 [商业模式具体对象图谱及关系覆盖清单](business-model-actors.md) `business_model` 和 `business_model_coverage`，与经营驱动方程分别表达实际交换/权利/责任关系和价值驱动。覆盖清单来自取证，不能从成图倒填；其关闭审查绑定真实隔离 pass 和最终图谱摘要。`run` 必须包含：
 
 - `run_id`：当前执行的稳定唯一标识；
 - `research_mode`：`full / incremental / repair / migration`；

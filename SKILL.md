@@ -53,7 +53,7 @@ description: Research, update, audit, repair, freeze, and explicitly authorized 
 - 普通企业复算 FCF、Owner Earnings、ROIC、净债务、市值和 EV；金融、保险、REIT、资源等使用分类契约指定的行业适配口径，并把通用财务字段无法表达的序列写入 `industry_metrics`。
 - 护城河同时读取竞争对手和替代品；长期生存把需求持久性、适应能力和外部冲击拆开验证；文化和管理层比较承诺与实际行动。
 
-研究价值交换时同时读取 [business-model-actors.md](references/business-model-actors.md)：按当前公司的实际使用者、付款方、产品与交付渠道、供给与合作对象生成具体名称和关系，不套“客户 / 产品与渠道 / 生态伙伴”四角色模板。把有来源的对象、连线及插图语义写入证据台账 `business_model`；实际角色涉及已确认品牌或产品时，以可选 `official_logos` 交接品牌身份，优先使用下游已验证的官方标识，缺少时沿用对应角色插图。品牌引用是研究元数据，实际素材和官方出处核验仍由网站或内容层管理，不扩大研究素材交付范围。
+研究价值交换时同时读取 [business-model-actors.md](references/business-model-actors.md)：从业务证据先建立参与者及关系候选清单，检查使用、付款、交付、供给、权利与责任，以及参与者之间不经过公司的关系。关系类型由实际生意决定；商品、信息、注意力、资产、授权、风险承担及其他有据关系用开放的 `exchange_type` 和具体标签表达，不被“价值 / 资金 / 信息”三类限制。将图谱写入 `business_model`，将纳入、合并、省略或待核实的裁决写入 `business_model_coverage`，逐项对账并由隔离审查主动寻找遗漏，同时解释价值创造、传递与回收的机制。既有 `kind` 仅作显示兼容，不能代替经济语义或删边；不套固定角色数，不强制每家公司都有数据反馈。同时按 [business-model-feedback.md](references/business-model-feedback.md) 判断是否有证据支持可选的商业闭环：逐环解释经营变化如何传导并反馈起点，区分事实、管理层主张和推断，核实单位经济性、再投入条件及断裂风险；在 `business_model_feedback` 独立交接。未识别到或证据不足时不展示、不强凑闭环，也不阻断其他研究。实际角色涉及已确认品牌或产品时，以可选 `official_logos` 交接品牌身份；实际素材与渲染仍由下游管理。
 
 ## 4. 长期价值判断
 

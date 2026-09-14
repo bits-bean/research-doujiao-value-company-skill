@@ -1262,7 +1262,7 @@ def _validate_source_audit(
 
 
 BUSINESS_ILLUSTRATIONS = {
-    "company", "cardholder", "merchant", "travel", "gamer", "advertiser",
+    "company", "participant", "cardholder", "merchant", "travel", "gamer", "advertiser",
     "cloud", "creator", "distributor", "consumer", "supplier", "search-user",
     "developer", "bank", "social-user", "digital-buyer", "search-distribution",
 }
@@ -1271,6 +1271,11 @@ GENERIC_BUSINESS_LABELS = {
     "customer", "customers", "user", "users", "offer & channels",
     "products & channels", "partners", "partner", "company", "ecosystem partners",
 }
+GENERIC_EXCHANGE_TYPES = {"money", "value", "data", "资金", "价值", "数据"}
+
+
+def _specific_exchange_type(value: Any) -> bool:
+    return _nonblank(value) and value.strip().casefold() not in GENERIC_EXCHANGE_TYPES
 
 
 def validate_business_model(
@@ -1400,6 +1405,11 @@ def validate_business_model(
             neighbors[target].add(source)
         if flow.get("kind") not in ("money", "value", "data"):
             fail("flow-kind", path + ".kind", "must be money, value or data")
+        if "exchange_type" not in flow:
+            _add(issues, "warning" if mode == "audit" else "error", "business-model-exchange-type-missing",
+                 root + path + ".exchange_type", "new handoffs must name the actual exchange beyond the legacy display kind")
+        elif not _specific_exchange_type(flow.get("exchange_type")):
+            fail("exchange-type", path + ".exchange_type", "must name the actual exchange; the vocabulary is open")
         for key in ("label", "label_en"):
             if not _nonblank(flow.get(key)):
                 fail("flow-label", path + "." + key, "must describe the actual directed exchange")
@@ -1414,6 +1424,221 @@ def validate_business_model(
         pending.extend(neighbors[current] - reached)
     if reached != actor_ids:
         fail("disconnected", "", "every actor must connect to the company through actual relationships")
+    return issues
+
+
+def canonical_business_model_sha256(graph: Mapping[str, Any]) -> str:
+    """Bind the review to the entire graph, including labels and optional metadata."""
+    payload = json.dumps(graph, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def validate_business_model_coverage(
+    coverage: Any,
+    graph: Any,
+    source_ids: set[str],
+    passes: Any,
+    mode: str = "full",
+    *,
+    declared: bool = True,
+) -> list[ProcessIssue]:
+    """Reconcile an independently researched candidate inventory with its graph.
+
+    This checks traceability and review integrity, not whether researchers found
+    every economic relationship. It never invents pairs, reverse edges or types.
+    """
+    issues: list[ProcessIssue] = []
+    root = "evidence-ledger.json.business_model_coverage"
+
+    def fail(code: str, path: str, message: str) -> None:
+        _add(issues, "error", "business-model-coverage-" + code, root + path, message)
+
+    if not declared:
+        _add(issues, "warning" if mode == "audit" else "error", "business-model-coverage-missing", root,
+             "historical relationship completeness is unverified; new handoffs require a reviewed candidate inventory")
+        return issues
+    if not isinstance(coverage, dict):
+        fail("shape", "", "declared coverage must be an object")
+        return issues
+    if coverage.get("version") != "1.0":
+        fail("version", ".version", "must equal 1.0")
+    if not _nonblank(coverage.get("scope")):
+        fail("scope", ".scope", "must explain the researched business scope and materiality boundary")
+    if not isinstance(graph, dict):
+        fail("graph", "", "coverage requires a valid business_model graph")
+        return issues
+
+    def identifier(value: Any) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,63}", value) is not None
+
+    reviewed_source_ids: set[str] = set()
+
+    def sources(value: Any, path: str) -> None:
+        if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
+            fail("sources", path, "must be a nonempty array of unique resolved source IDs")
+        elif len(value) != len(set(value)) or any(item not in source_ids for item in value):
+            fail("sources", path, "must contain unique source IDs from this company package")
+        else:
+            reviewed_source_ids.update(value)
+
+    def source_locations(item: dict[str, Any], path: str) -> None:
+        locations, ids = item.get("source_locations"), item.get("source_ids")
+        if (not isinstance(locations, dict) or not isinstance(ids, list)
+                or not all(isinstance(source_id, str) for source_id in ids)
+                or set(locations) != set(ids)
+                or not all(_nonblank(location) for location in locations.values())):
+            fail("source-locations", path + ".source_locations",
+                 "must map exactly every source_id to a nonblank precise page or section location")
+
+    def records(value: Any, path: str) -> list[tuple[int, dict[str, Any]]]:
+        if not isinstance(value, list) or not value:
+            fail("collection", path, "must be a nonempty array")
+            return []
+        result: list[tuple[int, dict[str, Any]]] = []
+        for index, item in enumerate(value):
+            if not isinstance(item, dict):
+                fail("record", f"{path}[{index}]", "must be an object")
+            else:
+                result.append((index, item))
+        return result
+
+    actor_values = graph.get("actors")
+    actors = {item["id"]: item for item in actor_values
+              if isinstance(item, dict) and identifier(item.get("id"))} if isinstance(actor_values, list) else {}
+    flow_values = graph.get("flows")
+    flows = {item["id"]: item for item in flow_values
+             if isinstance(item, dict) and identifier(item.get("id"))} if isinstance(flow_values, list) else {}
+
+    participants: dict[str, dict[str, Any]] = {}
+    mapped_actor_ids: set[str] = set()
+    for index, item in records(coverage.get("participants"), ".participants"):
+        path = f".participants[{index}]"
+        candidate_id = item.get("id")
+        if not identifier(candidate_id) or candidate_id in participants:
+            fail("participant-id", path + ".id", "must be a unique lowercase candidate participant ID")
+        else:
+            participants[candidate_id] = item
+        for key in ("label", "reason"):
+            if not _nonblank(item.get(key)):
+                fail("participant-text", path + "." + key, "must explain the actual participant and inclusion decision")
+        disposition = item.get("disposition")
+        actor_id = item.get("actor_id")
+        if disposition in ("included", "aggregated"):
+            if not isinstance(actor_id, str) or actor_id not in actors:
+                fail("participant-actor", path + ".actor_id", "included or aggregated participants must map to an existing actor")
+            else:
+                mapped_actor_ids.add(actor_id)
+        elif disposition in ("excluded", "unresolved"):
+            if "actor_id" not in item or actor_id is not None:
+                fail("participant-actor", path + ".actor_id", "excluded or unresolved participants must explicitly use null")
+        else:
+            fail("participant-disposition", path + ".disposition", "must be included, aggregated, excluded or unresolved")
+        if disposition == "unresolved":
+            fail("unresolved-participant", path, "resolve material participant gaps before formal handoff")
+        sources(item.get("source_ids"), path + ".source_ids")
+        source_locations(item, path)
+    if set(actors) != mapped_actor_ids:
+        fail("actor-omission", ".participants", "every graph actor must be represented in the candidate inventory")
+
+    relationship_ids: set[str] = set()
+    covered_flow_ids: set[str] = set()
+    for index, item in records(coverage.get("relationships"), ".relationships"):
+        path = f".relationships[{index}]"
+        relationship_id = item.get("id")
+        if not identifier(relationship_id) or relationship_id in relationship_ids:
+            fail("relationship-id", path + ".id", "must be a unique lowercase candidate relationship ID")
+        else:
+            relationship_ids.add(relationship_id)
+        candidate_source, candidate_target = item.get("source"), item.get("target")
+        endpoints_valid = (
+            isinstance(candidate_source, str) and isinstance(candidate_target, str)
+            and candidate_source in participants and candidate_target in participants and candidate_source != candidate_target
+        )
+        if not endpoints_valid:
+            fail("relationship-endpoints", path, "source and target must name two different candidate participants")
+        if not _specific_exchange_type(item.get("exchange_type")):
+            fail("exchange-type", path + ".exchange_type", "must name the actual exchange using an open vocabulary")
+        if not _nonblank(item.get("reason")):
+            fail("relationship-reason", path + ".reason", "must explain the evidence and drawing or exclusion decision")
+        disposition, flow_id = item.get("disposition"), item.get("flow_id")
+        if disposition == "drawn":
+            if not isinstance(flow_id, str) or flow_id not in flows:
+                fail("relationship-flow", path + ".flow_id", "a drawn relationship must resolve to an existing graph flow")
+            else:
+                covered_flow_ids.add(flow_id)
+                flow = flows[flow_id]
+                if endpoints_valid:
+                    source_actor = participants[candidate_source].get("actor_id")
+                    target_actor = participants[candidate_target].get("actor_id")
+                    if (not isinstance(source_actor, str) or not isinstance(target_actor, str)
+                            or source_actor != flow.get("source") or target_actor != flow.get("target")):
+                        fail("relationship-direction", path, "mapped participant endpoints must match the directed graph flow exactly")
+                if item.get("exchange_type") != flow.get("exchange_type"):
+                    fail("relationship-type", path + ".exchange_type", "must equal the graph flow's actual exchange_type")
+        elif disposition in ("excluded", "unresolved"):
+            if "flow_id" not in item or flow_id is not None:
+                fail("relationship-flow", path + ".flow_id", "excluded or unresolved relationships must explicitly use null")
+        else:
+            fail("relationship-disposition", path + ".disposition", "must be drawn, excluded or unresolved")
+        if disposition == "unresolved":
+            fail("unresolved-relationship", path, "resolve material relationship gaps before formal handoff")
+        sources(item.get("source_ids"), path + ".source_ids")
+        source_locations(item, path)
+    if set(flows) != covered_flow_ids:
+        fail("flow-omission", ".relationships", "every graph flow must have a drawn, sourced candidate relationship")
+
+    stages: list[str] = []
+    for index, item in records(coverage.get("value_logic"), ".value_logic"):
+        path = f".value_logic[{index}]"
+        stage = item.get("stage")
+        if stage not in ("creation", "delivery", "capture"):
+            fail("value-stage", path + ".stage", "must be creation, delivery or capture")
+        else:
+            stages.append(stage)
+        if not _nonblank(item.get("explanation")):
+            fail("value-explanation", path + ".explanation", "must explain this company's value mechanism")
+        value_flow_ids = item.get("flow_ids")
+        if (not isinstance(value_flow_ids, list) or not value_flow_ids
+                or not all(isinstance(flow_id, str) for flow_id in value_flow_ids)
+                or len(value_flow_ids) != len(set(value_flow_ids))
+                or any(flow_id not in flows for flow_id in value_flow_ids)):
+            fail("value-flows", path + ".flow_ids", "must contain nonempty unique references to graph flows")
+        sources(item.get("source_ids"), path + ".source_ids")
+    if sorted(stages) != ["capture", "creation", "delivery"]:
+        fail("value-stage-coverage", ".value_logic", "must explain creation, delivery and capture exactly once each")
+
+    review = coverage.get("review")
+    if not isinstance(review, dict):
+        fail("review", ".review", "must bind an independent completed review to the actual graph")
+        return issues
+    if not _nonblank(review.get("conclusion")):
+        fail("review-conclusion", ".review.conclusion", "must record the independent review's conclusion and limits")
+    try:
+        expected_hash = canonical_business_model_sha256(graph)
+    except (TypeError, ValueError, OverflowError):
+        fail("graph-hash", ".review.graph_sha256", "graph must be canonical JSON without nonfinite values")
+    else:
+        if review.get("graph_sha256") != expected_hash:
+            fail("graph-hash", ".review.graph_sha256", "must match SHA-256 of the entire canonical graph reviewed")
+    pass_values = [item for item in passes if isinstance(item, dict)] if isinstance(passes, (list, tuple)) else []
+    pass_id = review.get("pass_id")
+    matches = [item for item in pass_values if isinstance(pass_id, str) and item.get("id") == pass_id]
+    primary_actors = {item.get("actor_id") for item in pass_values
+                      if item.get("role") == "primary_research" and _nonblank(item.get("actor_id"))}
+    if len(matches) != 1:
+        fail("review-pass", ".review.pass_id", "must reference one existing independent review pass")
+    else:
+        reviewer = matches[0]
+        reviewer_actor = reviewer.get("actor_id")
+        if (reviewer.get("role") not in ("adversarial_review", "source_audit")
+                or reviewer.get("execution") not in ("isolated_agent", "isolated_context")
+                or reviewer.get("status") != "completed" or not _nonblank(reviewer_actor)
+                or reviewer_actor in primary_actors):
+            fail("review-pass", ".review.pass_id", "must reference a completed isolated adversarial/source audit pass distinct from primary research")
+        accessed = reviewer.get("source_ids_accessed")
+        if (not isinstance(accessed, list) or not all(isinstance(item, str) for item in accessed)
+                or not reviewed_source_ids.issubset(set(accessed))):
+            fail("review-sources", ".review.pass_id", "the reviewer must declare access to every coverage source")
     return issues
 
 
@@ -1444,7 +1669,7 @@ def validate_research_process(
     if not isinstance(expected_fingerprint, Mapping) or set(expected_fingerprint) != PROTOCOL_FINGERPRINT_KEYS:
         return [ProcessIssue("error", "expected-protocol-fingerprint", path, "validator supplied an invalid expected protocol fingerprint")]
 
-    current_only_keys = LEDGER_ROOT_KEYS.difference({"claims"})
+    current_only_keys = LEDGER_ROOT_KEYS.difference({"claims"}) | {"business_model_coverage", "business_model_feedback"}
     declares_current = evidence.get("ledger_version") is not None or bool(current_only_keys.intersection(evidence))
     if mode == "audit" and not declares_current:
         _add(
@@ -1483,6 +1708,16 @@ def validate_research_process(
         issues,
     )
     issues.extend(validate_business_model(evidence.get("business_model"), company, set(source_records), mode))
+    issues.extend(validate_business_model_coverage(
+        evidence.get("business_model_coverage"), evidence.get("business_model"), set(source_records), passes, mode,
+        declared="business_model_coverage" in evidence,
+    ))
+    # Local import keeps the optional module's shared finding type acyclic.
+    from validate_business_feedback import validate_business_model_feedback
+    issues.extend(validate_business_model_feedback(
+        evidence.get("business_model_feedback"), evidence.get("business_model"), set(source_records), passes,
+        declared="business_model_feedback" in evidence,
+    ))
     _validate_researchability(evidence.get("researchability"), issues)
     _validate_driver_map(evidence.get("business_driver_map"), set(source_records), issues)
     _validate_management_decisions(
@@ -1508,7 +1743,9 @@ def validate_research_process(
 __all__ = [
     "ProcessIssue",
     "canonical_company_sha256",
+    "canonical_business_model_sha256",
     "deterministic_ordinary_claim_sample",
     "expected_dcf_audit_value",
     "validate_research_process",
+    "validate_business_model_coverage",
 ]
