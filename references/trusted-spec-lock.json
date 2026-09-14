@@ -27,21 +27,27 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "e80624a7955e69ceffd6249fe99f9d10f073d95aa83de8167f7866498b2ac75f",
-    "toolchain_digest_sha256": "872fdbca4370cd0eac9f4ff54144ca3865fe96c67dac759468a97115dc519c0f",
-    "bundle_digest_sha256": "d4064cb035c02c490ced360678ba7f3ac3caff381e6c8daaf3afba6e389b4134",
+    "normative_digest_sha256": "7317214cc17805eec5c3b61a6ce9874ff441f368aca58afae833f026d59c6ff5",
+    "toolchain_digest_sha256": "4f366cd266c9bcd4f7e0e6d5823733454f607fd017aaa2f6eb9791d3d4841e9a",
+    "bundle_digest_sha256": "f11ed2d17949af74e28ab977fe0916b35be637adef79862fa77208cc46869531",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "90b3a4e20ab906041f5d7ec55bb0fdc2f8e39985d7fc8ab30b7337b15766329f",
-        "size_bytes": 24537
+        "sha256": "cfbbcabd83ad2483b0798e4e8b2ab3aec6f8e9cccb883e80fb786c55a7d92208",
+        "size_bytes": 24962
       },
       {
         "path": "agents/openai.yaml",
         "role": "normative",
         "sha256": "a96efdad0c758ba35b4ff466e30a2a5617fc15325e28b01c3485feeb4f0aff27",
         "size_bytes": 878
+      },
+      {
+        "path": "references/business-model-actors.md",
+        "role": "normative",
+        "sha256": "f4925d1e6c2c1b9a37b696ee886e77f8f8510055fa76121a2f5a776337a8ca6b",
+        "size_bytes": 5408
       },
       {
         "path": "references/classification-and-chart-routing.md",
@@ -88,14 +94,14 @@
       {
         "path": "references/research-execution-and-audit.md",
         "role": "normative",
-        "sha256": "f3c29a642c3e0f45ef97a18d4727af9edfbf864866ad1263ffb1ad0f249d1bf8",
-        "size_bytes": 13358
+        "sha256": "37ef3bf5df9095f2e0d7dda27c0addd367e7d13247e4979458af99f44266af8e",
+        "size_bytes": 13530
       },
       {
         "path": "references/revenue-mix-history.md",
         "role": "normative",
-        "sha256": "54e89c821594a52313cbaa84316c0b0fec859065cb09fabc68e0b0425468a2fa",
-        "size_bytes": 11718
+        "sha256": "7e6c02f8dcf23e8e73e50fd58a8bb918bfe0df86ea3b347deba1a407a65322fc",
+        "size_bytes": 12029
       },
       {
         "path": "references/source-routing.md",
@@ -154,8 +160,8 @@
       {
         "path": "scripts/validate_research_process.py",
         "role": "toolchain",
-        "sha256": "1cbb5cd239021f87da0a86d0712a46f44edee42717806baf0497c9ec1ef5bfc4",
-        "size_bytes": 75968
+        "sha256": "8688c95c17ea759da32dd393580e6aca4525da3f563eb78fb7dad78375347fa6",
+        "size_bytes": 82808
       },
       {
         "path": "scripts/validate_skill.py",

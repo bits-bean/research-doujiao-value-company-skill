@@ -1261,6 +1261,139 @@ def _validate_source_audit(
             _add(issues, "error", "source-audit-ordinary-result", f"{path}.checks", f"sampled claim {claim_id!r} must be a passing ordinary claim check")
 
 
+BUSINESS_ILLUSTRATIONS = {
+    "company", "cardholder", "merchant", "travel", "gamer", "advertiser",
+    "cloud", "creator", "distributor", "consumer", "supplier", "search-user",
+    "developer", "bank", "social-user", "digital-buyer", "search-distribution",
+}
+GENERIC_BUSINESS_LABELS = {
+    "客户", "用户", "产品与渠道", "生态伙伴", "合作伙伴", "公司",
+    "customer", "customers", "user", "users", "offer & channels",
+    "products & channels", "partners", "partner", "company", "ecosystem partners",
+}
+
+
+def validate_business_model(
+    graph: Any,
+    company: Mapping[str, Any],
+    source_ids: set[str],
+    mode: str = "full",
+) -> list[ProcessIssue]:
+    """Validate the frozen actor graph without inferring business relationships."""
+    issues: list[ProcessIssue] = []
+    root = "evidence-ledger.json.business_model"
+
+    def fail(code: str, path: str, message: str) -> None:
+        _add(issues, "error", "business-model-" + code, root + path, message)
+
+    if graph is None:
+        _add(issues, "warning" if mode == "audit" else "error", "business-model-missing",
+             root, "a company-specific actor graph is required for new research handoff")
+        return issues
+    if not isinstance(graph, dict):
+        fail("shape", "", "must be an object")
+        return issues
+    if graph.get("version") != "1.0":
+        fail("version", ".version", "must equal 1.0")
+    meta = company.get("meta") if isinstance(company.get("meta"), Mapping) else {}
+    identity = graph.get("company_identity")
+    identity_keys = {"company_name_en", "ticker", "exchange"}
+    if not isinstance(identity, dict) or set(identity) != identity_keys or any(
+        not _nonblank(identity.get(key)) or identity.get(key) != meta.get(key) for key in identity_keys
+    ):
+        fail("identity", ".company_identity", "must match this company's legal name, ticker and exchange")
+    sankey = company.get("income_statement_sankey")
+    fiscal_year = sankey.get("fiscal_year") if isinstance(sankey, Mapping) else None
+    if not _nonblank(graph.get("period")) or graph.get("period") != fiscal_year:
+        fail("period", ".period", "must match the same package's Sankey fiscal year")
+    for key in ("notes", "notes_en"):
+        if not _nonblank(graph.get(key)):
+            fail("notes", "." + key, "must explain the diagram's business scope and limits")
+
+    def identifier(value: Any) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,63}", value) is not None
+
+    def sources(value: Any, path: str) -> None:
+        if not isinstance(value, list) or not value or not all(isinstance(x, str) for x in value):
+            fail("sources", path, "must be a nonempty array of source IDs")
+        elif len(value) != len(set(value)) or any(x not in source_ids for x in value):
+            fail("sources", path, "must contain unique, resolved company source IDs")
+
+    actors = graph.get("actors")
+    if not isinstance(actors, list) or len(actors) < 2:
+        fail("actors", ".actors", "must contain the company and at least one actual counterparty")
+        return issues
+    actor_ids: set[str] = set()
+    company_count = 0
+    for index, actor in enumerate(actors):
+        path = f".actors[{index}]"
+        if not isinstance(actor, dict):
+            fail("actor", path, "must be an object")
+            continue
+        actor_id = actor.get("id")
+        if not identifier(actor_id) or actor_id in actor_ids:
+            fail("actor-id", path + ".id", "must be a unique lowercase semantic ID")
+        else:
+            actor_ids.add(actor_id)
+        for key in ("label", "label_en", "detail", "detail_en"):
+            value = actor.get(key)
+            if not _nonblank(value):
+                fail("actor-text", path + "." + key, "must be a nonblank description of this actual actor")
+            elif key.startswith("label") and value.strip().casefold() in GENERIC_BUSINESS_LABELS:
+                fail("generic-label", path + "." + key, "use a specific company or counterparty name")
+        illustration = actor.get("illustration")
+        if not isinstance(illustration, str) or illustration not in BUSINESS_ILLUSTRATIONS:
+            fail("illustration", path + ".illustration", "must use a supported semantic illustration key")
+        if actor_id == "company":
+            company_count += 1
+            if illustration != "company":
+                fail("company-illustration", path, "the company actor must use the company identity asset")
+        elif illustration == "company":
+            fail("company-illustration", path, "only the company actor may use the company identity asset")
+        sources(actor.get("source_ids"), path + ".source_ids")
+    if company_count != 1:
+        fail("company-count", ".actors", "must have exactly one actor with id company")
+    flows = graph.get("flows")
+    if not isinstance(flows, list) or not flows:
+        fail("flows", ".flows", "must contain sourced directed relationships")
+        return issues
+    flow_ids: set[str] = set()
+    neighbors = {actor_id: set() for actor_id in actor_ids}
+    for index, flow in enumerate(flows):
+        path = f".flows[{index}]"
+        if not isinstance(flow, dict):
+            fail("flow", path, "must be an object")
+            continue
+        flow_id = flow.get("id")
+        if not identifier(flow_id) or flow_id in flow_ids:
+            fail("flow-id", path + ".id", "must be a unique lowercase semantic ID")
+        else:
+            flow_ids.add(flow_id)
+        source, target = flow.get("source"), flow.get("target")
+        if not isinstance(source, str) or not isinstance(target, str) or source not in actor_ids or target not in actor_ids or source == target:
+            fail("endpoints", path, "source and target must name two different actors")
+        else:
+            neighbors[source].add(target)
+            neighbors[target].add(source)
+        if flow.get("kind") not in ("money", "value", "data"):
+            fail("flow-kind", path + ".kind", "must be money, value or data")
+        for key in ("label", "label_en"):
+            if not _nonblank(flow.get(key)):
+                fail("flow-label", path + "." + key, "must describe the actual directed exchange")
+        sources(flow.get("source_ids"), path + ".source_ids")
+    reached: set[str] = set()
+    pending = ["company"] if "company" in actor_ids else []
+    while pending:
+        current = pending.pop()
+        if current in reached:
+            continue
+        reached.add(current)
+        pending.extend(neighbors[current] - reached)
+    if reached != actor_ids:
+        fail("disconnected", "", "every actor must connect to the company through actual relationships")
+    return issues
+
+
 def validate_research_process(
     evidence: Any,
     company: Mapping[str, Any],
@@ -1326,6 +1459,7 @@ def validate_research_process(
         _is_too_hard(company),
         issues,
     )
+    issues.extend(validate_business_model(evidence.get("business_model"), company, set(source_records), mode))
     _validate_researchability(evidence.get("researchability"), issues)
     _validate_driver_map(evidence.get("business_driver_map"), set(source_records), issues)
     _validate_management_decisions(
