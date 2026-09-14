@@ -63,6 +63,58 @@ class BusinessModelTests(unittest.TestCase):
         self.assertEqual(validate_business_model(None, self.company, set())[0].severity, "error")
         self.assertEqual(validate_business_model(None, self.company, set(), "audit")[0].severity, "warning")
 
+    def brand(self, asset_id="sample-search", **changes):
+        return {"asset_id": asset_id, "brand_name": "示例搜索", "brand_name_en": "Sample Search", "source_ids": ["SRC-FY"], **changes}
+
+    def test_optional_brands_preserve_legacy_fallback_and_multiple_role_identities(self):
+        self.graph["actors"][1]["official_logos"] = []
+        self.assertEqual(self.codes(), set())
+        self.graph["actors"][1]["official_logos"] = [self.brand(), self.brand("sample-video", brand_name="示例视频", brand_name_en="Sample Video")]
+        before = copy.deepcopy(self.graph)
+        self.assertEqual(self.codes(), set())
+        self.assertEqual(self.graph, before)
+        del self.graph["actors"][1]["illustration"]
+        self.assertIn("business-model-illustration", self.codes())
+
+    def test_brand_references_cannot_replace_the_canonical_company_identity(self):
+        self.graph["actors"][0]["official_logos"] = [self.brand()]
+        self.assertIn("business-model-company-official-logos", self.codes())
+
+    def test_brand_asset_keys_reject_urls_paths_and_duplicate_assets(self):
+        for value in ["https://example.test/logo.svg", "../logo", "/logo.svg", "logo.svg", "Uppercase", "a" * 65, ["bad"]]:
+            with self.subTest(value=value):
+                self.graph["actors"][1]["official_logos"] = [self.brand(value)]
+                self.assertIn("business-model-official-logo-id", self.codes())
+        self.graph["actors"][1]["official_logos"] = [self.brand(), self.brand()]
+        self.assertIn("business-model-official-logo-id", self.codes())
+
+    def test_brands_require_bilingual_identity_and_resolved_business_evidence(self):
+        for key in ["brand_name", "brand_name_en"]:
+            self.graph["actors"][1]["official_logos"] = [self.brand(**{key: " "})]
+            self.assertIn("business-model-official-logo-brand", self.codes())
+        for sources in [[], ["SRC-MISSING"], ["SRC-FY", "SRC-FY"], [{"bad": True}]]:
+            with self.subTest(sources=sources):
+                self.graph["actors"][1]["official_logos"] = [self.brand(source_ids=sources)]
+                self.assertIn("business-model-sources", self.codes())
+
+    def test_brand_metadata_does_not_embed_assets_or_skip_required_fields(self):
+        for extra in [{"source_url": "https://example.test/logo.svg"}, {"path": "assets/logo.svg"}, {"data": "data:image/svg+xml;base64,PHN2Zz4="}]:
+            self.graph["actors"][1]["official_logos"] = [self.brand(**extra)]
+            self.assertIn("business-model-official-logo", self.codes())
+        for key in ["asset_id", "brand_name", "brand_name_en", "source_ids"]:
+            value = self.brand()
+            del value[key]
+            self.graph["actors"][1]["official_logos"] = [value]
+            self.assertIn("business-model-official-logo", self.codes())
+
+    def test_malformed_brand_collections_return_findings_without_throwing(self):
+        for value in [None, "sample-search", {}, 1]:
+            self.graph["actors"][1]["official_logos"] = value
+            self.assertIn("business-model-official-logos", self.codes())
+        for value in [None, "sample-search", [], 1]:
+            self.graph["actors"][1]["official_logos"] = [value]
+            self.assertIn("business-model-official-logo", self.codes())
+
 
 if __name__ == "__main__":
     unittest.main()
