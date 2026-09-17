@@ -59,6 +59,16 @@ class BusinessModelTests(unittest.TestCase):
         self.graph["actors"][1]["illustration"] = "made-up-icon"
         self.assertIn("business-model-illustration", self.codes())
 
+    def test_text_participant_preserves_roles_without_a_matching_illustration(self):
+        self.graph["actors"][1].update(
+            label="专利许可使用方", label_en="Patent licensees", illustration="participant",
+        )
+        self.assertEqual(self.codes(), set())
+        self.graph["actors"][0]["illustration"] = "participant"
+        self.assertIn("business-model-company-illustration", self.codes())
+        self.graph["actors"][1]["illustration"] = "unregistered-licensee-icon"
+        self.assertIn("business-model-illustration", self.codes())
+
     def test_missing_handoff_blocks_new_research_but_remains_auditable(self):
         self.assertEqual(validate_business_model(None, self.company, set())[0].severity, "error")
         self.assertEqual(validate_business_model(None, self.company, set(), "audit")[0].severity, "warning")

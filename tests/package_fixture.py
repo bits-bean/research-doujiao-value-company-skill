@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from validate_research_package import load_trusted_spec_lock, protocol_fingerprint, write_json
-from validate_research_process import canonical_company_sha256, deterministic_ordinary_claim_sample
+from validate_research_process import canonical_business_model_sha256, canonical_company_sha256, deterministic_ordinary_claim_sample
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,11 +24,33 @@ def make_business_model_fixture(company: dict) -> dict:
             {"id": "cardholders", "label": "付费持卡会员", "label_en": "Fee-paying card members", "detail": "支付会员费并使用卡片权益", "detail_en": "Pay membership fees and use card benefits", "illustration": "cardholder", "source_ids": ["SRC-FY"]},
         ],
         "flows": [
-            {"id": "membership-fee", "source": "cardholders", "target": "company", "label": "卡片会员费", "label_en": "Card membership fees", "kind": "money", "source_ids": ["SRC-FY"]},
-            {"id": "member-service", "source": "company", "target": "cardholders", "label": "支付服务与会员权益", "label_en": "Payment services and benefits", "kind": "value", "source_ids": ["SRC-FY"]},
+            {"id": "membership-fee", "source": "cardholders", "target": "company", "label": "卡片会员费", "label_en": "Card membership fees", "kind": "money", "exchange_type": "会员费", "source_ids": ["SRC-FY"]},
+            {"id": "member-service", "source": "company", "target": "cardholders", "label": "支付服务与会员权益", "label_en": "Payment services and benefits", "kind": "value", "exchange_type": "支付服务与会员权益", "source_ids": ["SRC-FY"]},
         ],
         "notes": "仅解释已披露的会员服务关系，箭头不是会计流量。",
         "notes_en": "Only disclosed membership relationships; arrows are not accounting flows.",
+    }
+
+
+def make_business_model_coverage_fixture(graph: dict) -> dict:
+    """Explicit fictional inventory; deliberately not regenerated from graph edges."""
+    return {
+        "version": "1.0",
+        "scope": "仅研究年报披露的付费会员服务业务；未主张会员行为数据形成反馈优势。",
+        "participants": [
+            {"id": "network-operator", "label": "测试支付网络运营方", "disposition": "included", "actor_id": "company", "reason": "年报确认其发行收费卡并提供支付服务。", "source_ids": ["SRC-FY"], "source_locations": {"SRC-FY": "Business, Membership services, p. 4"}},
+            {"id": "fee-paying-members", "label": "付费持卡会员", "disposition": "included", "actor_id": "cardholders", "reason": "会员支付费用并实际使用支付服务与权益。", "source_ids": ["SRC-FY"], "source_locations": {"SRC-FY": "Business, Membership services, p. 4"}},
+        ],
+        "relationships": [
+            {"id": "annual-fee-contract", "source": "fee-paying-members", "target": "network-operator", "exchange_type": "会员费", "disposition": "drawn", "flow_id": "membership-fee", "reason": "会员依年报所述收费安排向运营方支付会员费。", "source_ids": ["SRC-FY"], "source_locations": {"SRC-FY": "Revenue recognition, Membership fees, p. 42"}},
+            {"id": "member-benefits-contract", "source": "network-operator", "target": "fee-paying-members", "exchange_type": "支付服务与会员权益", "disposition": "drawn", "flow_id": "member-service", "reason": "运营方履行会员服务与权益义务，是收费的对价。", "source_ids": ["SRC-FY"], "source_locations": {"SRC-FY": "Business, Membership services, p. 4"}},
+        ],
+        "value_logic": [
+            {"stage": "creation", "explanation": "组织支付服务与会员权益为付费持卡人解决支付需求。", "flow_ids": ["member-service"], "source_ids": ["SRC-FY"]},
+            {"stage": "delivery", "explanation": "按会员合同持续向持卡人交付支付服务及权益。", "flow_ids": ["member-service"], "source_ids": ["SRC-FY"]},
+            {"stage": "capture", "explanation": "持卡人支付会员费，运营方由服务对价形成收入。", "flow_ids": ["membership-fee"], "source_ids": ["SRC-FY"]},
+        ],
+        "review": {"pass_id": "PASS-CHALLENGE", "graph_sha256": canonical_business_model_sha256(graph), "conclusion": "已独立检查参与者、服务与收费方向；限定业务范围内未发现重要漏项，不推定数据反馈。"},
     }
 
 
@@ -901,6 +923,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
         "source_audit": {"audit_pass_id": "PASS-AUDIT", "selection_seed": seed, "checks": source_checks},
         "claims": extended_claims,
     }
+    evidence["business_model_coverage"] = make_business_model_coverage_fixture(evidence["business_model"])
     write_json(package / "evidence-ledger.json", evidence)
     write_json(
         package / "calculation-ledger.json",

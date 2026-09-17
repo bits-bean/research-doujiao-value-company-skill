@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "e7bfd8e38b43286867ddf43cf9b0fb5dfdcd98c4feba4d0a6fda39f89655fc9a",
-    "toolchain_digest_sha256": "e0c8bd3368d188bd4ae380e541e84eeaad58ccf3fed5a5f190315484723be74c",
-    "bundle_digest_sha256": "c711ed3b2bfc89ce84c60798a6fe8b1f40c848776254fcba361be5d5536f8a6d",
+    "normative_digest_sha256": "30f73ea49c7c9c6f6219fa7f06f3502b88ed021034d275a32821c67b753932be",
+    "toolchain_digest_sha256": "419dde6a7cef37cc18d631349ab39f6c8e3665d3acfccfb7fad2ef4883412be6",
+    "bundle_digest_sha256": "89e833b7fb6fdf8bd95f3ee63e9c290c4bd4553fbdbd0586b0e321597fef2a35",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "adf6ae179bcdf842b8d88104a3a3b59a06b746695e2ff4f4aba74f077a426569",
-        "size_bytes": 25226
+        "sha256": "ecf75fb561995a6b04456f9dedc55fb5c5ad2806cab997f9a4a8ce91e8670928",
+        "size_bytes": 25937
       },
       {
         "path": "agents/openai.yaml",
@@ -46,8 +46,14 @@
       {
         "path": "references/business-model-actors.md",
         "role": "normative",
-        "sha256": "07c5cc10e4162a8eabdd76a53f986abaf0f2e9f9303cb5685373c069043db58c",
-        "size_bytes": 8325
+        "sha256": "72d202e5c12234658c151ddd208839aa90027f5e7f1d9fe9578af1ee183a13c6",
+        "size_bytes": 19627
+      },
+      {
+        "path": "references/business-model-feedback.md",
+        "role": "normative",
+        "sha256": "bed437fb272881a7f11ed2204efce8c1b419b018c9c9b7d3d2381d39b257ce42",
+        "size_bytes": 7583
       },
       {
         "path": "references/classification-and-chart-routing.md",
@@ -58,8 +64,8 @@
       {
         "path": "references/evidence-and-calculation.md",
         "role": "normative",
-        "sha256": "b0ea04b1ff432169bf3d12f89f00d4297b95d3132dbd0ffb2831e84fa7607a58",
-        "size_bytes": 13138
+        "sha256": "e869306802435364db1721c08598cc49a367931d87b21c42581769be8f6523cf",
+        "size_bytes": 13886
       },
       {
         "path": "references/github-archive.md",
@@ -82,8 +88,8 @@
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "3b9642db50e5e382a47bbe4cdfc563c96dd9ae82aa38a0b31bd4495730c86421",
-        "size_bytes": 25717
+        "sha256": "e479aa57386b48b2fce0137bbad45005d640bc1dd7ee03132342c5fe96bbebe2",
+        "size_bytes": 26712
       },
       {
         "path": "references/research-contract.md",
@@ -94,8 +100,8 @@
       {
         "path": "references/research-execution-and-audit.md",
         "role": "normative",
-        "sha256": "37ef3bf5df9095f2e0d7dda27c0addd367e7d13247e4979458af99f44266af8e",
-        "size_bytes": 13530
+        "sha256": "fc5b5f0cd13c1f04a83b17fc4982f087886b2cdcc847111619b3678d49a0cff6",
+        "size_bytes": 13715
       },
       {
         "path": "references/revenue-mix-history.md",
@@ -152,6 +158,12 @@
         "size_bytes": 42117
       },
       {
+        "path": "scripts/validate_business_feedback.py",
+        "role": "toolchain",
+        "sha256": "8ca9256069a8cd3ce784b103d6f08eff4af0a0c5055897ac9ca9e0bc09bb885c",
+        "size_bytes": 11920
+      },
+      {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
         "sha256": "03547cf164f7d065a87351fa8ee0459e8e1319af2f7f40f426877faaac2c5ec7",
@@ -160,8 +172,8 @@
       {
         "path": "scripts/validate_research_process.py",
         "role": "toolchain",
-        "sha256": "ba3a8b6bb727d5446d5f3a3b96f8bac211f0ee2d9ffa2370987f16341935f389",
-        "size_bytes": 84420
+        "sha256": "2dbacc4478bc05f02bcb3b0140a2566bba80d2d87bc2923b5ce89538881ad89c",
+        "size_bytes": 98440
       },
       {
         "path": "scripts/validate_skill.py",
