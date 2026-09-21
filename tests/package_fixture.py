@@ -58,6 +58,10 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
     """Create real-schema inputs; the caller may add validation report and manifest."""
     schema_path = root / "company.schema.json"
     shutil.copyfile(ROOT / "references/specs/company.schema.json", schema_path)
+    trust_findings = []
+    trusted_lock = load_trusted_spec_lock(trust_findings)
+    if trusted_lock is None:
+        raise AssertionError(f"test fixture requires a valid bundled trust lock: {trust_findings!r}")
     package = root / "package"
     package.mkdir()
 
@@ -271,7 +275,7 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             "accounting_standard": "US GAAP",
             "display_language": "zh-CN",
             "source_version": "2026Q1",
-            "schema_version": "2.3.0",
+            "schema_version": trusted_lock["company_schema"]["schema_version"],
             "theme": "light",
             "sankey_style": "app-economy-inspired-light",
         },
@@ -675,10 +679,6 @@ def make_valid_unfrozen_package(root: Path) -> tuple[Path, Path, dict]:
             }
         )
 
-    trust_findings = []
-    trusted_lock = load_trusted_spec_lock(trust_findings)
-    if trusted_lock is None:
-        raise AssertionError(f"test fixture requires a valid bundled trust lock: {trust_findings!r}")
     all_claim_ids = [item["id"] for item in extended_claims]
     preflight = []
     for capability in (

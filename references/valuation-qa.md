@@ -69,6 +69,10 @@ DCF 不是“给每股收益乘一个倍数”。先按企业类型选择真正�
 
 三个情景使用 `bear / base / bull`，年度必须连续、无重复并完整覆盖 `1..forecast_years`。计算台账保留未缩放原始数值和足以复算现金流的业务驱动；报告只换算展示单位，不改变数字含义。
 
+FCFF 的 `equity_value_bridge` 保留 `explicit_period_present_value + terminal_present_value - net_debt` 的原定义。明确识别的额外桥项可使用：加回 `nonoperating_securities`（非经营证券）和 `nonoperating_assets`（除证券之外的其他非经营资产），扣减 `minority_interests`（少数股东权益）和 `preferred_equity`（优先股权益）。这些输入必须为非负金额，在三情景正文价值桥分别列出与台账同名语义的金额列，并由实际公式、股权价值与每股价值相互核对；不能通过改写净债务定义、把桥项藏入现值或只写一段说明通过验证。除上述受控输入外的额外项先解决契约，不静默忽略。资产项目不得重复计量，是否可分配及其估值应由来源和模型适用性说明支持。
+
+Reverse DCF 的字段和表格维度按所反推的经济指标归类。`base_revenue_path_required_operating_margin` 等字段反推的是利润率，路径中的 revenue/growth 仅描述条件，不能据此误归为增长维度。至少两个经营维度及现实比较、推翻阈值的要求不变；利润率数值必须与对应台账/结构化值一致。
+
 ## 风险只归位一次
 
 在 `evidence-ledger.json.valuation_review.risk_placements` 中为每项重大风险记录风险标识、经济传导、唯一归位、受影响情景、对应主张和防重复理由；具体机器字段执行 [research-execution-and-audit.md](research-execution-and-audit.md)。唯一归位只使用：

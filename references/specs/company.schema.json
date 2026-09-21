@@ -113,7 +113,7 @@
             "type": "object",
             "properties": {
               "schema_version": {
-                "enum": ["2.2.0", "2.3.0"]
+                "enum": ["2.2.0", "2.3.0", "2.4.0"]
               }
             },
             "required": ["schema_version"]
@@ -233,6 +233,79 @@
                     }
                   },
                   "required": ["category"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "meta": {
+            "type": "object",
+            "properties": {
+              "schema_version": {
+                "const": "2.4.0"
+              }
+            },
+            "required": ["schema_version"]
+          }
+        },
+        "required": ["meta"]
+      },
+      "then": {
+        "properties": {
+          "income_statement_sankey": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "revenue_source",
+                        "revenue_subtotal",
+                        "revenue_offset",
+                        "revenue_total",
+                        "cost_expense",
+                        "cost_offset",
+                        "cost_subtotal",
+                        "pretax_costs_total",
+                        "profit_addition",
+                        "profit_deduction",
+                        "profit_subtotal",
+                        "pretax_profit",
+                        "income_tax",
+                        "net_income"
+                      ]
+                    }
+                  },
+                  "required": ["category"],
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "category": {
+                            "const": "profit_deduction"
+                          }
+                        },
+                        "required": ["category"]
+                      },
+                      "then": {
+                        "properties": {
+                          "statement_value": {
+                            "type": "number",
+                            "exclusiveMaximum": 0
+                          }
+                        },
+                        "required": ["statement_value"]
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -459,9 +532,9 @@
         },
         "schema_version": {
           "type": "string",
-          "enum": ["2.0.0", "2.1.0", "2.2.0", "2.3.0"],
-          "default": "2.3.0",
-          "description": "company.json 数据协议版本。2.3.0 新增以正值守恒表示负收入抵减的 revenue_subtotal / revenue_offset 受控桥；2.2.0 为利润表 Sankey 节点新增必填原表符号金额 statement_value，并继续以正数 value 表示几何流量；2.0.0、2.1.0 与 2.2.0 仅为向后兼容既有冻结包。"
+          "enum": ["2.0.0", "2.1.0", "2.2.0", "2.3.0", "2.4.0"],
+          "default": "2.4.0",
+          "description": "company.json 数据协议版本。2.4.0 新增保留负报表金额的终端 profit_deduction，并允许互不重叠的 revenue_source / revenue_subtotal 混合汇入总收入；2.3.0 新增 revenue_subtotal / revenue_offset 受控收入桥；2.2.0 新增必填 statement_value，正数 value 等于其绝对值；2.0.0 至 2.3.0 保留原有协议语义以兼容既有冻结包。"
         },
         "theme": {
           "type": "string",
@@ -779,7 +852,7 @@
         },
         "category": {
           "$ref": "#/$defs/nullableString",
-          "description": "Schema 2.3.0 的受控收入抵减使用可嵌套的 revenue_source / revenue_subtotal 正值 continuation 最终到达 revenue_total；revenue_subtotal 可另外分流至终端 revenue_offset，revenue_offset 保留负 statement_value 并使用正 value。"
+          "description": "Schema 2.3.0 及后续版本使用可嵌套的 revenue_source / revenue_subtotal 唯一正值 continuation 到达 revenue_total；subtotal 可分流至负 statement_value、正 value 的终端 revenue_offset。Schema 2.4.0 另允许互不重叠的 source/subtotal 混合汇入总收入；profit_deduction 必须保留负 statement_value，正 value 等于其绝对值，仅可由 profit_subtotal 单一流入并终止，不得流入收入或成本。跨节点拓扑与守恒由共享运行时校验。"
         },
         "color": {
           "$ref": "#/$defs/nullableString"
