@@ -37,11 +37,11 @@
 
 ### 审查旧研究包
 
-读取研究包自身的 manifest 与冻结文件。若 manifest 为 `1.0`，只能使用 `audit` 模式诊断，不得作为新增量研究的前序版本，不得重新冻结或 GitHub 归档。若要继续生产，按当前研究协议和当前锁定 Schema 重建新包；`company.json.meta.schema_version` 写当前 `2.3.0`，而 `manifest_version` 仍保持 `2.0`。
+读取研究包自身的 manifest 与冻结文件。若 manifest 为 `1.0`，只能使用 `audit` 模式诊断，不得作为新增量研究的前序版本，不得重新冻结或 GitHub 归档。若要继续生产，按当前研究协议和当前锁定 Schema 重建新包；`company.json.meta.schema_version` 写当前 `2.4.0`，而 `manifest_version` 仍保持 `2.0`。
 
-若 manifest 为 v2 但 `company.json.meta.schema_version` 与当前 Skill 锁定版本不同，同样只能按旧锁审计；Schema 1.x、2.0.0、2.1.0 与 2.2.0 包都不能作为当前 Schema 2.3.0 incremental 的前序包。迁移时回到原始证据，重建当前协议要求的结构字段，在新目录运行当前 `full` 门禁后冻结，不能机械复制旧自由文本或只改版本号。
+若 manifest 为 v2 但 `company.json.meta.schema_version` 与当前 Skill 锁定版本不同，同样只能按旧锁审计；Schema 1.x、2.0.0、2.1.0、2.2.0 与 2.3.0 包都不能作为当前 Schema 2.4.0 incremental 的前序包。迁移时回到原始证据，重建当前协议要求的结构字段，在新目录运行当前 `full` 门禁后冻结，不能机械复制旧自由文本或只改版本号。
 
-兼容研究协议文档中保留的“Schema 1.x → 2.0”文字记录历史迁移边界，不决定当前数据协议版本。任何新建、迁移、增量或归档都以 `trusted-spec-lock.json.company_schema` 的当前版本为准；当前锁定版本为 2.3.0。
+兼容研究协议文档中保留的“Schema 1.x → 2.0”文字记录历史迁移边界，不决定当前数据协议版本。任何新建、迁移、增量或归档都以 `trusted-spec-lock.json.company_schema` 的当前版本为准；当前锁定版本为 2.4.0。
 
 历史 v2 manifest 若只有兼容 `research_protocol`、没有 `integrity_profile: execution-bound-v1` 与 `execution_integrity`，可用 `audit` 模式诊断，但不能作为当前正式冻结或增量前序包。不要原地补写完整性声明。
 

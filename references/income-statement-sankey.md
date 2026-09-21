@@ -4,20 +4,20 @@
 
 先逐行提取同一财年年报利润表及相关附注，再生成节点；禁止先画图再凑数。把提取结果写入 `calculation-ledger.json.income_statement_sankey`，逐项保存 `node_id / value / source_ids / location`，其中台账 `value` 必须保留报表原始符号。年报单列的收入、成本、费用、所得税和利润不得遗漏或自行合并；只有年报本身合并披露时才能沿用合并口径。
 
-节点 `category` 只使用：`revenue_source / revenue_subtotal / revenue_offset / revenue_total / cost_expense / cost_offset / cost_subtotal / pretax_costs_total / profit_addition / profit_subtotal / pretax_profit / income_tax / net_income`。Schema 2.2.0 及以后每个节点同时保存：
+节点 `category` 只使用：`revenue_source / revenue_subtotal / revenue_offset / revenue_total / cost_expense / cost_offset / cost_subtotal / pretax_costs_total / profit_addition / profit_deduction / profit_subtotal / pretax_profit / income_tax / net_income`。Schema 2.2.0 及以后每个节点同时保存：
 
-- `statement_value`：披露或计算值的实际原始数值，保留正负号；只有 `cost_offset` 与 Schema 2.3.0 的 `revenue_offset` 可以为负；
+- `statement_value`：披露或计算值的实际原始数值，保留正负号；只有 `cost_offset`、Schema 2.3.0 起的 `revenue_offset` 与 Schema 2.4.0 起的 `profit_deduction` 可以为负；
 - `value`：仅作为桑基宽度与流量守恒值，必须为正数且等于 `abs(statement_value)`；
 - `links[].value`：必须为正数，不得用负连线、零宽连线或改号后的净额伪造守恒。
 
-Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`；Schema 2.2.0 保留有符号成本抵减和利润加项，但没有收入抵减角色。它们都不得作为当前 2.3.0 正式冻结或增量链的前序包。
+Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`；Schema 2.2.0 保留有符号成本抵减和利润加项，但没有收入抵减角色。Schema 2.3.0 没有利润扣减角色。历史版本不得作为当前 2.4.0 正式冻结或增量链的前序包。
 
 ## 生成模板
 
 收入起点按披露结构二选一：
 
 1. 年报收入分项没有中间小计或负收入抵减时，每项 `revenue_source → revenue_total`；
-2. 年报披露收入层级或负收入抵减时，使用 `revenue_source → revenue_subtotal* → revenue_total`。每个 `revenue_source` 必须无流入且恰有一条收入主链流出；每个 `revenue_subtotal` 只接收 `revenue_source / revenue_subtotal`，恰有一条流向下一 `revenue_subtotal / revenue_total` 的 continuation 边，其余流出只能是终端 `revenue_offset`。每个收入来源和小计都必须沿各自唯一的 continuation 路径到达同一个 `revenue_total`，不得把平面收入源和小计父节点混接到总收入。
+2. 年报披露收入层级或负收入抵减时，使用 `revenue_source → revenue_subtotal* → revenue_total`。每个 `revenue_source` 必须无流入且恰有一条收入主链流出；每个 `revenue_subtotal` 只接收 `revenue_source / revenue_subtotal`，恰有一条流向下一 `revenue_subtotal / revenue_total` 的 continuation 边，其余流出只能是终端 `revenue_offset`。每个收入来源和小计都必须沿各自唯一的 continuation 路径到达同一个 `revenue_total`，Schema 2.4.0 允许总收入同时接收互不重叠的直接来源和小计，例如产品分项经产品小计汇入总收入、服务来源直接汇入总收入；不新增虚构小计，不让同一来源同时走直接和间接路径。Schema 2.3.0 及以前仍保留不混接两类父节点的历史约束。
 
 `revenue_offset` 用于年报单列的负收入调整。它必须保留负 `statement_value`，以正的绝对值作为几何流量，只能由 `revenue_subtotal` 流入且必须无流出。于是抵减前收入小计的正流量分成“披露净收入 + 抵减绝对额”，机械等价于 `净收入 = 抵减前收入 + 负收入抵减`。不得把抵减改成正收入源流入 `revenue_total`，也不得把它分摊进某个正收入分项。`revenue_total` 仍是唯一与 `financials[].revenue` 勾稽的披露净收入节点。
 
@@ -30,9 +30,11 @@ Schema 2.0.0 / 2.1.0 历史包在审计时可没有 `statement_value`；Schema 2
 
 逐级利润桥可在下一个 `profit_subtotal` 或 `pretax_profit` 接收受控的 `profit_addition` 根节点。该节点的 `statement_value` 必须严格为正，必须无流入、恰有一条正值连线指向对应利润节点。上一利润节点与下一利润节点之间的桥接连线使用扣除本层正成本后的余额；下一利润节点的流入合计则包含该余额与全部正收益加项。
 
+Schema 2.4.0 的 `profit_deduction` 表达报表原值为负的利润扣减。它必须保留严格负的 `statement_value`、正的绝对值几何流量，只有一个 `profit_subtotal` 父节点且无流出；不得由收入、成本或税前利润节点流入。父节点仍须保留唯一的后续利润 continuation。该 continuation 的计算输入键必须恰好对应父利润节点、所有直接正成本子节点与所有直接利润扣减子节点，数值均保留节点原始符号；公式为“父利润 − 正成本 + 负利润扣减”。例如负的其他净收支不能改成正费用、改用 `cost_offset`、删去或静默净额化。
+
 年报披露的净成本 subtotal 含负费用时，使用 `cost_offset`。它必须保留负 `statement_value`，无流入、恰有一条正值连线指向 `cost_subtotal`；该目标 subtotal 还必须有恰一个非 offset 的结构父节点。这允许“披露净成本 + 负费用的绝对值 → 正成本合计（计算值） → 各正成本子项”，既不重复计量负费用，也不改号或静默净额化。`cost_offset` 不得指向 `pretax_costs_total`。
 
-`cost_subtotal` 必须继续展开到已披露子项；`profit_subtotal` 每层必须恰有一个后续利润节点。通常还须有至少一个成本/费用分支；若本层没有成本分支，只有后续利润节点另有至少一个受控 `profit_addition` 流入时才允许主链原额续接。最低层级的 `revenue_total → pretax_profit` 仍必须同时分出唯一 `pretax_costs_total`。禁止总收入直接连接所得税或净利润，禁止把多项已披露费用合并成“其他费用”，也禁止用净利润替代税前利润桥。
+`cost_subtotal` 必须继续展开到已披露子项；`profit_subtotal` 每层必须恰有一个后续利润节点。通常还须有至少一个成本/费用或利润扣减分支；若两者都没有，只有后续利润节点另有至少一个受控 `profit_addition` 流入时才允许主链原额续接。最低层级的 `revenue_total → pretax_profit` 仍必须同时分出唯一 `pretax_costs_total`。禁止总收入直接连接所得税或净利润，禁止把多项已披露费用合并成“其他费用”，也禁止用净利润替代税前利润桥。
 
 ## 计算值与来源
 

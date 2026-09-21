@@ -27,15 +27,15 @@
   },
   "execution_integrity": {
     "profile": "execution-bound-v1",
-    "normative_digest_sha256": "30f73ea49c7c9c6f6219fa7f06f3502b88ed021034d275a32821c67b753932be",
-    "toolchain_digest_sha256": "419dde6a7cef37cc18d631349ab39f6c8e3665d3acfccfb7fad2ef4883412be6",
-    "bundle_digest_sha256": "89e833b7fb6fdf8bd95f3ee63e9c290c4bd4553fbdbd0586b0e321597fef2a35",
+    "normative_digest_sha256": "162cb137bf8e2ac9881e0842975a868973dafd9a897daa53c8ad21a50fd89f88",
+    "toolchain_digest_sha256": "6d133769678cb210be94b3736e2329fe20a20c8c8798a22c78a21b5b508fc918",
+    "bundle_digest_sha256": "33059f680ea04264a94275d1b417ef3ff304898f997b1e43ad5c4baf1f7d4ac4",
     "artifacts": [
       {
         "path": "SKILL.md",
         "role": "normative",
-        "sha256": "ecf75fb561995a6b04456f9dedc55fb5c5ad2806cab997f9a4a8ce91e8670928",
-        "size_bytes": 25937
+        "sha256": "95593b0ae61f99fc199f949798c4a54cf98069c8069d207c95cd0760c31008cb",
+        "size_bytes": 26177
       },
       {
         "path": "agents/openai.yaml",
@@ -58,8 +58,8 @@
       {
         "path": "references/classification-and-chart-routing.md",
         "role": "normative",
-        "sha256": "7435443cf515ed8564f9e35ceda794bfc0b73295c3f4ef10a833b3b23c9faa12",
-        "size_bytes": 8164
+        "sha256": "2c0dd3592fe52143a7223fc4830dff9da6f9575c5b72208c17be90f020889888",
+        "size_bytes": 10489
       },
       {
         "path": "references/evidence-and-calculation.md",
@@ -70,32 +70,32 @@
       {
         "path": "references/github-archive.md",
         "role": "normative",
-        "sha256": "c6e4d60586f407b282982a425f6f7714e30280b51713e0962f7eb80aa9a2cbbc",
-        "size_bytes": 12651
+        "sha256": "e0eae3ea0c93f1cba66c3db7510f757eaad342a0eb29a8ab01918eb483e499e9",
+        "size_bytes": 12659
       },
       {
         "path": "references/identity-assets.md",
         "role": "normative",
-        "sha256": "3995975f067d82eb73ffa237d01db4258f8c94030b4c40e5e68c172a09014004",
-        "size_bytes": 19366
+        "sha256": "c70dac751be20bff62e456db7cee8adaf08ea0b9fd6fbc6ac88d15a820b719d5",
+        "size_bytes": 19643
       },
       {
         "path": "references/income-statement-sankey.md",
         "role": "normative",
-        "sha256": "9daf042ecd6a2591fb255cbd428a7a18964b05403bdd45f38516b4eb7b617fd7",
-        "size_bytes": 16896
+        "sha256": "f105ababcadfb54e2ea056985fa77f689e864df441ced26e96763691f3d17473",
+        "size_bytes": 17920
       },
       {
         "path": "references/qa-gates.md",
         "role": "normative",
-        "sha256": "e479aa57386b48b2fce0137bbad45005d640bc1dd7ee03132342c5fe96bbebe2",
-        "size_bytes": 26712
+        "sha256": "b9108b46eb4d050fe5c8974ed03abc147dcb545c4691b4573c044fb842c2854f",
+        "size_bytes": 27311
       },
       {
         "path": "references/research-contract.md",
         "role": "normative",
-        "sha256": "00b81614f7f1e37e90ae54921f9e8f4287e9cd658b1581cdebf4b6e3f6dd033d",
-        "size_bytes": 31556
+        "sha256": "dbbc4fce40c7cb06b6127512da0c43b7510d66fa50c122fc077b351d9b7a2828",
+        "size_bytes": 31572
       },
       {
         "path": "references/research-execution-and-audit.md",
@@ -106,14 +106,14 @@
       {
         "path": "references/revenue-mix-history.md",
         "role": "normative",
-        "sha256": "7e6c02f8dcf23e8e73e50fd58a8bb918bfe0df86ea3b347deba1a407a65322fc",
+        "sha256": "55262c76633aba3cb0bec1865001787a7bf0297ff0a8513edc8e0f7a153dddbf",
         "size_bytes": 12029
       },
       {
         "path": "references/source-routing.md",
         "role": "normative",
-        "sha256": "e2d4e983902a5514ad536c425622e0fdd8e80b6d00d7c37daae6b93253c9e01d",
-        "size_bytes": 12221
+        "sha256": "e5ea4487e6ef924953774e512632c589d0dc944b45694e6ad710132146a7377c",
+        "size_bytes": 12229
       },
       {
         "path": "references/specs/automation-workflow.md",
@@ -136,8 +136,8 @@
       {
         "path": "references/valuation-qa.md",
         "role": "normative",
-        "sha256": "abb6aaf883c7432e0041e02fa15c173de10139845181482c5be25696dbba8050",
-        "size_bytes": 14054
+        "sha256": "7299941fc4c23402aa4e47ae3acfb1b2f138e5f0da0dd5a1115ed0e7f3e816f3",
+        "size_bytes": 15248
       },
       {
         "path": "scripts/freeze_research.py",
@@ -148,8 +148,8 @@
       {
         "path": "scripts/prepare_github_archive.py",
         "role": "toolchain",
-        "sha256": "829e3e1daca0b627314ba0db53921749c97b85c91a049743c3ca5865cab7eaa5",
-        "size_bytes": 134038
+        "sha256": "53ab985f7124878305e682f0b07e2499c77cc65272d8bc8b182af6e16b0d7c7c",
+        "size_bytes": 136230
       },
       {
         "path": "scripts/prepare_sankey_color_audit.py",
@@ -166,8 +166,8 @@
       {
         "path": "scripts/validate_research_package.py",
         "role": "toolchain",
-        "sha256": "03547cf164f7d065a87351fa8ee0459e8e1319af2f7f40f426877faaac2c5ec7",
-        "size_bytes": 326050
+        "sha256": "0f7a0b6bfd0b2d647577a46a53ff07b1fd17a22735b0bf3d13a967bc1a772ba0",
+        "size_bytes": 340077
       },
       {
         "path": "scripts/validate_research_process.py",
@@ -198,12 +198,12 @@
   "company_schema": {
     "repository": "bits-bean/doujiao-value-system",
     "ref": "main",
-    "commit": "72e6ecb706b9f203557cc147e19f47051eb9028e",
+    "commit": "1baf0ae081dafe9ba0db334684fe73a8c656e828",
     "path": "schemas/company.schema.json",
-    "blob_sha1": "deddf446609f26f4415c367178b012cf1a17b8e2",
-    "sha256": "6bbb50bf715d607cfc47118a9525250364229f4fea06318832cd3f5b93481695",
-    "size_bytes": 38994,
-    "schema_version": "2.3.0",
+    "blob_sha1": "95425d0eaa8bf79f85b53523275e6463031c08e2",
+    "sha256": "75cb5f9b7241fe61172dd82bc7ca818c343d9f6744494c10c1870356724f9b5f",
+    "size_bytes": 41516,
+    "schema_version": "2.4.0",
     "bundled_path": "references/specs/company.schema.json"
   }
 }

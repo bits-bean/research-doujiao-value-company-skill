@@ -771,6 +771,75 @@ class GithubDeliveryTests(unittest.TestCase):
                         "update-confirmed-schema-migration",
                     )
 
+    def test_schema_2_3_to_2_4_requires_migration_and_separate_same_date_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"].update(schema_version="2.4.0", data_as_of="2026-03-31", valuation_date="2026-04-15")
+            write_json(new_path, new_company)
+            existing = root / "existing-schema-2-3.json"
+            old_company = copy.deepcopy(new_company)
+            old_company["meta"].update(schema_version="2.3.0", data_as_of="2025-12-31", valuation_date="2026-01-15")
+            write_json(existing, old_company)
+            kwargs = {
+                "existing_company_path": existing,
+                "canonical_absent": False,
+                "locked_schema_version": "2.4.0",
+            }
+
+            with self.assertRaisesRegex(ArchivePlanError, "Schema migration requires explicit confirmation"):
+                canonical_action(new_path, confirm_same_date_revision=False, **kwargs)
+            self.assertEqual(
+                canonical_action(new_path, confirm_same_date_revision=False, confirm_schema_migration=True, **kwargs),
+                "update-confirmed-schema-migration",
+            )
+
+            old_company["meta"].update(data_as_of="2026-03-31", valuation_date="2026-04-15")
+            write_json(existing, old_company)
+            with self.assertRaisesRegex(ArchivePlanError, "same data_as_of"):
+                canonical_action(new_path, confirm_same_date_revision=False, confirm_schema_migration=True, **kwargs)
+            with self.assertRaisesRegex(ArchivePlanError, "Schema migration requires explicit confirmation"):
+                canonical_action(new_path, confirm_same_date_revision=True, **kwargs)
+            self.assertEqual(
+                canonical_action(new_path, confirm_same_date_revision=True, confirm_schema_migration=True, **kwargs),
+                "update-confirmed-schema-migration",
+            )
+
+    def test_schema_2_3_upgrade_does_not_bypass_identity_dates_or_current_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            package, _, _ = self.make_package(root)
+            new_path = package / "company.json"
+            new_company = json.loads(new_path.read_text(encoding="utf-8"))
+            new_company["meta"].update(schema_version="2.4.0", data_as_of="2026-03-31", valuation_date="2026-04-15")
+            write_json(new_path, new_company)
+            existing = root / "existing-schema-2-3.json"
+            for mutation in ("identity", "newer_data", "noncurrent_target", "unknown_patch_version"):
+                with self.subTest(mutation=mutation):
+                    old_company = copy.deepcopy(new_company)
+                    old_company["meta"].update(schema_version="2.3.0", data_as_of="2025-12-31", valuation_date="2026-01-15")
+                    locked = "2.4.0"
+                    if mutation == "identity":
+                        old_company["meta"]["ticker"] = "OTHER"
+                    elif mutation == "newer_data":
+                        old_company["meta"]["data_as_of"] = "2026-06-30"
+                    elif mutation == "noncurrent_target":
+                        locked = "2.5.0"
+                    else:
+                        old_company["meta"]["schema_version"] = "2.3.1"
+                    write_json(existing, old_company)
+                    with self.assertRaises(ArchivePlanError):
+                        canonical_action(
+                            new_path,
+                            existing_company_path=existing,
+                            canonical_absent=False,
+                            confirm_same_date_revision=True,
+                            confirm_schema_migration=True,
+                            locked_schema_version=locked,
+                        )
+
     def test_schema_migration_rejects_downgrade(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

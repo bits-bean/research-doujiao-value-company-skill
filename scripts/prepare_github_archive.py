@@ -221,7 +221,7 @@ class LogoGeometry:
 
 @dataclass(frozen=True)
 class PngRaster:
-    """Validated non-interlaced PNG samples used to prove a pixel-exact crop."""
+    """Validated packed PNG samples in final row order for pixel-exact crop proofs."""
 
     width: int
     height: int
@@ -332,7 +332,7 @@ def canonical_action(
             existing_version is not None
             and (
                 existing_version[0] == 1
-                or existing_version in {(2, 0, 0), (2, 1, 0), (2, 2, 0)}
+                or existing_version in {(2, 0, 0), (2, 1, 0), (2, 2, 0), (2, 3, 0)}
             )
         )
         allowed = (
@@ -1479,6 +1479,7 @@ def _decode_png(path: Path) -> PngRaster:
     idat_ended = False
     expected_decoded_size = 0
     scanline_size = 0
+    passes: list[tuple[int, int, int, int, int, int, int]] = []
     png_height = 0
     png_width = 0
     png_color_type = -1
@@ -1523,12 +1524,25 @@ def _decode_png(path: Path) -> PngRaster:
                 bit_depth not in legal_depths.get(color_type, set())
                 or compression != 0
                 or filter_method != 0
-                or interlace != 0
+                or interlace not in {0, 1}
             ):
                 raise ArchivePlanError("observed PNG uses unsupported or invalid IHDR encoding")
             channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
             scanline_size = (width * channels * bit_depth + 7) // 8
-            expected_decoded_size = (scanline_size + 1) * height
+            # PNG Adam7 pass extraction (W3C PNG 3, section 8): each pass is
+            # filtered independently; empty passes contain no filter byte.
+            steps = ((0, 0, 1, 1),) if interlace == 0 else (
+                (0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8),
+                (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2),
+            )
+            for x0, y0, dx, dy in steps:
+                pass_width = max(0, (width - x0 + dx - 1) // dx)
+                pass_height = max(0, (height - y0 + dy - 1) // dy)
+                if not pass_width or not pass_height:
+                    continue
+                row_size = (pass_width * channels * bit_depth + 7) // 8
+                passes.append((x0, y0, dx, dy, pass_width, pass_height, row_size))
+                expected_decoded_size += (row_size + 1) * pass_height
             if expected_decoded_size <= 0 or expected_decoded_size > 64_000_000:
                 raise ArchivePlanError("observed PNG expands beyond the safe Logo limit")
             png_height = height
@@ -1605,10 +1619,6 @@ def _decode_png(path: Path) -> PngRaster:
         or len(decoded) != expected_decoded_size
     ):
         raise ArchivePlanError("observed PNG compressed image data is incomplete or excessive")
-    for row in range(png_height):
-        if decoded[row * (scanline_size + 1)] > 4:
-            raise ArchivePlanError("observed PNG contains an invalid scanline filter")
-
     bytes_per_pixel = max(1, (png_bit_depth * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[png_color_type] + 7) // 8)
 
     def paeth(left: int, above: int, upper_left: int) -> int:
@@ -1622,30 +1632,54 @@ def _decode_png(path: Path) -> PngRaster:
             return above
         return upper_left
 
-    reconstructed_rows: list[bytes] = []
-    previous = bytes(scanline_size)
-    for row_index in range(png_height):
-        offset = row_index * (scanline_size + 1)
-        filter_type = decoded[offset]
-        filtered = decoded[offset + 1 : offset + 1 + scanline_size]
-        reconstructed = bytearray(scanline_size)
-        for index, value in enumerate(filtered):
-            left = reconstructed[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
-            above = previous[index]
-            upper_left = previous[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
-            if filter_type == 0:
-                predictor = 0
-            elif filter_type == 1:
-                predictor = left
-            elif filter_type == 2:
-                predictor = above
-            elif filter_type == 3:
-                predictor = (left + above) // 2
+    # Keep samples packed: a large valid low-bit-depth image must not allocate
+    # Python integers per pixel. The existing 64 MB limit covers both layouts.
+    rows = [bytearray(scanline_size) for _ in range(png_height)]
+    offset = 0
+    bits_per_pixel = png_bit_depth * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[png_color_type]
+    for x0, y0, dx, dy, pass_width, pass_height, row_size in passes:
+        previous = bytes(row_size)
+        for row_index in range(pass_height):
+            filter_type = decoded[offset]
+            if filter_type > 4:
+                raise ArchivePlanError("observed PNG contains an invalid scanline filter")
+            filtered = decoded[offset + 1 : offset + 1 + row_size]
+            offset += row_size + 1
+            reconstructed = bytearray(row_size)
+            for index, value in enumerate(filtered):
+                left = reconstructed[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                above = previous[index]
+                upper_left = previous[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+                if filter_type == 0:
+                    predictor = 0
+                elif filter_type == 1:
+                    predictor = left
+                elif filter_type == 2:
+                    predictor = above
+                elif filter_type == 3:
+                    predictor = (left + above) // 2
+                else:
+                    predictor = paeth(left, above, upper_left)
+                reconstructed[index] = (value + predictor) & 0xFF
+            previous = bytes(reconstructed)
+            target = rows[y0 + row_index * dy]
+            if dx == 1:
+                target[:] = reconstructed
+            elif bits_per_pixel >= 8:
+                pixel_bytes = bits_per_pixel // 8
+                for column in range(pass_width):
+                    target_start = (x0 + column * dx) * pixel_bytes
+                    source_start = column * pixel_bytes
+                    target[target_start : target_start + pixel_bytes] = reconstructed[source_start : source_start + pixel_bytes]
             else:
-                predictor = paeth(left, above, upper_left)
-            reconstructed[index] = (value + predictor) & 0xFF
-        previous = bytes(reconstructed)
-        reconstructed_rows.append(previous)
+                mask = (1 << bits_per_pixel) - 1
+                for column in range(pass_width):
+                    source_bit = column * bits_per_pixel
+                    sample = (reconstructed[source_bit // 8] >> (8 - bits_per_pixel - source_bit % 8)) & mask
+                    target_bit = (x0 + column * dx) * bits_per_pixel
+                    target[target_bit // 8] |= sample << (8 - bits_per_pixel - target_bit % 8)
+    reconstructed_rows = [bytes(row) for row in rows]
+    del rows
     del decoded
 
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[png_color_type]

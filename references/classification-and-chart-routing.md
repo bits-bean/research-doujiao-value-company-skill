@@ -73,6 +73,17 @@
 
 ## 覆盖与缺失
 
+### 增量投入资本非正时的可审计空值
+
+`standard_roic / payments_network / software_platform` 仍至少需要三个完整财年的增量回报证据。回购、分配或资产变化使滚动投入资本增量非正时，不把机械相除值当成新增项目回报，也不把缺数据当成不适用。可保持 `financials.incremental_roic: null`，但计入该财年覆盖的前提是 **3 年和 5 年两个窗口都通过以下证据门**：
+
+- `industry_metrics` 分别保存 `incremental_roic_3y / incremental_roic_5y`，`value: null`、`value_type: ratio`；`label` 简述非正分母原因，`source_ids` 覆盖窗口来源。Schema 没有 metric notes 字段，不自行添加。
+- `calculation-ledger.json.incremental_roic_windows[]` 每项恰含 `period / window_years / start_period / status / reason_code / capital_basis / economic_reason / delta_nopat_calculation_id / delta_invested_capital_calculation_id / source_ids`。窗口年数只能为 3 或 5，`start_period` 与结束 FY 的年份差必须相符；`status: unavailable`、`reason_code: non_positive_invested_capital_change`。
+- 两个计算 ID 绑定同一结束 FY 的 `metric: custom` 数字计算。NOPAT 的输入恰为 `beginning_nopat / ending_nopat`，公式 `ending_nopat - beginning_nopat`；投入资本输入恰为 `beginning_invested_capital / ending_invested_capital`，公式 `ending_invested_capital - beginning_invested_capital`。两条 `result` 均保留有限数字并按实际金额复算，不能用 null 跳过计算；投入资本差额必须 `<= 0`。
+- 两条计算均须有年报或监管原始披露来源；窗口和指标来源覆盖计算来源。`capital_basis` 说明窗口两端一致的资本定义，`economic_reason` 说明具体资本分配或资产变化如何使增量比率失去解释力，报告说明由此不能识别新增项目回报。
+
+单个窗口不适用仍应记录，但不能单独替代该财年的两个窗口覆盖。正的资本增量无论多小，都不自动适用该豁免；保留机械计算和解释，不设无来源的通用“小分母”阈值。缺少窗口输入、只写“资料不足”、缺官方来源、公式不符、正分母或不足三个不同 FY，均不能通过覆盖门。下游保留空值断点，不补成 0，不从 null 推断回报良好。
+
 - 正式完整研究默认给主指标和普通行业的辅助 / 增量结果各至少八个完整财年；上市不足八年时覆盖全部可得完整财年，并在完整度说明中解释。
 - `regulated_bank` 与 `payments_credit` 采用明确例外：ROE / ROTCE 主指标仍须长期序列；资本约束板块允许使用最新报告期的 CET1 / 资本充足率加管理层目标区间或监管最低要求作当前仪表，不要求伪造八年资本序列；第三板块可在每股权益长期序列与至少三个完整财年的回购对股数影响之间二选一。
 - 当前资本仪表必须把实绩值与同一报告期的目标上下限或监管最低要求一起冻结。只有一个孤立 CET1 / 资本充足率数值不满足路由；完整度说明须明确当前截面不能代表长期资本趋势。

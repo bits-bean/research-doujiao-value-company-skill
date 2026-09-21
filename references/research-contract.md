@@ -54,7 +54,7 @@ research/<company-slug>/<YYYY-MM-DD>/
 
 严格通过锁定 commit 的 `schemas/company.schema.json`。不得加入研究包状态、冻结哈希、制作说明或平台内容；这些属于 sidecar 文件。
 
-当前 Schema 2.3.0 允许读取历史 2.0.0 / 2.1.0 / 2.2.0 包，但新研究固定写 `meta.schema_version: 2.3.0`。财务期在官方披露可得时分别保存总净利润、归属于普通股股东的利润和公司报告的稀释 EPS；缺失使用 `null`。不得用 `net_income ÷ diluted_shares` 生成 `diluted_eps`，也不得把归母口径与总净利润无声混用。
+当前 Schema 2.4.0 允许读取历史 2.0.0 / 2.1.0 / 2.2.0 / 2.3.0 包，但新研究固定写 `meta.schema_version: 2.4.0`。财务期在官方披露可得时分别保存总净利润、归属于普通股股东的利润和公司报告的稀释 EPS；缺失使用 `null`。不得用 `net_income ÷ diluted_shares` 生成 `diluted_eps`，也不得把归母口径与总净利润无声混用。
 
 Schema 2.x 的 `classification` 与 `industry_metrics` 必须完整执行 [classification-and-chart-routing.md](classification-and-chart-routing.md)。分类来自官方业务与监管证据；宽 sector 和行业 slug 仅用于标签与检索，公司类型驱动的会计计算与资本回报图表路由只由 `accounting_profile` 和 `returns_profile` 控制。行业指标按 `period + code` 唯一，并保留 `value_type` 与来源。银行与支付信贷的主 ROE / ROTCE 必须是长期序列；资本约束可用最新 CET1 / 资本充足率配合同期管理层目标区间或监管最低要求作当前仪表；第三板块必须在每股权益长期序列和至少三个完整财年的回购对股数影响中二选一。当前资本截面不能冒充长期趋势，须在完整度说明中标明限制。
 
@@ -270,7 +270,7 @@ Too Hard 研究若存在可豁免的结构缺口，每个 warning code 都必须
 
 - 旧 Schema 冻结包保持不可变，只按其原 manifest 和旧 Schema 审计；不得在旧目录补字段或改版本号。
 - 新建迁移目录，从原始来源重新验证分类、行业指标、二十年长期生存三维判断、承诺结果与下一验证、资本配置结果、风险因果链和长期跟踪方法；不得把旧自由文本机械塞入新字段，也不得从网站展示、护城河分数或估值字段反推公司类型与长期生存结论。
-- 迁移包必须通过当前锁定 Schema 2.3.0 的 `full` 验证并作为新的完整基线冻结。Schema 1.x、2.0.0、2.1.0 与 2.2.0 manifest 都不能成为 2.3.0 `incremental` 前序；后续增量从这个 2.3.0 基线开始。
+- 迁移包必须通过当前锁定 Schema 2.4.0 的 `full` 验证并作为新的完整基线冻结。Schema 1.x、2.0.0、2.1.0、2.2.0 与 2.3.0 manifest 都不能成为 2.4.0 `incremental` 前序；后续增量从这个 2.4.0 基线开始。
 - 数据日和估值日不得因迁移回退。只允许从语义版本更低的 Schema 升级到当前锁定版本，禁止降级；同日迁移属于结构化重建，必须经过人工接受，归档时同时显式确认 Schema 迁移和同日修订。
 - 远端 `companies/<slug>/` 仍使用整包替换；只替换受管研究文件，保留 `images/` 和其他非研究资产。公司 Logo 由独立单文件门禁决定保留、创建或在另获明确授权后替换。
 

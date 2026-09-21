@@ -175,7 +175,7 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "$schema", "$id", "$defs", "$ref", "$comment",
     "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly",
     "type", "additionalProperties", "required", "properties", "items", "enum", "const",
-    "allOf", "if", "then", "pattern", "minLength", "minimum", "exclusiveMinimum", "maximum",
+    "allOf", "if", "then", "pattern", "minLength", "minimum", "exclusiveMinimum", "maximum", "exclusiveMaximum",
     "uniqueItems", "minItems", "maxItems", "format",
 }
 REPORT_SECTIONS = (
@@ -873,6 +873,8 @@ def validate_schema(instance: Any, schema: dict[str, Any], root: dict[str, Any],
             add(findings, "error", "schema-exclusive-minimum", path, f"must be above {schema['exclusiveMinimum']}")
         if "maximum" in schema and instance > schema["maximum"]:
             add(findings, "error", "schema-maximum", path, f"above {schema['maximum']}")
+        if "exclusiveMaximum" in schema and instance >= schema["exclusiveMaximum"]:
+            add(findings, "error", "schema-exclusive-maximum", path, f"must be below {schema['exclusiveMaximum']}")
     if isinstance(instance, list):
         if len(instance) < schema.get("minItems", 0):
             add(findings, "error", "schema-min-items", path, "array is too short")
@@ -1768,11 +1770,132 @@ def validate_too_hard_acknowledgements(company: dict[str, Any], text: str, findi
             )
 
 
+def validate_incremental_roic_unavailability(
+    company: dict[str, Any], calculations: Any, findings: list[Finding]
+) -> set[str]:
+    """Count evidenced nonpositive capital changes, never undocumented missing data."""
+    if not isinstance(calculations, dict) or "incremental_roic_windows" not in calculations:
+        return set()
+    windows = calculations.get("incremental_roic_windows")
+    if not isinstance(windows, list):
+        add(findings, "error", "incremental-roic-unavailability", "calculation-ledger.json.incremental_roic_windows", "must be an array of evidenced unavailable rolling windows")
+        return set()
+    financials = {
+        item.get("period"): item for item in list_or_empty(company.get("financials"))
+        if isinstance(item, dict) and item.get("period_type") == "FY"
+    }
+    metrics = {
+        (item.get("period"), item.get("code")): item
+        for item in list_or_empty(company.get("industry_metrics")) if isinstance(item, dict)
+    }
+    source_types = {
+        source.get("id"): source.get("source_type")
+        for source in list_or_empty(company.get("sources")) if isinstance(source, dict)
+    }
+    records = {
+        item.get("id"): item for item in list_or_empty(calculations.get("calculations"))
+        if isinstance(item, dict)
+    }
+    official_types = {"annual_report", "regulatory_filing"}
+    valid_windows: dict[str, set[int]] = {}
+    observed_amounts: dict[tuple[str, str], Decimal] = {}
+    capital_bases: dict[str, str] = {}
+    seen: set[tuple[Any, Any]] = set()
+    required_keys = {
+        "period", "window_years", "start_period", "status", "reason_code",
+        "capital_basis", "economic_reason", "delta_nopat_calculation_id",
+        "delta_invested_capital_calculation_id", "source_ids",
+    }
+    for index, window in enumerate(windows):
+        path = f"calculation-ledger.json.incremental_roic_windows[{index}]"
+        problems: list[str] = []
+        if not isinstance(window, dict) or set(window) != required_keys:
+            add(findings, "error", "incremental-roic-unavailability", path, f"window keys must be exactly {sorted(required_keys)!r}")
+            continue
+        period, years = window.get("period"), window.get("window_years")
+        if not isinstance(period, str) or not isinstance(window.get("start_period"), str) or not isinstance(years, int) or isinstance(years, bool):
+            add(findings, "error", "incremental-roic-unavailability", path, "period/start_period must be FY strings and window_years must be integer 3 or 5")
+            continue
+        end_match = re.fullmatch(r"FY(\d{4})", str(period))
+        start_match = re.fullmatch(r"FY(\d{4})", str(window.get("start_period")))
+        if not isinstance(years, int) or isinstance(years, bool) or years not in {3, 5}:
+            problems.append("window_years must be 3 or 5")
+        if not end_match or not start_match or years not in {3, 5} or int(end_match.group(1)) - int(start_match.group(1)) != years:
+            problems.append("start_period must be the actual FY exactly window_years before period")
+        if (period, years) in seen:
+            problems.append("period + window_years must be unique")
+        seen.add((period, years))
+        if period not in financials or financials[period].get("incremental_roic") is not None:
+            problems.append("the ending financial FY must preserve incremental_roic=null")
+        if window.get("status") != "unavailable" or window.get("reason_code") != "non_positive_invested_capital_change":
+            problems.append("only evidenced non_positive_invested_capital_change is eligible")
+        for field in ("capital_basis", "economic_reason"):
+            if not substantive_text(window.get(field), 16) or looks_like_placeholder(window.get(field)):
+                problems.append(f"{field} must explain the consistent capital definition and specific economic cause")
+        if not re.search(r"回购|分红|派息|分配|剥离|营运资本|现金|债务|权益|repurchase|buyback|dividend|distribution|divest|working.capital|cash|debt|equity", str(window.get("economic_reason", "")), re.I):
+            problems.append("economic_reason must identify a capital allocation or balance-sheet mechanism, not merely unavailable data")
+        basis = normalized_text(window.get("capital_basis"))
+        if period in capital_bases and capital_bases[period] != basis:
+            problems.append("three- and five-year windows must use one consistent capital definition")
+        capital_bases[period] = basis
+        source_ids = window.get("source_ids")
+        if not nonblank_list(source_ids) or any(source not in source_types for source in source_ids) or not any(source_types.get(source) in official_types for source in list_or_empty(source_ids)):
+            problems.append("window needs resolved annual-report or regulatory-filing evidence")
+        window_sources = set(source_ids) if isinstance(source_ids, list) and all(isinstance(source, str) for source in source_ids) else set()
+        metric = metrics.get((period, f"incremental_roic_{years}y"))
+        if (
+            not isinstance(metric, dict) or metric.get("value") is not None
+            or metric.get("value_type") != "ratio"
+            or not substantive_text(metric.get("label"), 8)
+            or not nonblank_list(metric.get("source_ids"))
+            or not window_sources.issubset(set(metric["source_ids"]))
+        ):
+            problems.append("matching 3y/5y industry metric must preserve null, ratio, an explanatory label and all window sources")
+        for kind in ("nopat", "invested_capital"):
+            record_id = window.get(f"delta_{kind}_calculation_id")
+            record = records.get(record_id) if isinstance(record_id, str) else None
+            if not isinstance(record, dict):
+                problems.append(f"missing delta_{kind} custom calculation")
+                continue
+            inputs = record.get("inputs")
+            start_key, end_key = f"beginning_{kind}", f"ending_{kind}"
+            expected_formula = f"{end_key}-{start_key}"
+            record_sources = record.get("source_ids")
+            if (
+                record.get("metric") != "custom" or record.get("period") != period
+                or not isinstance(inputs, dict) or set(inputs) != {start_key, end_key}
+                or any(not numeric(inputs.get(key)) for key in (start_key, end_key))
+                or re.sub(r"\s+", "", str(record.get("formula"))) != expected_formula
+                or not nonblank_list(record_sources)
+                or not set(record_sources).issubset(window_sources)
+                or not any(source_types.get(source) in official_types for source in list_or_empty(record_sources))
+            ):
+                problems.append(f"delta_{kind} requires exact beginning/ending inputs, ending FY, ending-minus-beginning formula and covered official sources")
+                continue
+            delta = sankey_decimal(inputs[end_key]) - sankey_decimal(inputs[start_key])
+            for input_key, input_period in ((start_key, window["start_period"]), (end_key, period)):
+                observation_key = (kind, input_period)
+                amount = sankey_decimal(inputs[input_key])
+                if observation_key in observed_amounts and not sankey_amounts_equal(amount, observed_amounts[observation_key]):
+                    problems.append(f"{kind} for {input_period} contradicts another rolling window's raw amount")
+                observed_amounts[observation_key] = amount
+            if not sankey_amounts_equal(delta, record.get("result")):
+                problems.append(f"delta_{kind} result must reconcile to raw inputs within one cent")
+            if kind == "invested_capital" and delta > 0:
+                problems.append("a positive capital change cannot qualify for unavailable status")
+        if problems:
+            add(findings, "error", "incremental-roic-unavailability", path, "; ".join(problems))
+        else:
+            valid_windows.setdefault(period, set()).add(years)
+    return {period for period, years in valid_windows.items() if years == {3, 5}}
+
+
 def validate_classification_and_industry_metrics(
     company: dict[str, Any],
     completeness: str,
     mode: str,
     findings: list[Finding],
+    calculations: Any = None,
 ) -> None:
     classification = company.get("classification")
     if not isinstance(classification, dict):
@@ -1869,6 +1992,7 @@ def validate_classification_and_industry_metrics(
             if item.get("period") in fy_periods:
                 metric_values.setdefault(item["code"], set()).add(item["period"])
 
+    unavailable_incremental_periods = validate_incremental_roic_unavailability(company, calculations, findings)
     if mode != "full" or not fy_periods:
         return
     severity = "warning" if is_unable(company) and documented_material_gap(completeness) else "error"
@@ -1929,7 +2053,7 @@ def validate_classification_and_industry_metrics(
             missing.append(f"ROE<{required_history}FY")
         if financial_count("roic") < required_history:
             missing.append(f"ROIC<{required_history}FY")
-        if financial_count("incremental_roic") < required_incremental:
+        if financial_count("incremental_roic") + len(unavailable_incremental_periods) < required_incremental:
             missing.append(f"incremental_roic<{required_incremental}FY")
     elif returns in {"regulated_bank", "payments_credit"}:
         if max(financial_count("roe"), metric_count("rotce")) < required_history:
@@ -2485,6 +2609,7 @@ def validate_sankey(
         "cost_subtotal",
         "pretax_costs_total",
         "profit_addition",
+        "profit_deduction",
         "profit_subtotal",
         "pretax_profit",
         "income_tax",
@@ -2495,8 +2620,9 @@ def validate_sankey(
         if isinstance(company.get("meta"), dict)
         else None
     )
-    uses_signed_contract = schema_version in {"2.2.0", "2.3.0"}
-    supports_revenue_offsets = schema_version == "2.3.0"
+    uses_signed_contract = schema_version in {"2.2.0", "2.3.0", "2.4.0"}
+    supports_revenue_offsets = schema_version in {"2.3.0", "2.4.0"}
+    supports_profit_deductions = schema_version == "2.4.0"
     node_records = [node for node in nodes if isinstance(node, dict)]
     ids = [node.get("id") for node in node_records]
     node_by_id = {node.get("id"): node for node in node_records}
@@ -2524,7 +2650,9 @@ def validate_sankey(
         if not numeric(value) or float(value) <= 0:
             add(findings, "error", "sankey-node-value", f"company.json.income_statement_sankey.nodes[{index}].value", "node values must be finite, positive base-unit flow magnitudes")
         if role in {"revenue_subtotal", "revenue_offset"} and not supports_revenue_offsets:
-            add(findings, "error", "sankey-role-version", f"company.json.income_statement_sankey.nodes[{index}].category", "revenue_subtotal and revenue_offset require Schema 2.3.0")
+            add(findings, "error", "sankey-role-version", f"company.json.income_statement_sankey.nodes[{index}].category", "revenue_subtotal and revenue_offset require Schema 2.3.0 or later")
+        if role == "profit_deduction" and not supports_profit_deductions:
+            add(findings, "error", "sankey-role-version", f"company.json.income_statement_sankey.nodes[{index}].category", "profit_deduction requires Schema 2.4.0")
         if uses_signed_contract and not numeric(statement_value):
             add(findings, "error", "sankey-statement-value", f"company.json.income_statement_sankey.nodes[{index}].statement_value", "Schema 2.2.0 and later require every Sankey node to preserve its finite signed statement value")
         elif numeric(statement_value) and numeric(value) and not sankey_amounts_equal(value, abs(sankey_decimal(statement_value))):
@@ -2533,10 +2661,10 @@ def validate_sankey(
             signed = sankey_decimal(statement_value)
             if signed == 0:
                 add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", "signed-contract Sankey statement_value must be nonzero")
-            elif role in {"cost_offset", "revenue_offset"} and signed > 0:
+            elif role in {"cost_offset", "revenue_offset", "profit_deduction"} and signed > 0:
                 add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", f"{role} must preserve a negative statement_value")
-            elif role not in {"cost_offset", "revenue_offset"} and signed < 0:
-                add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", "only cost_offset and revenue_offset may carry a negative statement_value in the signed positive-flow contract")
+            elif role not in {"cost_offset", "revenue_offset", "profit_deduction"} and signed < 0:
+                add(findings, "error", "sankey-signed-role", f"company.json.income_statement_sankey.nodes[{index}]", "only cost_offset, revenue_offset and profit_deduction may carry a negative statement_value in the signed positive-flow contract")
 
     roles_valid = True
     for role in ("revenue_total", "pretax_profit", "income_tax", "net_income"):
@@ -2669,8 +2797,10 @@ def validate_sankey(
                 add(findings, "error", "sankey-revenue-chain", "company.json.income_statement_sankey.links", f"revenue node {node_id!r} must have one continuous path to total revenue")
 
         expected_revenue_parents = {"revenue_source"} if not role_ids["revenue_subtotal"] else {"revenue_subtotal"}
+        if supports_profit_deductions:
+            expected_revenue_parents = {"revenue_source", "revenue_subtotal"}
         if not parents[revenue_total] or any(role_by_id.get(parent) not in expected_revenue_parents for parent in parents[revenue_total]):
-            add(findings, "error", "sankey-revenue-chain", "company.json.income_statement_sankey.links", "total revenue must receive the complete flat revenue-source set or the final revenue-subtotal bridge, without mixing the two topologies")
+            add(findings, "error", "sankey-revenue-chain", "company.json.income_statement_sankey.links", "total revenue must receive only the complete revenue sources/subtotals permitted by its schema version; mixed levels require Schema 2.4.0 and unique source-to-total paths")
         if role_ids["revenue_offset"] and not role_ids["revenue_subtotal"]:
             add(findings, "error", "sankey-revenue-offset", "company.json.income_statement_sankey.links", "revenue offsets require a conserving revenue-subtotal bridge")
         if children[pretax_profit] != {income_tax, net_income} or parents[income_tax] != {pretax_profit} or parents[net_income] != {pretax_profit}:
@@ -2683,6 +2813,10 @@ def validate_sankey(
             targets = children[node_id]
             if parents[node_id] or len(targets) != 1 or role_by_id.get(next(iter(targets), None)) not in profit_adjustment_targets:
                 add(findings, "error", "sankey-profit-addition", "company.json.income_statement_sankey.links", f"profit addition {node_id!r} must be a root with exactly one positive flow into a profit subtotal or pretax profit")
+
+        for node_id in role_ids["profit_deduction"]:
+            if children[node_id] or len(parents[node_id]) != 1 or role_by_id.get(next(iter(parents[node_id]), None)) != "profit_subtotal":
+                add(findings, "error", "sankey-profit-deduction", "company.json.income_statement_sankey.links", f"profit deduction {node_id!r} must be terminal with exactly one profit-subtotal parent")
 
         for node_id in role_ids["cost_offset"]:
             targets = children[node_id]
@@ -2699,7 +2833,8 @@ def validate_sankey(
             current_children = children[current]
             profit_successors = [child for child in current_children if role_by_id.get(child) in {"profit_subtotal", "pretax_profit"}]
             cost_children = [child for child in current_children if role_by_id.get(child) in cost_roles]
-            other_children = current_children - set(profit_successors) - set(cost_children)
+            deduction_children = [child for child in current_children if role_by_id.get(child) == "profit_deduction"]
+            other_children = current_children - set(profit_successors) - set(cost_children) - set(deduction_children)
             if len(profit_successors) != 1 or other_children:
                 add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"{current!r} must have exactly one next profit node and no unsupported branches")
                 break
@@ -2709,7 +2844,7 @@ def validate_sankey(
             if current not in parents[successor] or unexpected_parents:
                 add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"profit node {successor!r} must receive its bridge from {current!r} and may otherwise receive only controlled profit additions")
             addition_parents = parents[successor] & profit_addition_ids
-            if not cost_children and (current == revenue_total or not addition_parents):
+            if not cost_children and not deduction_children and (current == revenue_total or not addition_parents):
                 add(findings, "error", "sankey-profit-chain", "company.json.income_statement_sankey.links", f"{current!r} may omit a cost branch only when it is a profit subtotal and the next profit node receives at least one controlled profit addition")
             if current == revenue_total and successor == pretax_profit:
                 if len(cost_children) != 1 or role_by_id.get(cost_children[0]) != "pretax_costs_total":
@@ -2966,6 +3101,28 @@ def validate_sankey(
                         path,
                         "a revenue-subtotal continuation with direct offsets must use exactly the source subtotal and direct offset node IDs as inputs, with each value equal to that node's signed statement_value",
                     )
+            direct_profit_deductions = {
+                child for child in children.get(source, set())
+                if role_by_id.get(child) == "profit_deduction"
+            }
+            if role_by_id.get(source) == "profit_subtotal" and direct_profit_deductions:
+                direct_costs = {
+                    child for child in children.get(source, set())
+                    if role_by_id.get(child) in {"cost_expense", "cost_subtotal", "pretax_costs_total"}
+                }
+                expected_input_ids = {source} | direct_profit_deductions | direct_costs
+                record_inputs = record.get("inputs") if isinstance(record, dict) else None
+                inputs_match = (
+                    isinstance(record_inputs, dict)
+                    and set(record_inputs) == expected_input_ids
+                    and all(sankey_amounts_equal(record_inputs.get(node_id), node_by_id.get(node_id, {}).get("statement_value")) for node_id in expected_input_ids)
+                )
+                signed_values = {node_id: sankey_decimal(node_by_id.get(node_id, {}).get("statement_value")) for node_id in expected_input_ids}
+                expected_continuation = None
+                if all(value is not None for value in signed_values.values()):
+                    expected_continuation = signed_values[source] - sum((signed_values[node_id] for node_id in direct_costs), Decimal(0)) + sum((signed_values[node_id] for node_id in direct_profit_deductions), Decimal(0))
+                if not inputs_match or not sankey_amounts_equal(expected_continuation, edge_values.get(edge)):
+                    add(findings, "error", "sankey-profit-deduction-calculation-inputs", path, "profit continuation must bind exactly the source subtotal, direct positive costs and direct negative deductions by node ID and preserve their signed statement values; continuation equals subtotal minus costs plus signed deductions")
             if isinstance(record, dict) and isinstance(record.get("source_ids"), list):
                 all_item_sources.update(record["source_ids"])
         if covered_edges != continuation_edges:
@@ -4768,6 +4925,12 @@ def validate_report_valuation_detail(
     }
     value_rows: dict[str, tuple[float, float, float, float, float, float]] = {}
     value_invalid = False
+    bridge_adjustments = {
+        "nonoperating_securities": (1, ("加回非经营证券", "非经营证券", "nonoperating securities")),
+        "nonoperating_assets": (1, ("加回其他非经营资产", "其他非经营资产", "other nonoperating assets")),
+        "minority_interests": (-1, ("扣减少数股东权益", "少数股东权益", "minority interests", "noncontrolling interests")),
+        "preferred_equity": (-1, ("扣减优先股权益", "优先股权益", "preferred equity")),
+    }
     expected_scenarios = {
         scenario_kind(item.get("name")): item
         for item in list_or_empty((company.get("valuation") or {}).get("dcf_scenarios") if isinstance(company.get("valuation"), dict) else [])
@@ -4778,6 +4941,7 @@ def validate_report_valuation_detail(
         if not all(index is not None for index in columns.values()) or len(set(columns.values())) != len(columns):
             continue
         net_debt_column = header_column(headers, ("净债务调整", "净债务", "net debt"))
+        adjustment_columns = {key: header_column(headers, aliases) for key, (_, aliases) in bridge_adjustments.items()}
         for row in rows:
             kind = scenario_kind(row[int(columns["scenario"])])
             parsed: dict[str, float | None] = {}
@@ -4802,9 +4966,19 @@ def validate_report_valuation_detail(
             numeric_values = tuple(float(value) for value in values)
             value_rows[kind] = numeric_values
             explicit_pv, terminal_pv, net_debt, equity_value, shares, per_share = numeric_values
+            adjustments: dict[str, float] = {}
+            for key, column in adjustment_columns.items():
+                if column is None:
+                    continue
+                amount = parse_localized_display_number(row[column], "money", headers[column])
+                if amount is None or amount < 0:
+                    value_invalid = True
+                else:
+                    adjustments[key] = float(amount)
+            expected_value = explicit_pv + terminal_pv - net_debt + sum(bridge_adjustments[key][0] * amount for key, amount in adjustments.items())
             if (
                 shares <= 0
-                or not report_number_matches(equity_value, explicit_pv + terminal_pv - net_debt)
+                or not report_number_matches(equity_value, expected_value)
                 or not report_number_matches(per_share, equity_value / shares)
                 or not report_number_matches(per_share, expected_scenarios.get(kind, {}).get("fair_value_per_share"))
             ):
@@ -4812,6 +4986,22 @@ def validate_report_valuation_detail(
             expected = ledger_equity.get(kind)
             if isinstance(expected, dict):
                 inputs = expected.get("inputs") if isinstance(expected.get("inputs"), dict) else {}
+                adjustment_input_keys = set(inputs) & set(bridge_adjustments)
+                allowed_inputs = {"explicit_period_present_value", "terminal_present_value", "net_debt"} | set(bridge_adjustments)
+                if (
+                    set(inputs) - allowed_inputs
+                    or adjustment_input_keys != set(adjustments)
+                    or any(not numeric(inputs[key]) or inputs[key] < 0 or not report_number_matches(adjustments[key], inputs[key]) for key in adjustment_input_keys)
+                    or ("net_debt" in inputs and net_debt_column is None)
+                ):
+                    value_invalid = True
+                try:
+                    formula_value = evaluate_custom_formula(expected.get("formula"), inputs)
+                except FormulaEvaluationError:
+                    value_invalid = True
+                else:
+                    if not report_number_matches(expected_value, formula_value):
+                        value_invalid = True
                 if (
                     not report_number_matches(explicit_pv, inputs.get("explicit_period_present_value"))
                     or not report_number_matches(terminal_pv, inputs.get("terminal_present_value"))
@@ -4821,6 +5011,9 @@ def validate_report_valuation_detail(
                     or not report_number_matches(per_share, expected.get("per_share"))
                 ):
                     value_invalid = True
+            elif adjustments:
+                # An extra report column never creates an unbound valuation asset.
+                value_invalid = True
         break
     if value_invalid or set(value_rows) != {"bear", "base", "bull"} or (ledger_equity and set(ledger_equity) != {"bear", "base", "bull"}):
         add(
@@ -4828,7 +5021,7 @@ def validate_report_valuation_detail(
             "error",
             "report-valuation-value-bridge",
             "research-report.md#valuation",
-            "valuation section needs a three-scenario bridge from explicit PV and terminal PV through any net-debt adjustment to equity and per-share value",
+            "valuation section needs a three-scenario bridge from explicit PV and terminal PV through net debt and separately displayed, ledger-bound controlled nonoperating asset/minority/preferred adjustments to equity and per-share value",
         )
 
 
@@ -5043,8 +5236,8 @@ def validate_valuation_report(company: dict[str, Any], body: str, findings: list
     }
     reverse = valuation.get("reverse_dcf") if isinstance(valuation.get("reverse_dcf"), dict) else {}
     category_tokens = {
-        "growth": ("growth", "cagr", "revenue", "sales", "cash_flow", "fcf", "fcfe", "增长", "收入", "营收", "现金流"),
         "profitability": ("margin", "roe", "roa", "roic", "rotce", "profit", "利润率", "回报率", "回报", "净利率"),
+        "growth": ("growth", "cagr", "revenue", "sales", "cash_flow", "fcf", "fcfe", "增长", "收入", "营收", "现金流"),
         "capital-cash": ("capital", "reinvest", "cash", "capex", "turnover", "payout", "retention", "buyback", "资本", "再投资", "现金", "周转", "留存", "分配", "回购"),
     }
     expected_by_category: dict[str, list[float]] = {key: [] for key in category_tokens}
@@ -6039,7 +6232,7 @@ def validate_research_package(root: Path, schema_path: Path, mode: str, company_
                 validate_chinese_display_units(mask_non_rendered_markdown(gap_text), findings, "schema-gap-report.md")
     validate_completeness(completeness, findings)
     validate_company_logo(company, completeness, company_slug, findings)
-    validate_classification_and_industry_metrics(company, completeness, mode, findings)
+    validate_classification_and_industry_metrics(company, completeness, mode, findings, calculations)
     validate_financials(company, completeness, mode, findings)
     validate_sankey(company, findings, calculations, known)
     validate_durability(company, findings)
