@@ -6341,18 +6341,28 @@ def main() -> int:
         parser.error(f"not a directory: {root}")
     if not schema_path.is_file():
         parser.error(f"schema does not exist: {schema_path}")
-    findings = validate_research_package(root, schema_path, args.mode, args.company_slug)
-    payload = report_payload(root, schema_path, args.mode, findings, args.company_slug)
+    output: Path | None = None
     if args.output:
+        # Check the supplied path before resolve() hides a destination symlink.
+        if args.output.is_symlink():
+            parser.error("--output cannot be a symlink")
         output = args.output.resolve()
+        if output == schema_path:
+            parser.error("--output cannot overwrite the input Schema")
         try:
             output.relative_to(root)
             inside = True
         except ValueError:
             inside = False
-        if (root / "research-manifest.json").exists() and inside:
-            print("Refusing to write inside a frozen research package; choose an external --output path.", file=sys.stderr)
-            return 1
+        manifest_path = root / "research-manifest.json"
+        if inside:
+            if manifest_path.exists() or manifest_path.is_symlink():
+                parser.error("Refusing to write inside a frozen research package; choose an external --output path.")
+            if output != root / "validation-report.json":
+                parser.error("inside a draft package, --output must be validation-report.json; research inputs cannot be overwritten")
+    findings = validate_research_package(root, schema_path, args.mode, args.company_slug)
+    payload = report_payload(root, schema_path, args.mode, findings, args.company_slug)
+    if output is not None:
         try:
             write_json(output, payload)
         except OSError as exc:

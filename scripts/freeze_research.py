@@ -681,6 +681,22 @@ def main() -> int:
             print(f"Refusing symlinked package file: {name}", file=sys.stderr)
             return 1
 
+    # Full validation is also required for incremental packages, so it cannot
+    # distinguish a new baseline from an update. Bind the freeze mode explicitly
+    # before selecting the ancestry gate or writing any validation output.
+    try:
+        evidence = load_json(root / "evidence-ledger.json")
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read evidence ledger research mode: {exc}")
+    run = evidence.get("run") if isinstance(evidence, dict) else None
+    research_mode = run.get("research_mode") if isinstance(run, dict) else None
+    freeze_modes = {"full": "full", "repair": "full", "migration": "full", "incremental": "incremental"}
+    if not isinstance(research_mode, str) or research_mode not in freeze_modes:
+        parser.error("evidence ledger run.research_mode must be full, repair, migration, or incremental")
+    required_mode = freeze_modes[research_mode]
+    if args.mode != required_mode:
+        parser.error(f"research_mode {research_mode!r} requires --mode {required_mode}; received {args.mode!r}")
+
     incremental_transition: dict[str, Any] | None = None
     if args.mode == "incremental":
         if args.previous_manifest is None or not args.official_trigger_source_id:

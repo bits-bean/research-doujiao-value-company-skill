@@ -84,8 +84,10 @@ class SkillContractTests(unittest.TestCase):
         contract = (ROOT / "references" / "income-statement-sankey.md").read_text(encoding="utf-8")
 
         self.assertIn("下游-x-型布局与最少交叉", skill)
-        self.assertIn("入口侧最上 / 最下分支尽量落在左上角 / 左下角", skill)
-        self.assertIn("出口侧最上 / 最下分支尽量落在右上角 / 右下角", skill)
+        # The entrypoint routes to the detailed handoff contract; the geometry
+        # requirements need not be duplicated in both documents.
+        self.assertIn("入口侧最上分支尽量靠左上角，最下分支尽量靠左下角", contract)
+        self.assertIn("出口侧最上分支尽量靠右上角，最下分支尽量靠右下角", contract)
         self.assertIn("整体尽量呈清晰 X 型", contract)
         self.assertIn("能由这三种手段消除的交叉必须为 0", contract)
         self.assertIn("不得为了 X 型或零交叉", contract)

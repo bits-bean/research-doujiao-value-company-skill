@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import json
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,12 +20,108 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from validate_research_package import (  # noqa: E402
     EXPECTED_SCHEMA_DRAFT,
     EXPECTED_SCHEMA_ID,
+    main,
     validate_research_package,
     write_json,
 )
 
 
 class ValidationGateTests(unittest.TestCase):
+    def run_output_check(self, root: Path, schema: Path, output: Path) -> tuple[int, str]:
+        """Exercise CLI destination checks and real writes independently of the trust lock."""
+        arguments = [
+            "validate_research_package.py", str(root), "--schema", str(schema),
+            "--company-slug", "test-company", "--output", str(output),
+        ]
+        stderr = io.StringIO()
+        with (
+            patch.object(sys, "argv", arguments),
+            patch("validate_research_package.validate_research_package", return_value=[]),
+            patch("validate_research_package.report_payload", return_value={"errors": 0, "findings": []}),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(stderr),
+        ):
+            try:
+                code = main()
+            except SystemExit as exc:
+                code = exc.code
+        return code, stderr.getvalue()
+
+    def test_output_cannot_overwrite_draft_inputs_or_create_other_package_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "package"
+            root.mkdir()
+            schema = Path(temp_dir) / "schema.json"
+            schema.write_text("{}\n", encoding="utf-8")
+            for name in (
+                "company.json", "evidence-ledger.json", "calculation-ledger.json",
+                "research-report.md", "research-completeness.md", "schema-gap-report.md",
+                "research-manifest.json", "nested/output.json", "unexpected.json",
+            ):
+                with self.subTest(name=name):
+                    destination = root / name
+                    # A new manifest must also be rejected before it can freeze the draft.
+                    if name != "research-manifest.json":
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        destination.write_bytes(b"original research input\n")
+                    code, message = self.run_output_check(root, schema, destination)
+                    self.assertNotEqual(code, 0)
+                    self.assertIn("inside a draft package", message)
+                    if name == "research-manifest.json":
+                        self.assertFalse(destination.exists())
+                    else:
+                        self.assertEqual(destination.read_bytes(), b"original research input\n")
+
+    def test_output_cannot_overwrite_input_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "package"
+            root.mkdir()
+            schema = Path(temp_dir) / "schema.json"
+            schema.write_bytes(b"original schema\n")
+            code, message = self.run_output_check(root, schema, schema)
+            self.assertNotEqual(code, 0)
+            self.assertIn("input Schema", message)
+            self.assertEqual(schema.read_bytes(), b"original schema\n")
+
+    def test_output_rejects_symlink_without_mutating_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "package"
+            root.mkdir()
+            schema = Path(temp_dir) / "schema.json"
+            schema.write_text("{}\n", encoding="utf-8")
+            target = Path(temp_dir) / "external.json"
+            target.write_bytes(b"keep external file\n")
+            output = root / "validation-report.json"
+            output.symlink_to(target)
+            code, message = self.run_output_check(root, schema, output)
+            self.assertNotEqual(code, 0)
+            self.assertIn("symlink", message)
+            self.assertTrue(output.is_symlink())
+            self.assertEqual(target.read_bytes(), b"keep external file\n")
+
+    def test_output_writes_draft_validation_report_and_external_frozen_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "package"
+            root.mkdir()
+            schema = Path(temp_dir) / "schema.json"
+            schema.write_text("{}\n", encoding="utf-8")
+            output = root / "validation-report.json"
+            code, message = self.run_output_check(root, schema, output)
+            self.assertEqual(code, 0, message)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), {"errors": 0, "findings": []})
+            original_report = output.read_bytes()
+            manifest = root / "research-manifest.json"
+            manifest.write_bytes(b"frozen manifest\n")
+            code, message = self.run_output_check(root, schema, output)
+            self.assertNotEqual(code, 0)
+            self.assertIn("frozen research package", message)
+            self.assertEqual(output.read_bytes(), original_report)
+            external = Path(temp_dir) / "audit" / "validation-report.json"
+            code, message = self.run_output_check(root, schema, external)
+            self.assertEqual(code, 0, message)
+            self.assertEqual(json.loads(external.read_text(encoding="utf-8")), {"errors": 0, "findings": []})
+            self.assertEqual(manifest.read_bytes(), b"frozen manifest\n")
+
     def test_write_json_uses_deterministic_lf_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "result.json"

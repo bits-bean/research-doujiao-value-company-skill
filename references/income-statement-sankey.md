@@ -130,13 +130,13 @@ python3 scripts/prepare_sankey_color_audit.py \
 - `revenue_total → profit_subtotal* → pretax_profit` 形成唯一利润主链，每层的正成本流出、桥接余额和受控加项流入分别与前后节点守恒；
 - 税前利润 = 所得税 + 净利润；
 - 总收入、净利润与同财年 `financials` 一致；
-- Schema 2.2.0 及以后每个节点都有有限且非零的 `statement_value`，`value = abs(statement_value)`；只有 `cost_offset / revenue_offset` 为负，披露台账值与 `statement_value` 同号同值，计算记录 `result` 与计算节点 `statement_value` 一致；
+- Schema 2.2.0 及以后每个节点都有有限且非零的 `statement_value`，`value = abs(statement_value)`；当前版本只有 `cost_offset / revenue_offset / profit_deduction` 为负（历史角色适用版本见本文件开头），披露台账值与 `statement_value` 同号同值，计算记录 `result` 与计算节点 `statement_value` 一致；
 - Schema 2.3.0 的收入小计与抵减逐层守恒，`revenue_total` 与同财年 `financials[].revenue` 相等，每条收入与利润 continuation 边都有精确计算绑定；
 - 图中每个节点恰好在披露清单或计算值清单中出现一次，披露清单每一项也都有节点和连线；
 - 桑基根级 `source_ids` 覆盖全部披露项和计算项来源。
 - `color_audit` 覆盖三项规范身份和每个官方可验证别名的两种查询；`matched` 的逐节点样本与 `nodes[].color` 完全一致，`not_found` 的节点色全空并绑定 System 默认版本，`blocked` 不得通过正式门禁。
 
-当前 2.3.0 放行“正值守恒图中的有符号利润加项、成本抵减与收入抵减”。所得税收益、负的利润 subtotal、负的净利润或非控股权益归属等本契约未定义的关系，仍不得改符号或硬塞入图；记录 Schema Gap 并阻断正式冻结。
+当前锁定 Schema 放行本契约定义的有符号利润加项、成本抵减、收入抵减与利润扣减，流量仍为严格正值。所得税收益、负的利润 subtotal、负的净利润或非控股权益归属等本契约未定义的关系，仍不得改符号或硬塞入图；记录 Schema Gap 并阻断正式冻结。
 
 ## FY2025 收入抵减示例
 

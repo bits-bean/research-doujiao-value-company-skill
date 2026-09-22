@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import copy
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from freeze_research import (  # noqa: E402
     build_manifest,
+    main as freeze_main,
     validate_incremental_research_drift,
     validate_incremental_transition,
     verify_previous_manifest,
@@ -33,6 +37,97 @@ from validate_research_package import (  # noqa: E402
 
 
 class IncrementalChainTests(unittest.TestCase):
+    def invoke_freeze_mode_gate(self, package: Path, cli_mode: str | None) -> tuple[int | None, str, int]:
+        """Run CLI routing with real input reads; stop before unrelated full gates."""
+        class ReachedFullValidation(Exception):
+            pass
+
+        lock = load_json(ROOT / "references/trusted-spec-lock.json")
+        arguments = [
+            "freeze_research.py", str(package),
+            "--schema", str(ROOT / "references/specs/company.schema.json"),
+            "--schema-blob-sha", lock["company_schema"]["blob_sha1"],
+            "--schema-commit", lock["company_schema"]["commit"],
+            "--company-slug", "test-company",
+        ]
+        if cli_mode is not None:
+            arguments.extend(["--mode", cli_mode])
+        if cli_mode == "incremental":
+            arguments.extend([
+                "--previous-manifest", str(package.parent / "previous/research-manifest.json"),
+                "--official-trigger-source-id", "SRC-NEW",
+            ])
+        stderr = io.StringIO()
+        with (
+            patch.object(sys, "argv", arguments),
+            patch("freeze_research.load_trusted_spec_lock", return_value=lock),
+            patch("freeze_research.validate_incremental_transition", return_value=([], {"verified": True})) as transition,
+            patch("freeze_research.validate_research_package", side_effect=ReachedFullValidation),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(stderr),
+        ):
+            try:
+                code = freeze_main()
+            except SystemExit as exc:
+                code = exc.code
+            except ReachedFullValidation:
+                code = None
+        return code, stderr.getvalue(), transition.call_count
+
+    def test_freeze_mode_mismatch_fails_before_writing_or_checking_ancestry(self) -> None:
+        for research_mode, cli_mode in (
+            ("incremental", None), ("incremental", "full"),
+            ("full", "incremental"), ("repair", "incremental"), ("migration", "incremental"),
+        ):
+            with self.subTest(research_mode=research_mode, cli_mode=cli_mode), tempfile.TemporaryDirectory() as temp_dir:
+                package = Path(temp_dir) / "package"
+                package.mkdir()
+                write_json(package / "evidence-ledger.json", {"run": {"research_mode": research_mode}})
+                write_json(package / "company.json", {"preserve": "company research"})
+                write_json(package / "validation-report.json", {"preserve": "previous validation"})
+                before = {path.name: path.read_bytes() for path in package.iterdir()}
+                code, message, ancestry_calls = self.invoke_freeze_mode_gate(package, cli_mode)
+                self.assertIsNotNone(code, "mismatched modes reached full validation")
+                self.assertNotEqual(code, 0)
+                self.assertIn("requires --mode", message)
+                self.assertEqual(ancestry_calls, 0)
+                self.assertFalse((package / "research-manifest.json").exists())
+                self.assertEqual({path.name: path.read_bytes() for path in package.iterdir()}, before)
+
+    def test_freeze_missing_or_invalid_research_mode_fails_without_writing(self) -> None:
+        invalid_ledgers = [
+            [], {}, {"run": []}, {"run": {}},
+            *[{"run": {"research_mode": value}} for value in (None, False, 0, [], {}, "audit", "")],
+        ]
+        for evidence in invalid_ledgers:
+            with self.subTest(evidence=evidence), tempfile.TemporaryDirectory() as temp_dir:
+                package = Path(temp_dir) / "package"
+                package.mkdir()
+                write_json(package / "evidence-ledger.json", evidence)
+                write_json(package / "company.json", {"preserve": "company research"})
+                before = {path.name: path.read_bytes() for path in package.iterdir()}
+                code, message, ancestry_calls = self.invoke_freeze_mode_gate(package, None)
+                self.assertIsNotNone(code, "invalid mode reached full validation")
+                self.assertNotEqual(code, 0)
+                self.assertIn("run.research_mode must be", message)
+                self.assertEqual(ancestry_calls, 0)
+                self.assertFalse((package / "research-manifest.json").exists())
+                self.assertEqual({path.name: path.read_bytes() for path in package.iterdir()}, before)
+
+    def test_freeze_supported_mode_mapping_reaches_full_gate_and_incremental_ancestry(self) -> None:
+        for research_mode, cli_mode in (
+            ("full", None), ("full", "full"), ("repair", "full"),
+            ("migration", "full"), ("incremental", "incremental"),
+        ):
+            with self.subTest(research_mode=research_mode, cli_mode=cli_mode), tempfile.TemporaryDirectory() as temp_dir:
+                package = Path(temp_dir) / "package"
+                package.mkdir()
+                write_json(package / "evidence-ledger.json", {"run": {"research_mode": research_mode}})
+                code, message, ancestry_calls = self.invoke_freeze_mode_gate(package, cli_mode)
+                self.assertIsNone(code, message)
+                self.assertEqual(ancestry_calls, 1 if research_mode == "incremental" else 0)
+                self.assertFalse((package / "research-manifest.json").exists())
+
     def make_drift_pair(self, root: Path) -> tuple[Path, Path, dict, dict]:
         baseline_root = root / "baseline"
         baseline_root.mkdir()

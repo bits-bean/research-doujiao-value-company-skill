@@ -23,15 +23,15 @@
 2. [research-methodology.md](specs/research-methodology.md)：研究方法、行业适配和报告结构；
 3. [company.schema.json](specs/company.schema.json)：`company.json` 唯一结构协议的锁定副本；
 4. [research-execution-and-audit.md](research-execution-and-audit.md)：当前正式执行、挑战、论点状态和来源审计协议。
+5. [automation-workflow.md](specs/automation-workflow.md)：三份兼容协议之一，首次正式研究也须完整读取；增量任务按其中的更新流程执行。
 
-在访问公司资料前，先按执行协议实测 `protocol_access / schema_access / official_source_retrieval / challenge_source_retrieval / calculation_runtime / package_write`。探针必须记录实际方法和结果；来源探针须绑定两条不同且已解析的来源与取回内容 SHA-256，不能把权限存在当作能力通过。
+展开正式批量取证前，先按执行协议实测 `protocol_access / schema_access / official_source_retrieval / challenge_source_retrieval / calculation_runtime / package_write`。预检阶段允许为来源探针取得最小必要的公司官方原件和另一条挑战来源，并登记稳定 source ID；探针须绑定两条不同且已解析的来源与取回内容 SHA-256。记录实际方法和结果，不能把权限存在当作能力通过。
 
 ### 财报或重大事件增量更新
 
-在上述四项基础上追加：
+在上述五项基础上追加：
 
-5. 上一冻结版本的报告、`company.json`、`evidence-ledger.json`、`calculation-ledger.json` 与 `research-manifest.json`；
-6. [automation-workflow.md](specs/automation-workflow.md)。
+6. 上一冻结版本的全部 manifest 声明文件和 `research-manifest.json`，包括报告、`company.json`、两本台账、完整度说明、验证报告及可选 Schema 缺口说明。
 
 逐项比较上一版本的论点假设、未解冲突和 DCF 参数。只允许由新官方财报或重大事件触发；任何状态或参数变化都要在当前 `thesis` 修订记录中绑定新证据，不能由股价变化反推商业假设。
 
@@ -44,6 +44,8 @@
 兼容研究协议文档中保留的“Schema 1.x → 2.0”文字记录历史迁移边界，不决定当前数据协议版本。任何新建、迁移、增量或归档都以 `trusted-spec-lock.json.company_schema` 的当前版本为准；当前锁定版本为 2.4.0。
 
 历史 v2 manifest 若只有兼容 `research_protocol`、没有 `integrity_profile: execution-bound-v1` 与 `execution_integrity`，可用 `audit` 模式诊断，但不能作为当前正式冻结或增量前序包。不要原地补写完整性声明。
+
+区分两种审查结果：当前验证器的 `--mode audit` 是只读诊断入口，仍会检查 v2 包与当前 Schema / 执行锁的兼容性，不能把锁不一致的错误解释成“历史包当时无效”，也不能把当前工具称为旧版验证器。若要按原锁机械重验，应从可验证的历史发行版取得原 Skill、原 Schema 及运行依赖，在隔离目录执行，审计输出始终放在被审包外。无法恢复可信历史环境时，只核验 manifest 文件哈希并做原始来源 / 人工语义审查，明确记录“历史运行时未复现”，不宣称旧门禁通过。执行锁与当前版本不同的旧包也不得跳过前序完整性检查直接增量冻结。
 
 ### 下游交接
 
