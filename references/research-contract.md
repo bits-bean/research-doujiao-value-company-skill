@@ -94,7 +94,7 @@ system 图表与下游内容所需的数据、路由和来源必须在冻结前�
 
 ### evidence-ledger.json
 
-严格执行 [research-execution-and-audit.md](research-execution-and-audit.md)。根级结构使用：
+严格执行 [research-execution-and-audit.md](research-execution-and-audit.md)。以下是不完整的起始草稿骨架，不是可冻结样例；示例 ID、日期及省略内容须由真实执行记录替换。`business_model` 与 `business_model_coverage` 按 [business-model-actors.md](business-model-actors.md) 补齐，只有全部能力、独立审查、来源审计和准出条件通过后才能把状态改为 `ready_to_freeze`：
 
 ```json
 {
@@ -104,7 +104,7 @@ system 图表与下游内容所需的数据、路由和来源必须在冻结前�
     "research_mode": "full",
     "workflow_tier": "standard",
     "data_cutoff_at": "2026-08-24T17:00:00Z",
-    "status": "ready_to_freeze",
+    "status": "preflight",
     "protocol_fingerprint": {},
     "preflight": [],
     "passes": []
@@ -225,7 +225,7 @@ system 图表与下游内容所需的数据、路由和来源必须在冻结前�
 | `terminal_present_value` | 含最后一年现金流、永续增长率、折现率和末年折现因子，复算终值现值 |
 | `equity_value_bridge` | 以显性期现金流现值之和加终值现值、再完成适用的净债务等调整得到股权价值，并以实际稀释后股数复算每股价值 |
 
-`valuation_scenario` 只使用 `bear / base / bull`。三个情景的年度必须连续、无重复且完整覆盖 `1..forecast_years`；每条仍遵守 `custom` 计算的公式、来源和独立复核要求。普通企业的年度计算输入另保留收入、利润率、税率、折旧摊销、资本开支和营运资金等适用驱动；受资本约束金融企业另保留普通股利润、RWA、目标 CET1、必要资本留存和 FCFE。某项驱动不适用时不造数，但应在 `review_method` 说明现金流如何形成。
+`valuation_scenario` 只使用 `bear / base / bull`。三个情景的年度必须连续、无重复且完整覆盖 `1..forecast_years`；每条仍遵守 `custom` 计算的公式、来源和独立复核要求。普通企业的收入、利润率、税率、折旧摊销、资本开支和营运资金等适用驱动，受资本约束金融企业的普通股利润、RWA、目标 CET1、必要资本留存和 FCFE，保存在同一 `calculations[]` 中独立的年度 `custom` 计算里；每条仅把实际参与该条公式的变量放入 `inputs`。折现记录本身只用 `cash_flow / discount_factor`，在 `review_method` 标明现金流形成计算的 ID、情景和年度，并复核其结果等于该年 `cash_flow`。这是需语义复核的关联，不宣称验证器已自动建立计算依赖图。驱动不适用时说明原因，不造数，也不把未使用驱动塞进折现输入或用 `0 * driver` 假消费绕过校验。
 
 `formula` 必须是可机械复算的受限算术表达式，可写为纯表达式或 `result = expression`。变量名必须与 `inputs` 完全一致；只允许有限数值、括号和 `+ - * / % **`，不允许函数、属性、索引、条件表达式或未使用输入。`result` 必须在允许误差内与复算结果一致。
 

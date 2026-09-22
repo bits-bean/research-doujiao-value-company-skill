@@ -8,7 +8,7 @@ GitHub 写入必须由用户在本次任务中明确授权。“研究某公司�
 
 ## 发布前门禁
 
-1. 使用冻结时锁定的 Schema 和当前 Skill v2 信任锁重新验证研究包；重新验证必须确认桑基 `color_audit` 不是 `blocked`，`matched` 逐节点色与 `company.json` 一致，或 `not_found` 已穷尽规范身份与官方可验证别名并绑定 System 默认版本。
+1. 使用冻结时锁定的 Schema 和当前 Skill 的信任锁重新验证研究包（信任锁 `lock_version: 3.0`，研究包 `manifest_version: 2.0`）；重新验证必须确认桑基 `color_audit` 不是 `blocked`，`matched` 逐节点色与 `company.json` 一致，或 `not_found` 已穷尽规范身份与官方可验证别名并绑定 System 默认版本。
 2. 要求 `manifest_version: 2.0`、`status: frozen`、`human_review_status: accepted`、`validation.mode: full`、零错误，并验证 manifest 与验证报告锁定的 `company_slug` 等于本次交付 slug、manifest 中全部哈希和文件大小。v1 研究包只能审查。
 3. 运行 `prepare_github_archive.py` 生成计划。计划文件只写冻结目录外的任务工作目录，不写冻结目录。
 4. 通过 GitHub 连接器取得权限和最新 `main` SHA，确认冻结清单锁定的 Schema commit 是其祖先，且 `main:schemas/company.schema.json` 仍为锁定 blob。

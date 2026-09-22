@@ -1,129 +1,132 @@
 ---
 name: research-doujiao-value-company
-description: Research, update, audit, repair, freeze, and explicitly authorized GitHub-deliver evidence-driven long-term company research under this Skill's authoritative protocol and the locked bits-bean/doujiao-value-system company Schema. Use for sourced company classification and chart-routing inputs, ten-year financials, industry metrics, ledgers, moat, durability, culture, management, capital allocation, risks, DCF or Reverse DCF, formal reports, schema-valid company.json, Too Hard decisions, frozen research handoffs, official-first company Logo handling with an authorized verified-third-party fallback, and company-level App Economy Insights Sankey color audits. Do not use to generate or redraw a Logo; manage other publishable visuals; render website or social images; call chart renderers or website APIs; choose channel ratios or layouts; produce social copy; publish content; predict short-term prices; or make unapproved GitHub writes.
+description: Research, update, audit, repair, migrate, and freeze evidence-driven long-term company research for 豆角 under its locked company Schema. Produces sourced reports, company.json, evidence/calculation ledgers, verified company Logos, and company-level Sankey color audits. Use for company fundamentals, industry-adapted financials, moat, management, cash-flow valuation, Too Hard decisions, and explicitly authorized GitHub research delivery. Excludes short-term price predictions, visual production, social copy, and publishing.
 ---
 
 # 豆角长期价值研究
 
-本 Skill 是权威研究层：先从证据和可复算计算形成判断，再交付可独立阅读的报告、结构化数据、台账、网站所需的已验证公司 Logo，以及供网站与导出器共同消费的公司级桑基节点色。网站图表仍由 system 代码渲染；本 Skill 不制作发布用视觉成品。
+从原始证据和可复算计算形成长期判断，交付独立可读的报告、结构化数据与台账。先确定任务模式，再读取对应契约；不能把审查、研究、冻结或交付混为同一动作。
 
-## 1. 权威与边界
+## 1. 先确定任务与权限
 
-- manifest v2 的兼容研究协议由 `references/specs/project-instructions.md`、`research-methodology.md`、`automation-workflow.md` 三份锁定文档定义；不得改写其 `research_protocol` 元组。
-- 当前正式执行另受 [research-execution-and-audit.md](references/research-execution-and-audit.md) 约束。`trusted-spec-lock.json.execution_integrity` 对规范、运行脚本和验证器建立完整性摘要；冻结包仍使用 `manifest_version: 2.0`，并以 `integrity_profile: execution-bound-v1` 和 `execution_integrity` 记录当前执行边界。
-- `company.json` Schema 唯一可编辑源：`bits-bean/doujiao-value-system/schemas/company.schema.json`；本 Skill 副本只读且受信任锁保护。
-- 不从旧聊天、旧报告或传播内容补事实；事实、管理层主张、第三方观点、推断和估算必须区分。
-- 不编造、插值或无声填补缺失数据；`null`、`[]` 和真实零值严格区分。
-- 企业质量、估值状态和研究状态分开。诚信、治理、资本韧性和数据可靠性可否决估值吸引力。
-- 审查请求只诊断；修复、冻结和 GitHub 交付各需相应授权。网站导入、图表渲染、内容生产和公开发布不属于本 Skill。
-- 本 Skill 不调用 `doujiao-value-system` 的图表导出命令或接口，不生成网站图、社媒图或背景，不选择平台比例、安全区、Logo 位置和引流文案，也不调用内容 Skill 代替用户生产或发布内容。
-- 公司 Logo 是唯一可交付视觉素材例外。首次研究缺少 Logo、公司已重塑品牌，或用户明确授权替换时，完整执行 [identity-assets.md](references/identity-assets.md)：先复用 system 中已验证的 canonical Logo，否则依次检查公司官网、Investor Relations、官方品牌 / 媒体资料和适用的官方产品 / 商户 / 开发者 / 支持页面。本私有 Skill 已记录用户常设授权：官方来源全部穷尽且已记录后，可使用出处稳定、身份可交叉核验的第三方原始正方形 SVG / PNG；无需仅因第三方资格再次询问，但每项资产仍须逐项留证、保留原字节并在 `company.json.brand_identity.company_logo` 中如实使用 `is_official:false`。不得生成、重绘或用近似图替代公司 Logo，也不得清洗来源文件。
-- 首次研究不能因第一个官方候选文件不安全、格式不合格或画布非方形就停止 Logo 搜索。按 `identity-assets.md` 继续检查官网当前页面实际加载的 DOM / CSS / 静态资源、IR、官方品牌或媒体资料，以及适用的官方产品、商户或支持页面；逐项记录候选 URL、格式、尺寸、是否正方形、核验结果和拒绝原因。官方原始正方形 SVG / PNG 始终优先；穷尽官方正方形候选后，才可对安全的官方非方形 PNG 做确定性中心方形裁剪。第三方兜底只接受通过同一安全与渲染门的原始正方形 SVG / PNG，不得裁剪、转码或改写。
-- 除公司 Logo 与 [income-statement-sankey.md](references/income-statement-sankey.md) 明确限定的 App Economy Insights 配色核验外，本 Skill 不搜索、下载、筛选、核验、生成、暂存或提交产品、服务、人物、门店、业务场景、封面主视觉、背景及其他视觉素材。配色原始 PNG 只是冻结包外私有研究证据，绝不作为视觉资产交付；研究包只保存其摘要和逐节点样本审计。内容生产所需其他素材仍由 `$produce-doujiao-value-content` 在其任务内独立完成。
-- 找不到可验证的官方 Logo，且仍找不到可验证的第三方原始正方形 Logo 时，写入 `asset_path:null`、`source_url:null`、`alt:null`、`is_official:false`，并在 `research-completeness.md` 记录 Logo 缺口；不得合成替代 Logo，也不得声称网站身份素材完整。采用第三方时，完整度说明必须显式记录官方来源穷尽、用户已授权常设兜底、第三方托管事实、身份交叉核验和网站展示影响。
-- `research-report.md` 不保存 Logo 元数据、状态或流程；其余指定 sidecar / JSON 只保存所需 Logo 元数据，不嵌入 Logo、图片、视频、音频、HTML 媒体标签或 `data:` 媒体 URI。Logo 字节只存在于冻结目录外的交付 / 审计目录或 system 仓库。发生裁剪时，官方原件与 provenance 必须留在冻结目录外的持久工作目录，不能只依赖会被清理的临时文件。
+| 用户任务 | 执行范围与终点 | 首先读取 |
+|---|---|---|
+| 首次完整研究 | 在新目录建立证据、计算、报告与结构化数据，按请求完成至草稿或冻结 | [source-routing.md](references/source-routing.md) 的首次完整研究路径 |
+| 更新财报 / 重大事件 | 核验上一冻结包与新官方触发，保留逐项变化归因 | 同上，再读上一完整冻结包与增量路径 |
+| 审查 / 审计 | 只读诊断；报告发现、影响、证据和修复建议，输出放在被审包外 | 原 manifest、原冻结文件与来源路由的旧包审查路径 |
+| 修复 / 迁移 | 草稿可修复；已冻结包必须在新目录重建，不原地补字段或改版本 | 当前协议、相关专项契约、原包与差异 |
+| 冻结 | 先完整验收与语义复核，再生成不可变 manifest | [qa-gates.md](references/qa-gates.md)、第 6 节命令 |
+| GitHub 提交 / 合并 | 人工已接受的合格冻结包，按已获授权完成交付 | [github-archive.md](references/github-archive.md) |
+| 优化 / 维护本 Skill | 修改指令、脚本或测试，验证后更新本地 Skill；不启动公司研究 | [skill-maintenance.md](references/skill-maintenance.md) |
 
-## 2. 模式与读取顺序
+审查请求只诊断；修复、冻结和 GitHub 交付须在用户请求或已有授权范围内。已有明确授权时连续完成相应工作，不重复询问。缺少授权时先完成已获授权且可审阅的本地工作，再说明尚需授权的具体动作。研究或冻结请求本身不授权 GitHub 写入。
 
-模式：首次完整研究、增量更新、审查、修复并重新冻结、Schema 迁移、授权 GitHub 归档。冻结目录不可原地修改。
+`run.research_mode`（`full / incremental / repair / migration`）、`run.workflow_tier`（`standard / audit`）和命令行 `--mode` 是三个不同概念；映射见第 6 节。专项审计使用 `audit` 档，不伪造 `research_mode: audit`。
 
-按 [source-routing.md](references/source-routing.md) 完整读取并锁定：
+## 2. 不可变的边界
 
-1. `project-instructions.md`；
-2. `research-methodology.md`；
-3. 只读 `company.schema.json`；
-4. [research-execution-and-audit.md](references/research-execution-and-audit.md)；
-5. 增量任务再读上一 v2 冻结包与 `automation-workflow.md`。
+- manifest v2 兼容研究协议由 `references/specs/` 下三份锁定文档定义，不改写 `research_protocol` 元组。当前执行规范、脚本和验证器由 `trusted-spec-lock.json.execution_integrity` 绑定；新冻结包固定为 `manifest_version: 2.0`、`integrity_profile: execution-bound-v1`。
+- `company.json` Schema 唯一可编辑源是 `bits-bean/doujiao-value-system/schemas/company.schema.json`；本 Skill 副本只读。新研究使用信任锁的当前活动/default 版本，不能从兼容 enum 任选旧版本。
+- 不从旧聊天、旧报告或传播内容补事实。区分事实、管理层主张、第三方观点、推断和估算；不编造、插值或无声补缺，严格区分 `null`、`[]` 和真实零值。企业质量、估值状态、研究状态分别判断；诚信、治理、资本韧性与数据可靠性可否决估值吸引力。
+- 本 Skill 不调用 `doujiao-value-system` 的图表导出命令或接口，不生成网站图、社媒图或背景，不选择平台比例、安全区、Logo 位置和引流文案，不调用内容 Skill 或发布接口。下游只消费同一冻结版本，不补研究事实、重算估值、改变路由、覆盖配色或覆盖结论。
+- 公司 Logo 是唯一可交付视觉素材例外，取得或更换前完整执行 [identity-assets.md](references/identity-assets.md)。优先复用已验证 canonical Logo；缺失、品牌重塑或获授权替换时继续穷尽官方来源，不能遇到首个不合格候选就停止。本私有 Skill 已记录用户常设授权：官方来源穷尽且留证后，可用身份交叉核验通过的第三方原始正方形 SVG / PNG，无需仅因第三方资格再次询问，必须保留原字节并写 `is_official:false`。唯一转换例外是契约规定的官方 PNG 确定性中心方形裁剪；原件与 provenance 持久保存在冻结包外。不得生成、重绘或用近似图替代公司 Logo。
+- 除公司 Logo 与 [income-statement-sankey.md](references/income-statement-sankey.md) 限定的 App Economy Insights 配色核验外，不搜索、下载、管理或交付其他视觉素材。配色原始 PNG 只作冻结包外私有证据；研究包仅保存摘要和逐节点样本。`company.json.income_statement_sankey.nodes[].color` 是网站与导出器唯一渲染真相；不得建立任务级 palette sidecar。
+- 无合格 Logo 时四元组精确写为 `asset_path:null / source_url:null / alt:null / is_official:false`，在 `research-completeness.md` 记录缺口及网站影响；不得静默清空远端已有引用。报告不写 Logo 或配色的元数据、状态与流程，研究包不嵌入媒体。Logo 字节留在冻结包外。
 
-同时锁定兼容研究协议摘要、完整执行摘要、验证器 SHA-256、Schema commit / blob / SHA-256 / version、公司法定身份、证券、会计准则、财年、币种、单位、数据日、估值日和股价时间戳。`company_schema.schema_version` 表示新研究必须输出的当前活动/default 版本；Schema enum 中保留的旧版本只用于读取历史冻结包。先实测协议、Schema、官方来源、挑战来源、计算运行时和草稿目录写入六项能力；任一能力、锚点或关键官方来源不可验证时只能交付计划 / 缺口，不称正式完成。
+## 3. 启动与按阶段读取
 
-正式研究使用 `standard` 档：主研究、隔离的对抗审查、隔离的来源审计和综合四个 pass 缺一不可；专项审计使用 `audit` 档并至少安排两个相互独立的对抗审查。各 pass 只提交主张、证据、反证和置信度，由综合 pass 裁决冲突，不让多个角色分别生成整份报告。
+完整执行 [source-routing.md](references/source-routing.md)：读取三份兼容协议、当前 Schema 和执行协议，验证兼容摘要、完整执行摘要、验证器 SHA-256 与 Schema commit / blob / SHA-256 / version。锁定公司法定身份、证券、会计准则、财年、币种、单位、数据日、估值日和股价时间戳。
 
-研究开始时完整读取 [classification-and-chart-routing.md](references/classification-and-chart-routing.md)，先用官方证据确定 `classification`，再选择会计、回报和行业指标框架。`sector` 与行业标签只用于检索；公司类型驱动的会计计算与资本回报图表路由只由 `accounting_profile` 和 `returns_profile` 控制。银行与支付信贷的回报图固定为长期 ROE / ROTCE 主序列、最新 CET1 / 资本充足率加目标或监管区间的当前仪表，以及“每股权益长期序列”或“至少三个完整财年的回购对股数影响”二选一；不得因缺少八年 CET1 或选择回购替代路径而改用普通企业模板。
+正式批量取证前实测协议、Schema、官方来源、挑战来源、计算运行时和草稿写入六项能力。来源预检本身允许访问最小官方原件与不同的挑战来源，并登记稳定 source ID 和实际取回内容 SHA-256。能力、锚点或关键来源不能验证时保留诊断 / 缺口，不称正式完成；具体失败路径按来源路由执行。
 
-## 3. 证据和十年财务
+正式研究使用 `standard` 档：主研究、隔离的对抗审查、隔离的来源审计、综合四个 pass 缺一不可；专项审计使用 `audit` 档并至少安排两个相互独立的对抗审查。各 pass 提交主张、证据、反证与置信度，综合 pass 裁决冲突，不让各角色各写整份报告。真实独立性与记录结构分别核验，不能把同一上下文自审记成隔离审查。
 
-完整读取 [evidence-and-calculation.md](references/evidence-and-calculation.md) 与 [research-execution-and-audit.md](references/research-execution-and-audit.md)，先做 `evidence-ledger.json` 和 `calculation-ledger.json`，再写结论。
+以下契约在对应工作开始前完整读取；同一任务中已读且未变的文件不重复加载。首次正式研究最终须覆盖所有适用行，按阶段读取不等于省略模块。
 
-- 默认十个完整财年 + 最新季度 + TTM，统一财年变化、重述、拆股、并购、币种、单位和正负号。
-- 按 [revenue-mix-history.md](references/revenue-mix-history.md) 查齐十年官方收入构成、金额与占比，逐年勾稽总营收并核对官方重列范围；最新财年补齐每类收入的付款方、付费原因、增长驱动及口径说明。商业模式章节交接收入来源、价值交换、利润流向、收入结构演变四部分；最新环形图及说明卡、十年水平金额与占比堆积图消费同一冻结数据，结构演变须解释赚钱方式及战略重心的变化。网站默认折叠经营解读，不在十年财务重复放图；不能只交总营收趋势或最新一年构成。
-- 关键数字记录期间、口径、来源 ID 和页码 / 章节；推断和估算记录最强反证与推翻条件。
-- 资料可得性与商业论点确定性分开评级；资料多不自动等于论点可靠，资料少也不自动等于公司差。
-- 在证据台账中建立 2—5 项经营与价值驱动、管理层决策过程 / 结果台账、关键论断裁决、论点假设状态、被否决主张、未解冲突和版本修订记录。增量更新必须把假设及估值参数相对上一冻结版本的变化逐项归因，不能随现价无声漂移。
-- 普通企业复算 FCF、Owner Earnings、ROIC、净债务、市值和 EV；金融、保险、REIT、资源等使用分类契约指定的行业适配口径，并把通用财务字段无法表达的序列写入 `industry_metrics`。
-- 护城河同时读取竞争对手和替代品；长期生存把需求持久性、适应能力和外部冲击拆开验证；文化和管理层比较承诺与实际行动。
+| 工作阶段 | 必读契约 | 关键产出 |
+|---|---|---|
+| 分类与行业框架 | [classification-and-chart-routing.md](references/classification-and-chart-routing.md) | 先用官方证据确定 `classification`；会计与回报路由仅由 `accounting_profile / returns_profile` 驱动 |
+| 取证、计算与独立审查 | [evidence-and-calculation.md](references/evidence-and-calculation.md)、[research-execution-and-audit.md](references/research-execution-and-audit.md) | 先建证据 / 计算台账，再形成结论；保存驱动、管理层决策、假设变化、裁决和来源审计 |
+| 收入构成与商业模式 | [revenue-mix-history.md](references/revenue-mix-history.md)、[business-model-actors.md](references/business-model-actors.md)、[business-model-feedback.md](references/business-model-feedback.md) | 十年收入构成、实际参与者及关系覆盖裁决、有证据才建立的可选闭环 |
+| 现金流估值 | [valuation-qa.md](references/valuation-qa.md) | 共用起点、三情景逐年路径、价值桥接、Reverse DCF、九格及风险归位 |
+| 利润表桑基与配色 | [income-statement-sankey.md](references/income-statement-sankey.md) | 有符号报表值、守恒流量、continuation 复算与配色三态 |
+| 报告与研究包 | [research-contract.md](references/research-contract.md) | 16 节可独立阅读报告、Schema 数据、台账、完整度说明 |
+| 验收与冻结 | [qa-gates.md](references/qa-gates.md) | 完整机器门禁、语义复核、准确完成状态 |
 
-研究价值交换时同时读取 [business-model-actors.md](references/business-model-actors.md)：从业务证据先建立参与者及关系候选清单，检查使用、付款、交付、供给、权利与责任，以及参与者之间不经过公司的关系。关系类型由实际生意决定；商品、信息、注意力、资产、授权、风险承担及其他有据关系用开放的 `exchange_type` 和具体标签表达，不被“价值 / 资金 / 信息”三类限制。将图谱写入 `business_model`，将纳入、合并、省略或待核实的裁决写入 `business_model_coverage`，逐项对账并由隔离审查主动寻找遗漏，同时解释价值创造、传递与回收的机制。既有 `kind` 仅作显示兼容，不能代替经济语义或删边；不套固定角色数，不强制每家公司都有数据反馈。同时按 [business-model-feedback.md](references/business-model-feedback.md) 判断是否有证据支持可选的商业闭环：逐环解释经营变化如何传导并反馈起点，区分事实、管理层主张和推断，核实单位经济性、再投入条件及断裂风险；在 `business_model_feedback` 独立交接。未识别到或证据不足时不展示、不强凑闭环，也不阻断其他研究。实际角色涉及已确认品牌或产品时，以可选 `official_logos` 交接品牌身份；实际素材与渲染仍由下游管理。
+## 4. 研究与估值的核心要求
 
-## 4. 长期价值判断
+完整执行方法论第 1—13 节。各模块给出问题、事实 / 计算、支持证据、最强反证、置信度与推翻条件；至少覆盖商业模式、十年财务、现金质量、回报与再投资、护城河、长期生存、文化 / 不为清单、管理层 / 资本配置、治理 / 债务、估值和 Pre-Mortem。
 
-完整执行方法论第 1—13 节。每个模块都写清：问题、事实 / 计算、支持证据、最强反证、置信度和推翻条件。至少覆盖商业模式、十年财务、现金质量、回报与再投资、护城河、长期生存、文化 / 不为清单、管理层 / 资本配置、治理 / 债务、估值和 Pre-Mortem。把当时信息下的管理层决策过程与事后结果分开评价；任何关键论断未经隔离挑战和裁决都不能进入最终结论。
+- 默认十个完整财年 + 最新季度 + TTM，统一财年变化、重述、拆股、并购、币种、单位和正负号。收入构成逐年金额 / 占比与总营收勾稽，解释赚钱方式与战略重心的变化，不能只交最新构成或总营收趋势。
+- 普通企业复算 FCF、Owner Earnings、ROIC、净债务、市值与 EV；金融、保险、REIT、资源等按分类契约适配，必要序列写入 `industry_metrics`。银行与支付信贷按专属回报路由，不能因 CET1 年数不足或选择回购替代路径退回普通企业模板。
+- 先从业务证据建立参与者与关系候选，再写 `business_model` 与 `business_model_coverage`；检查不经过公司的关系，不按固定角色数套图。用开放的 `exchange_type` 与具体标签表达经济语义，兼容 `kind` 不能代替语义或删边。商业反馈写入独立的 `business_model_feedback`，不强凑闭环；可选 `official_logos` 仅交接已确认品牌身份，素材交下游管理。
+- 护城河同时查竞争对手和替代品；长期生存分别验证需求持久性、适应能力和外部冲击；管理层比较承诺与行动，区分当时决策过程和事后结果。资料可得性与商业论点确定性分开评级。
+- 在台账中建立 2—5 项经营与价值驱动、管理层决策、关键论断裁决、假设状态、被否决主张、未解冲突及修订记录。增量变化绑定新证据与原因，不能随现价无声漂移。
+- DCF 与 Reverse DCF 共用计算台账中唯一的 `valuation_role: starting_cash_flow`。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业用“正常化普通股净利润 − 必要留存资本”。总额先折现，再除稀释后股数；EPS / 倍数只作交叉验证。
+- 悲观、基准、乐观均展示连续计算链：基准日现金 → 每年经营驱动与现金 → 折现因子与现值 → 终值及现值 → 股权价值 → 稀释后每股价值。分段假设必须明确“第1—5年”等起止年度，报告与计算台账逐年一致。
+- 先判断模型适用性，再裁决模型冲突；Pre-Mortem 每项重大风险只归入现金流、情景、尾部情景或折现率之一，避免重复扣罚。DCF 九格逐格给估值状态，翻转结论时降级置信度或归入 Too Hard。
 
-遇到商业模式无法验证、关键数据缺失、多个低确定性变量决定结果或 DCF 几乎全靠遥远终值时，主动归入 Too Hard，说明难点、缺证、移出条件和不行动理由。
+商业模式无法验证、核心数据缺失、多个低确定性变量主导或 DCF 几乎全靠遥远终值时，主动给出 Too Hard，说明难点、缺证、移出条件与不行动理由。Too Hard 是研究判断，不自动豁免数据、来源、Schema 或冻结门禁。
 
-## 5. 现金流估值
+## 5. 形成可交接的研究包
 
-完整读取 [valuation-qa.md](references/valuation-qa.md)，以计算台账中唯一的 `valuation_role: starting_cash_flow` 作为 DCF 与 Reverse DCF 共用起点。普通企业使用 FCFF、FCFE 或 Owner Earnings；受资本约束金融企业使用“正常化普通股净利润 − 必要留存资本”的可分配普通股现金。总额先折现、再除以稀释后股数；EPS 与倍数只作交叉验证。
+按研究包契约创建新版本目录。`company.json` 严格通过锁定 Schema，不新增字段、不借旧字段改义；无法表达的重要口径留在报告、台账和 `schema-gap-report.md`，阻断项未解决前不冻结。每个 `source_ids` 解析到同一 `company.json.sources`，关键计算保存公式、输入与来源。
 
-先登记主 DCF、Reverse DCF 与交叉验证的适用性，再比较结果。Pre-Mortem 的每项重大风险只能归入现金流、情景、尾部情景或折现率之一，避免重复扣罚；模型方向冲突必须解释适用边界并裁决。DCF 3×3 九格逐格给出估值状态；若会翻转结论，只能降级置信度或归入 Too Hard。
+机器层统一实际原始数值：100万元写 `1000000`，100万股写 `1000000`，比例写 `0.25`；计算台账声明 `numeric_convention: base_units`，每条计算不加 `unit`。人类读物与最终回复按 [中文展示单位契约](references/research-contract.md#中文展示单位契约) 转成亿元 / 万亿元、万股 / 亿股、原币种每股值及百分比，不自动换人民币。
 
-估值正文必须让读者沿一条连续算式复核：估值基准日可分配现金 → 每个预测年度的经营驱动与可分配现金 → 折现因子与现金流现值 → 终值及其现值 → 股权价值 → 稀释后每股价值。悲观、基准、乐观三个情景都必须逐年列示，不得只给增长率与最终答案。任何分段假设都写成“第1—5年”“第6—10年”等明确范围；“初期、前期、中期、后期、第一阶段、长期增长”等词若没有紧邻的起止年度，不得作为估值假设名称。计算台账保存同一组逐年记录和价值桥接，报告展示值必须与其复算一致。
+报告按方法论第 14 节固定 16 节写作，脱离 JSON 与台账仍能阅读、理解和核实。先解释含义与重要性，再给口径、公式、证据与限制；术语首次出现给中文全称及白话注解。关键主张就地引用直接链接或 `SRC-*`；文末索引为每个 ID 给完整 URL 与精确定位。报告只写经济事实、假设、计算、限制和反证；Schema 映射、验证 / 归档流程留在 sidecar。报告可见文本及来源索引不出现 Logo / `company_logo` / 公司标志 / 公司标识等资产词；有实质经济影响的变化用“品牌重塑”或“视觉识别变化”说明事实和影响。
 
-## 6. 正式研究包
+桑基使用 `statement_value` 保留报表原符号，严格正值 `value = abs(statement_value)` 表示流量；收入抵减、成本抵减、利润加项和利润扣减按专项契约路由，不用负连线或静默净额化。勾稽绝对差 `<= 0.01`；`calculated_links` 恰好覆盖收入小计及利润主链每条 continuation 边。交接包含 [X 型布局与最少交叉意图](references/income-statement-sankey.md#下游-x-型布局与最少交叉)，不写坐标、不为造型改拓扑、金额、符号或颜色。
 
-按 [research-contract.md](references/research-contract.md) 建立新版本目录；生成 `income_statement_sankey` 时完整执行 [income-statement-sankey.md](references/income-statement-sankey.md)，并在计算台账完成 App Economy Insights 规范身份与官方可验证别名检索、`matched / not_found / blocked` 三态裁决和逐节点取样审计。`company.json.income_statement_sankey.nodes[].color` 是网站与导出器唯一渲染真相；不得建立任务级 palette sidecar。`classification`、`financials`、`industry_metrics`、`income_statement_sankey`、`segments`、二十年以上的结构化 `durability` 判断、承诺的下次验证、资本配置结果、风险因果链、估值敏感性和长期跟踪方法必须是有来源的研究产出，不能留给网站或内容层猜测。证据台账还必须保存预检、独立 pass、研究可得性、驱动图、管理层决策、论点状态、估值审查与来源审计。每个结构化 `source_ids` 必须解析到同一 `company.json.sources`，关键计算另由计算台账提供公式、输入和来源，使 system 图表和下游内容无需重新研究即可追溯。`research-report.md` 采用方法论第 14 节的固定 16 节，面向没有财务专业背景但愿意认真阅读的投资者；脱离 JSON 和台账仍可独立阅读、理解及核实。先讲“这意味着什么、为什么重要”，再给口径、公式、证据和限制。缩写、行业指标及非通用术语首次出现时，在同一句或相邻括号内给中文全称和一句白话注解。关键主张就地引用直接链接或 `SRC-*`；使用 `SRC-*` 时文末索引给完整 URL 和精确定位。
+配色审计必须查规范身份与官方可验证别名，并裁决 `matched / not_found / blocked`：匹配时逐节点取样；完整检索无匹配时节点色留空，由 System 使用统一默认色；检索受阻是 error，不得冒充未找到或用 `--allow-warnings` 绕过。
 
-Schema 2.4.0 的每个桑基节点以 `statement_value` 保留报表原符号，以严格正值 `value = abs(statement_value)` 作为守恒流量；`profit_addition` 必须严格为正，`cost_offset / revenue_offset / profit_deduction` 必须严格为负。利润扣减 `profit_deduction` 只能由 `profit_subtotal` 以唯一入边终端分出，其续接计算绑定原负值；总收入可接互不重叠且路径唯一的收入来源与小计。收入抵减只能由 `revenue_subtotal` 以终端分流表达，不能作为正流量源接入净收入；只有 `profit_subtotal` 可在分出利润扣减或后续利润节点另有受控正收益加项时无成本分支续接，`revenue_total` 首层仍必须分出成本。不得用负连线或静默净额化。金额勾稽只允许绝对差 `<= 0.01`；台账 `calculated_links` 必须恰好覆盖收入小计和利润主链的每条 continuation 边并绑定可复算记录。
+## 6. 验证、冻结与历史包
 
-研究层不写死节点坐标，也不调用图表渲染器；但桑基交接必须携带 [income-statement-sankey.md](references/income-statement-sankey.md#下游-x-型布局与最少交叉) 的下游布局意图：入口侧最上 / 最下分支尽量落在左上角 / 左下角，出口侧最上 / 最下分支尽量落在右上角 / 右下角，中间主干居中，使整体尽量呈 X 型；下游必须通过节点顺序、端口顺序和局部路由走廊优先消除可避免的连线交叉。不得为造型改变会计拓扑、连接关系、金额、有符号语义、利润层级或节点配色。
+命令从实际 Skill 根目录运行，`scripts/` 和 `references/` 均相对此目录；研究包、前序 manifest 和外部审计输出使用绝对路径。尖括号内容是待替换参数，不要原样执行。先完整执行 QA，再使用对应命令。
 
-正文只保留投资判断所需的事实、假设、计算过程、限制与反证。Schema 字段映射、JSON 文件名、验证器兼容、归档或生成流程等内部实现说明写入 `schema-gap-report.md`、`research-completeness.md`、台账或 manifest，不塞进研究叙事。Logo 的搜索、取得、核验、文件规格或路径、缺失、回退、归档和交付状态，以及桑基配色的检索、取样、原图、默认色和渲染状态，一律不写入 `research-report.md`；报告可见文本和来源定位索引都不得出现 Logo / `company_logo` / 公司标志 / 公司标识等资产词。若品牌或视觉识别变化本身对生意、护城河或股东价值有实质影响，改用“品牌重塑”或“视觉识别变化”等面向读者的经济表述，只写可验证的事实与影响，不写资产处理过程。字段背后的真实经济假设仍须在正文直接说清。例如正文应写“第1—5年收入与普通股利润都按8%增长”，而不是解释某个 Schema 字段为何暂存同一数值。
+| 任务 | 台账 research_mode | 验证命令 | 冻结命令 |
+|---|---|---|---|
+| 首次完整研究 | `full` | `--mode full` | `--mode full` |
+| 增量更新 | `incremental` | 最终仍用 `--mode full` | `--mode incremental` + 前序 manifest + 官方触发 ID |
+| 修复 / Schema 迁移 | `repair / migration` | `--mode full` | 在新目录用 `--mode full` |
+| 只读审查 | 不改原包台账 | `--mode audit`，输出在包外 | 不冻结 |
 
-`company.json` 严格通过锁定 Schema，不新增字段。Schema 暂时无法表达的估值口径保留在报告、计算台账和 `schema-gap-report.md`，不得把旧字段静默改义。新研究的 `company.json` 与 `calculation-ledger.json` 统一存实际原始数值：人民币100万元写 `1000000`，100万股写 `1000000`，比例仍写 `0.25`；不得使用千、百万或十亿缩放值，计算台账也不得逐条添加 `unit`。所有面向中国读者的文字、表格、图表和最终回复再按 [research-contract.md](references/research-contract.md#中文展示单位契约) 换算：公司级金额优先用亿元，超大规模可用万亿元，股数用万股 / 亿股，每股值用原币种 / 股，比例用百分比。
-
-## 7. 验收与冻结
-
-完整执行 [qa-gates.md](references/qa-gates.md)，然后运行：
+CLI 验证器的 `--mode incremental` 仅用于过程检查，不能替代最终 `full`；冻结器也会强制执行 `full` 门禁。
 
 ```bash
-python3 scripts/validate_research_package.py <package> \
-  --schema references/specs/company.schema.json --company-slug <company-slug> --mode full \
-  --output <package>/validation-report.json
-```
+# 未冻结草稿：完整验证
+python3 scripts/validate_research_package.py <absolute-package> \
+  --schema references/specs/company.schema.json --company-slug <company-slug> \
+  --mode full --output <absolute-package>/validation-report.json
 
-零错误并完成语义复核后冻结：
-
-```bash
-python3 scripts/freeze_research.py <package> \
+# 获授权且零错误、语义复核完成后：首次 / 修复 / 迁移冻结
+python3 scripts/freeze_research.py <absolute-package> \
   --schema references/specs/company.schema.json \
   --schema-blob-sha <locked-blob> --schema-commit <locked-commit> \
-  --company-slug <company-slug>
+  --company-slug <company-slug> --mode full
+
+# 增量冻结：不可省略前序与新官方触发
+python3 scripts/freeze_research.py <absolute-new-package> \
+  --schema references/specs/company.schema.json \
+  --schema-blob-sha <locked-blob> --schema-commit <locked-commit> \
+  --company-slug <company-slug> --mode incremental \
+  --previous-manifest <absolute-previous-package>/research-manifest.json \
+  --official-trigger-source-id <SRC-new-official-trigger>
+
+# 只读诊断：历史包按 source-routing 的旧锁策略解释结果
+python3 scripts/validate_research_package.py <absolute-frozen-package> \
+  --schema <absolute-schema-for-audit> --company-slug <company-slug> \
+  --mode audit --output <absolute-audit-directory>/validation-report.json
 ```
 
-新 manifest 固定为 v2，保留既有 `research_protocol` 兼容块，并新增 `integrity_profile: execution-bound-v1` 与当前 `execution_integrity`；验证报告与 manifest 同时锁定精确 `company_slug`，并记录验证器、工具链和协议指纹。Logo 元数据与桑基节点色随 `company.json` 被锁定，配色检索和取样摘要随 `calculation-ledger.json` 被锁定；私有 App Economy Insights PNG 永不进入冻结包。`blocked` 配色审计必须产生 error，不能用 `--allow-warnings` 绕过。包外 Logo 字节要到授权归档规划时才按 observation、hash、安全门和固定渲染运行时验证。风险加权来源审计必须重新打开公司身份、估值输入、起始现金流、DCF 假设、适用的监管资本及全部关键论断来源，并按确定性种子抽检普通主张。警告默认阻断；只有完整度说明逐项解释原因、影响和待补证据时才能 `--allow-warnings`。该通用 warning 确认只允许冻结研究，不构成新公司无 Logo 的 GitHub 交付授权。只有真实人工审核后才使用 `--human-reviewed`。冻结只表示不可变，不等于投资建议、网站已具备 Logo 或网站已更新。
+警告默认阻断；只有完整度说明逐项写明 finding code、原因、影响和待补证据时，才可按 QA 规则使用 `--allow-warnings`。只有真实人工审核才使用 `--human-reviewed`；自动审查不能冒充人工接受。风险加权来源审计必须实际重开关键来源，普通主张按确定性种子抽检，不能只检查多个文件互相一致。
 
-旧 Schema → 当前锁定 Schema 2.4.0 是显式迁移：旧冻结包保持不可变且只按旧 manifest 审计；从原始来源重建当前协议要求的结构字段，在新目录按 2.4.0 完整验证后以 `full` 模式冻结。Schema 1.x、2.0.0、2.1.0、2.2.0 与 2.3.0 包都不得直接作为当前 2.4.0 `incremental` 的前序包，也不得仅改 `schema_version`。
+旧 manifest v1、缺少当前完整性 profile 的历史 v2，以及 Schema 版本与当前锁不一致的包只读审查；不能作为当前 incremental 前序。迁移回原始来源重建新目录，通过当前 `full` 后重新冻结，不只改版本号、不向旧包补锁。历史审计结果不等于通过当前正式门禁，具体工具限制见来源路由。
 
-## 8. 增量与下游
+## 7. 授权 GitHub 交付与完成状态
 
-增量只由比上一报告更新的官方财报或重大事件触发，按公司、期间、发布日期和 source ID 去重。复核旧包、更新受影响事实 / 计算 / 估值 / verdict，并在 `thesis` 中明确长期逻辑：增强 / 基本不变 / 削弱 / 被推翻 / 暂无法判断；假设状态或估值参数的每一处变化都必须绑定新证据和修订原因。
+只有明确要求提交 / 合并时执行 [github-archive.md](references/github-archive.md)。目标固定为 `bits-bean/doujiao-value-system/companies/<company-slug>/`，整套受管研究文件以同一原子变更替换；不增加日期或版本子目录、不再向 `research/` 写副本。最终 diff 仅含 manifest 声明的研究文件、manifest，以及本次显式暂存且验收通过的一个 canonical Logo；其他资产保留。
 
-system 图表层与内容层只接收同一冻结版本的报告、`company.json`、manifest、完整度说明、证据台账和计算台账；桑基网页与导出器必须共同消费 `company.json` 节点色，并用计算台账审计其 `matched / not_found` 来源，不得在内容任务重新搜索或覆盖。公司 Logo 作为 manifest 外的已验证身份素材按 `identity-assets.md` 单独交接，供 system 网站身份展示直接读取。社媒内容任务的其他素材仍按内容 Skill 自身契约独立核验，本 Skill 不把研究归档路径解释为内容制作授权。下游可以格式化、重排或用同一冻结序列计算展示派生值，但不得补研究事实、重算估值、改变路由、覆盖配色或覆盖结论。本 Skill 在交接完成后停止，不调用渲染器、内容 Skill 或发布接口。
+新 Logo 路径固定为 `assets/logo.svg` 或 `assets/logo.png`，已验证 legacy 文件可原样沿用。第三方常设兜底仍传 `--confirm-third-party-logo` 作机械确认；远端不同 Logo 的替换、清除旧引用和新公司无 Logo 交付各遵守归档契约的独立授权。普通提交、人工接受和 warning 确认不能代替“允许无 Logo 提交”。要求合并到 `main` 时走独立分支和 PR，检查通过后合并；只有明确要求“直接提交到 main”才允许原子、非强制、仅快进直写。写前核最新 HEAD、Schema blob、slug / identity 与单调性，写后按 commit 重读并核对全部 SHA-256。
 
-## 9. 授权 GitHub 提交
-
-用户明确要求提交 / 合并时完整读取 [github-archive.md](references/github-archive.md)。只把人工已接受、v2、零错误的冻结包提交到 `bits-bean/doujiao-value-system`。
-
-- GitHub 当前研究包固定为 `companies/<company-slug>/`，报告、`company.json`、台账、验证结果与 manifest 全部直接放在该目录；不得增加日期、`-vN` 或其他版本子目录，远端版本只由 Git 历史追踪。
-- 每次获授权提交都以同一原子变更创建或替换 `companies/<company-slug>/` 内的整套研究文件；`company.json` 只保留这一份正式副本，不再同步写入 `research/`。已有且与 `company.json` 一致的 Logo 原样保留；缺失或明确授权替换的 Logo 按 `identity-assets.md` 验证后与研究文件进入同一原子提交。
-- 新 canonical Logo 固定使用 `companies/<slug>/assets/logo.svg` 或 `companies/<slug>/assets/logo.png`；已有 `logo-primary.svg` 或 `logo-primary.png` 只作为 legacy 沿用。官方或依常设授权采用的第三方原始正方形文件都保持原字节；第三方必须记录 `is_official:false`。归档规划时仍传 `--confirm-third-party-logo`，用于机械确认冻结包确实满足常设规则，不构成新的第三方许可提问；GitHub 写入、远端不同 Logo 替换和直接 main 仍分别遵守其独立授权门。唯一转换例外仍是经 `identity-assets.md` 证明的官方 PNG → PNG 确定性中心方形裁剪，计划必须明确标记 `official_source_derived:true`。不得在 SVG 与 PNG 之间转换、包裹、清洗或重绘。最终差异白名单仍只包含冻结 manifest 声明的直接研究文件、`research-manifest.json`，以及本次显式暂存且通过门禁的一个 canonical Logo；原件与 provenance 不写入 GitHub。任何 `images/*`、产品图、图片 manifest、封面、背景或其他素材仍禁止进入研究归档。
-- 远端已有 Logo 只能精确沿用或经另行授权替换；若已确认没有可验证的官方 Logo 和已授权第三方兜底，可在完整记录缺口后用独立的“清除旧引用”授权把四元组改为精确空哨兵。清除只更新 `company.json` 引用，不删除旧文件，也不能代替 Logo 替换授权。
-- system 中尚不存在的新公司若仍为 Logo 空哨兵，普通“提交到 GitHub”授权必须停止；只有用户另外明确说“允许无 Logo 提交”或语义完全等价的话，才可使用 `--confirm-new-company-without-logo`。`--allow-warnings`、人工接受或普通写入授权均不得推导该确认。
-- 禁止把任何网站截图、渠道成品、`images/` 生成图、背景、比例模板或平台文案作为研究提交的一部分。
-- 研究请求、冻结请求仍不自动授权 GitHub；“提交到 GitHub”授权的唯一目标是上述公司目录。
-- 用户要求合并到 `main` 时走独立分支和 PR，检查通过后合并；只有明确说“直接提交到 main”才允许原子、非强制、仅快进直写。
-- 写入前核对最新 HEAD、Schema blob、slug / identity、远端当前公司目录和 `company.json` 单调性；写入后按 commit 重读全部文件并核对 SHA-256。
-
-## 10. 完成状态
-
-只有证据、计算、行业适配、现金流估值、16 节报告、Schema、一致性、桑基配色三态和冻结门禁全部通过，才称正式研究完成；否则准确标记为计划、草案、证据不完整、待人工复核、Too Hard、审查结果或迁移未完成。App Economy Insights 检索若 `blocked`，只能保留草稿，不能冻结；`not_found` 是完成态并由 System 使用统一默认色。Logo 缺失不改变投资研究结论，但必须在 `company.json` 与 `research-completeness.md`（必要时台账、manifest 或归档输出）明确标记网站身份素材未完整；`research-report.md` 不出现 Logo 或配色状态与流程。新公司的首次 GitHub 归档仍默认阻断，除非用户独立明确接受无 Logo 交付。
+最终回复分别说明研究判断、包状态和交付状态。只有全部研究、Schema、一致性、配色与冻结门禁通过才称正式研究完成；否则写清草稿、证据缺口、待人工复核、审查结果或迁移未完成。Too Hard 可与合格冻结并存；冻结只表示不可变，不表示人工已接受、GitHub 已提交或网站已更新。Logo 缺口不改投资结论，但必须另报网站身份素材未完整。
